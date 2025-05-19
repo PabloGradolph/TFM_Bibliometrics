@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Dashboard - Bibliometrics CSIC" %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 text-center mb-5">
+        <h1>{% trans "Dashboard" %}</h1>
+        <p class="lead">{% trans "Interactive visualizations of scientific production" %}</p>
+    </div>
+</div>
+
+<!-- Filters Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{% trans "Filters" %}</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="yearFilter" class="form-label">{% trans "Year" %}</label>
+                            <select class="form-select" id="yearFilter">
+                                <option value="">{% trans "All years" %}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="areaFilter" class="form-label">{% trans "Thematic Area" %}</label>
+                            <select class="form-select" id="areaFilter">
+                                <option value="">{% trans "All areas" %}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="institutionFilter" class="form-label">{% trans "Institution" %}</label>
+                            <select class="form-select" id="institutionFilter">
+                                <option value="">{% trans "All institutions" %}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="typeFilter" class="form-label">{% trans "Publication Type" %}</label>
+                            <select class="form-select" id="typeFilter">
+                                <option value="">{% trans "All types" %}</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Visualizations Section -->
+<div class="row g-4">
+    <!-- Timeline Chart -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">{% trans "Publication Timeline" %}</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm" data-view="yearly">{% trans "Yearly" %}</button>
+                        <button class="btn btn-outline-primary btn-sm" data-view="monthly">{% trans "Monthly" %}</button>
+                    </div>
+                </div>
+                <div id="timelineChart" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Areas Distribution -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">{% trans "Areas Distribution" %}</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm" data-view="pie">{% trans "Pie" %}</button>
+                        <button class="btn btn-outline-primary btn-sm" data-view="bar">{% trans "Bar" %}</button>
+                    </div>
+                </div>
+                <div id="areasChart" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collaboration Network -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">{% trans "Collaboration Network" %}</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm" data-view="force">{% trans "Force" %}</button>
+                        <button class="btn btn-outline-primary btn-sm" data-view="matrix">{% trans "Matrix" %}</button>
+                    </div>
+                </div>
+                <div id="networkChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics Table -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">{% trans "Key Metrics" %}</h5>
+                    <button class="btn btn-outline-primary btn-sm" id="exportMetrics">
+                        <i class="fas fa-download me-1"></i>{% trans "Export" %}
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Metric" %}</th>
+                                <th>{% trans "Value" %}</th>
+                                <th>{% trans "Trend" %}</th>
+                                <th>{% trans "Change" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricsTable">
+                            <!-- Data will be loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize visualizations when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        // Placeholder for visualization initialization code
+        console.log('Dashboard loaded');
+    });
+</script>
+{% endblock %} 

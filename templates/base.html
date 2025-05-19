@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+{% load i18n %}
+{% load static %}
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% trans "Bibliometrics CSIC" %}{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
+    <!-- Font Awesome (Optimized) -->
+    <link rel="stylesheet" href="{% static 'css/fontawesome.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/solid.min.css' %}">
+    <!-- Local Fonts -->
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 300;
+            src: url('{% static "fonts/Inter_24pt-Light.tff" %}') format('tff');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            src: url('{% static "fonts/Inter_24pt-Regular.tff" %}') format('tff');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 500;
+            src: url('{% static "fonts/Inter_18pt-Medium.tff" %}') format('tff');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 600;
+            src: url('{% static "fonts/Inter_18pt-SemiBold.tff" %}') format('tff');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 700;
+            src: url('{% static "fonts/Inter_18pt-Bold.tff" %}') format('tff');
+            font-display: swap;
+        }
+    </style>
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --background-color: #f8f9fa;
+            --text-color: #2c3e50;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .navbar {
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1rem 2rem;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--primary-color);
+            font-size: 1.5rem;
+        }
+
+        .nav-link {
+            color: var(--text-color);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            transition: color 0.3s ease;
+        }
+
+        .nav-link:hover {
+            color: var(--secondary-color);
+        }
+
+        .nav-link.active {
+            color: var(--secondary-color);
+        }
+
+        .language-selector {
+            position: relative;
+            display: inline-block;
+        }
+
+        .language-selector button {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .language-selector button:hover {
+            color: var(--secondary-color);
+        }
+
+        .language-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 0.5rem 0;
+            min-width: 120px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .language-selector:hover .language-dropdown {
+            display: block;
+        }
+
+        .language-option {
+            padding: 0.5rem 1rem;
+            display: block;
+            color: var(--text-color);
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            text-align: left;
+            border: none;
+            background: none;
+        }
+
+        .language-option:hover {
+            background-color: var(--background-color);
+            color: var(--secondary-color);
+        }
+
+        .main-content {
+            padding: 2rem;
+            min-height: calc(100vh - 76px);
+        }
+
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 5px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        .display-4 {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .lead {
+            color: #666;
+            font-weight: 400;
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 1rem;
+            }
+            
+            .main-content {
+                padding: 1rem;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-chart-line me-2"></i>{% trans "Bibliometrics CSIC" %}
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'dashboard' in request.path %}active{% endif %}" href="{% url 'dashboard' %}">
+                            <i class="fas fa-chart-bar me-1"></i>{% trans "Dashboard" %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'about' in request.path %}active{% endif %}" href="{% url 'about' %}">
+                            <i class="fas fa-info-circle me-1"></i>{% trans "About" %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <div class="language-selector">
+                            <button type="button" aria-expanded="false" aria-controls="language-dropdown">
+                                <i class="fas fa-globe me-1"></i>
+                                    <span>{% trans "EN" %}</span>
+                                <i class="fas fa-chevron-down ms-1"></i>
+                            </button>
+                            <div id="language-dropdown" class="language-dropdown" role="menu">
+                                <form action="{% url 'set_language' %}" method="post" class="language-form">
+                                    {% csrf_token %}
+                                    <input name="next" type="hidden" value="{{ request.path }}">
+                                    <input name="language" type="hidden" value="es">
+                                    <button type="submit" class="language-option">
+                                        <i class="fas fa-flag me-1"></i>{% trans "Spanish" %}
+                                    </button>
+                                </form>
+                                <form action="{% url 'set_language' %}" method="post" class="language-form">
+                                    {% csrf_token %}
+                                    <input name="next" type="hidden" value="{{ request.path }}">
+                                    <input name="language" type="hidden" value="en">
+                                    <button type="submit" class="language-option">
+                                        <i class="fas fa-flag me-1"></i>{% trans "English" %}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </main>
+
+    <!-- Bootstrap JS -->
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+    <!-- D3.js -->
+    <script src="{% static 'js/d3.v7.min.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html> 

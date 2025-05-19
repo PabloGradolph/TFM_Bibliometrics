@@ -1,0 +1,223 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024 THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2024.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Bibliometrics CSIC\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-03-19 12:00+0000\n"
+"PO-Revision-Date: 2024-03-19 12:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: .\core\views.py
+msgid "Bibliometrics CSIC"
+msgstr "Bibliometría CSIC"
+
+#: .\core\views.py
+msgid "Dashboard"
+msgstr "Panel de Control"
+
+#: .\core\views.py
+msgid "About"
+msgstr "Acerca de"
+
+#: .\core\views.py
+msgid "Spanish"
+msgstr "Español"
+
+#: .\core\views.py
+msgid "English"
+msgstr "Inglés"
+
+#: .\core\views.py
+msgid "EN"
+msgstr "ES"
+
+#: .\core\views.py
+msgid "Interactive web tool for scientific production analysis"
+msgstr "Herramienta web interactiva para el análisis de la producción científica"
+
+# home.html
+msgid "Home - Bibliometrics CSIC"
+msgstr "Inicio - Bibliometrics CSIC"
+
+msgid "Welcome to Bibliometrics CSIC"
+msgstr "Bienvenido a Bibliometría CSIC"
+
+msgid "Data Analysis"
+msgstr "Análisis de Datos"
+
+msgid "Explore and analyze CSIC's scientific production with interactive visualizations."
+msgstr "Explore y analice la producción científica del CSIC con visualizaciones interactivas."
+
+msgid "Collaboration Networks"
+msgstr "Redes de Colaboración"
+
+msgid "Discover collaboration patterns between researchers and groups."
+msgstr "Descubra patrones de colaboración entre investigadores y grupos."
+
+msgid "Topic Analysis"
+msgstr "Análisis de Temas"
+
+msgid "Identify main topics and trends in research."
+msgstr "Identifique los principales temas y tendencias en la investigación."
+
+msgid "How to get started?"
+msgstr "¿Cómo empezar?"
+
+msgid "Access the Dashboard to view main visualizations"
+msgstr "Acceda al Panel de Control para ver las visualizaciones principales"
+
+msgid "Explore data by researcher, group, or thematic area"
+msgstr "Explore datos por investigador, grupo o área temática"
+
+msgid "Generate customized reports"
+msgstr "Genere informes personalizados"
+
+msgid "Go to Dashboard"
+msgstr "Ir al Panel de Control"
+
+# about.html
+msgid "About - Bibliometrics CSIC"
+msgstr "Acerca de - Bibliometrics CSIC"
+
+msgid "About Bibliometrics CSIC"
+msgstr "Acerca de Bibliometrics CSIC"
+
+msgid "Features"
+msgstr "Características"
+
+msgid "Scientific production analysis"
+msgstr "Análisis de la producción científica"
+
+msgid "Citation analysis"
+msgstr "Análisis de citas"
+
+msgid "Collaboration network analysis"
+msgstr "Análisis de redes de colaboración"
+
+msgid "Topic analysis"
+msgstr "Análisis de temas"
+
+msgid "Customized report generation"
+msgstr "Generación de informes personalizados"
+
+msgid "Technologies"
+msgstr "Tecnologías"
+
+msgid "Django & Python"
+msgstr "Django y Python"
+
+msgid "Bootstrap"
+msgstr "Bootstrap"
+
+msgid "D3.js"
+msgstr "D3.js"
+
+msgid "SQLite"
+msgstr "SQLite"
+
+msgid "AI & NLP Tools"
+msgstr "Herramientas de IA y PLN"
+
+msgid "Our tool provides comprehensive analysis of scientific production, including:"
+msgstr "Nuestra herramienta proporciona un análisis completo de la producción científica, incluyendo:"
+
+msgid "Publication Trends"
+msgstr "Tendencias de Publicación"
+
+msgid "Citation Impact"
+msgstr "Impacto de Citas"
+
+msgid "Collaboration Patterns"
+msgstr "Patrones de Colaboración"
+
+msgid "Research Topics"
+msgstr "Temas de Investigación"
+
+# dashboard.html
+msgid "Dashboard - Bibliometrics CSIC"
+msgstr "Panel de Control - Bibliometrics CSIC"
+
+msgid "Interactive visualizations of scientific production"
+msgstr "Visualizaciones interactivas de la producción científica"
+
+msgid "Filters"
+msgstr "Filtros"
+
+msgid "Year"
+msgstr "Año"
+
+msgid "All years"
+msgstr "Todos los años"
+
+msgid "Thematic Area"
+msgstr "Área Temática"
+
+msgid "All areas"
+msgstr "Todas las áreas"
+
+msgid "Institution"
+msgstr "Institución"
+
+msgid "All institutions"
+msgstr "Todas las instituciones"
+
+msgid "Publication Type"
+msgstr "Tipo de Publicación"
+
+msgid "All types"
+msgstr "Todos los tipos"
+
+msgid "Publication Timeline"
+msgstr "Línea de Tiempo de Publicaciones"
+
+msgid "Yearly"
+msgstr "Anual"
+
+msgid "Monthly"
+msgstr "Mensual"
+
+msgid "Areas Distribution"
+msgstr "Distribución de Áreas"
+
+msgid "Pie"
+msgstr "Circular"
+
+msgid "Bar"
+msgstr "Barras"
+
+msgid "Collaboration Network"
+msgstr "Red de Colaboración"
+
+msgid "Force"
+msgstr "Fuerza"
+
+msgid "Matrix"
+msgstr "Matriz"
+
+msgid "Key Metrics"
+msgstr "Métricas Clave"
+
+msgid "Export"
+msgstr "Exportar"
+
+msgid "Metric"
+msgstr "Métrica"
+
+msgid "Value"
+msgstr "Valor"
+
+msgid "Trend"
+msgstr "Tendencia"
+
+msgid "Change"
+msgstr "Cambio" 

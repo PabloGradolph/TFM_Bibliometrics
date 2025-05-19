@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block content %}
+    <h2>Consulta a GESTBIB</h2>
+    <button id="btn-cargar" class="btn btn-primary">Cargar datos</button>
+
+    <div data-type="autores"
+        data-id="1"
+        data-language="es-ES" 
+        data-query="e3NvbG9QdWJsaWNhY2lvbmVzQ3NpYzpmYWxzZSx0aXBvbG9naWFzQXJ0aWN1bG86dHJ1ZSx0aXBvbG9naWFzQXJ0aWN1bG9EZVJldmlzaW9uOnRydWUsdGlwb2xvZ2lhc0JpYmxpb2dyYWZpYTp0cnVlLHRpcG9sb2dpYXNDYXBpdHVsb0RlTGlicm86dHJ1ZSx0aXBvbG9naWFzQ2FydGE6dHJ1ZSx0aXBvbG9naWFzQ29tdW5pY2FjaW9uRGVDb25ncmVzbzp0cnVlLHRpcG9sb2dpYXNDb3JyaWdlbmRhOnRydWUsdGlwb2xvZ2lhc0VkaXRvcmlhbDp0cnVlLHRpcG9sb2dpYXNMaWJybzp0cnVlLHRpcG9sb2dpYXNOb3RhOnRydWUsdGlwb2xvZ2lhc090cm86dHJ1ZSx0aXBvbG9naWFzUHVibGljYWNpb25SZXRyYWN0YWRhOnRydWUsdGlwb2xvZ2lhc1Jlc2VuYTp0cnVlLHRpcG9sb2dpYXNSZXNlbmFEZUxpYnJvOnRydWUsb2N1bHRhckR1cGxpY2Fkb3M6dHJ1ZX0="
+        data-fields="nombre;id_dc_url;orcid_url;cvn_fecyt;id_wos_url;id_scp_url;google_sch_url;academia_edu_url;id_openalex_url;researchgate_url;num_items;citas;indice_h;indice_internac"
+        data-classes="stripe"
+        data-author-link="verAutor.html?idAGB=##id##"
+        data-page-size="115670">
+        Cargando autores...
+    </div>
+    {% comment %} <p>Hay 115670 autores en GESTBIB</p> {% endcomment %}
+    <script type="text/javascript" src="https://gesbib.urici.csic.es/badge/csi.min.js"></script>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        const saveAuthorsUrl = "{% url 'save_authors' %}";
+    </script>
+    <script src="{% static 'js/load_gestbib_authors.js' %}"></script>
+{% endblock %}
