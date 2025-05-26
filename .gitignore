@@ -3,3 +3,4 @@ venv/
 .env
 /data/data/
 *.sqlite3
+/analysis/data/
