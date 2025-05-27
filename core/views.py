@@ -56,7 +56,10 @@ def get_filtered_data(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        query = query.filter(publication_type__in=types)
+        type_query = Q()
+        for type in types:
+            type_query |= Q(publication_type__icontains=type)
+        query = query.filter(type_query)
 
     # Obtener datos para las visualizaciones
     if view_type == 'monthly' and year_from and year_to and year_from == year_to:
