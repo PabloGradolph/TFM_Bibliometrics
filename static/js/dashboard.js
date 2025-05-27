@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Cargar los datos de los filtros
     loadFilterData();
 
+    // Configurar botones de vista de áreas (circular/barra)
+    setupAreasButtons();
+
     // Función para cargar los datos de los filtros
     function loadFilterData() {
         fetch('/api/dashboard/filters/')
@@ -97,7 +100,43 @@ document.addEventListener('DOMContentLoaded', function() {
         updateVisualizations();
     }
 
-    // Función para actualizar las visualizaciones basadas en los filtros
+    // --- ÁREAS TEMÁTICAS: LÓGICA DE BOTONES Y RENDER ---
+    let currentAreasView = 'pie';
+    let lastAreasData = null;
+
+    function renderAreasChart(data) {
+        if (currentAreasView === 'pie') {
+            updateAreasChart(data);
+        } else {
+            updateAreasBarChart(data);
+        }
+    }
+
+    // Lógica de botones de áreas temáticas igual que yearly/monthly
+    function setupAreasButtons() {
+        const pieBtn = document.querySelector('[data-areas-view="pie"]');
+        const barBtn = document.querySelector('[data-areas-view="bar"]');
+        if (!pieBtn || !barBtn) return;
+
+        pieBtn.addEventListener('click', function() {
+            if (!pieBtn.classList.contains('active')) {
+                pieBtn.classList.add('active');
+                barBtn.classList.remove('active');
+                currentAreasView = 'pie';
+                if (lastAreasData) renderAreasChart(lastAreasData);
+            }
+        });
+        barBtn.addEventListener('click', function() {
+            if (!barBtn.classList.contains('active')) {
+                barBtn.classList.add('active');
+                pieBtn.classList.remove('active');
+                currentAreasView = 'bar';
+                if (lastAreasData) renderAreasChart(lastAreasData);
+            }
+        });
+    }
+
+    // Modifica updateVisualizations para guardar los datos de áreas y renderizar según la vista activa
     function updateVisualizations() {
         const filters = {
             year_from: yearFrom.value,
@@ -139,13 +178,23 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 // Actualizar la línea de tiempo
                 updateTimeline(data.timeline, filters.view_type);
-                
-                // Actualizar el gráfico de áreas
-                updateAreasChart(data.areas);
-                
+                // Guardar y renderizar áreas según el botón activo
+                lastAreasData = data.areas;
+                // Si ninguno está activo, activa Circular por defecto
+                const pieBtn = document.querySelector('[data-areas-view="pie"]');
+                const barBtn = document.querySelector('[data-areas-view="bar"]');
+                if (pieBtn && barBtn && !pieBtn.classList.contains('active') && !barBtn.classList.contains('active')) {
+                    pieBtn.classList.add('active');
+                    barBtn.classList.remove('active');
+                    currentAreasView = 'pie';
+                } else if (barBtn && barBtn.classList.contains('active')) {
+                    currentAreasView = 'bar';
+                } else if (pieBtn && pieBtn.classList.contains('active')) {
+                    currentAreasView = 'pie';
+                }
+                renderAreasChart(data.areas);
                 // Actualizar el gráfico de instituciones
                 updateInstitutionsChart(data.institutions);
-                
                 // Actualizar el gráfico de tipos
                 updateTypesChart(data.types);
             })
@@ -412,9 +461,265 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateAreasChart(data) {
-        // TODO: Implementar la actualización del gráfico de áreas
-        console.log('Areas data:', data);
+        // Filtrar valores nulos
+        data = data.filter(d => d.thematic_areas__name !== null);
+
+        // Agrupar las áreas menos representativas en 'Otras'
+        const N = 25;
+        if (data.length > N) {
+            const sorted = data.slice().sort((a, b) => b.count - a.count);
+            const topN = sorted.slice(0, N);
+            const rest = sorted.slice(N);
+            const otrasCount = rest.reduce((sum, d) => sum + d.count, 0);
+            data = [...topN, {thematic_areas__name: 'Otras', count: otrasCount}];
+        }
+
+        // Limpiar el contenedor
+        d3.select('#areasChart').html('');
+
+        // Configuración del gráfico
+        const margin = {top: 20, right: 20, bottom: 70, left: 60};
+        const width = document.getElementById('areasChart').clientWidth - margin.left - margin.right;
+        const height = 300 - margin.top - margin.bottom;
+        const radius = Math.min(width, height) / 2;
+
+        // Crear el SVG
+        const svg = d3.select('#areasChart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .style('display', 'block')
+            .style('margin', '0 auto')
+            .append('g')
+            .attr('transform', `translate(${width/2 + margin.left},${height/2 + margin.top})`);
+
+        // Escala de colores
+        const color = d3.scaleOrdinal()
+            .domain(data.map(d => d.thematic_areas__name))
+            .range(d3.schemeCategory10);
+
+        // Crear el pie chart
+        const pie = d3.pie()
+            .value(d => d.count)
+            .sort(null);
+
+        const arc = d3.arc()
+            .innerRadius(0)
+            .outerRadius(radius);
+
+        // Info box para el clic
+        const infoBox = d3.select('#areasChart')
+            .append('div')
+            .attr('class', 'info-box')
+            .style('display', 'none')
+            .style('position', 'absolute')
+            .style('background-color', 'white')
+            .style('border', '2px solid #2196f3')
+            .style('border-radius', '6px')
+            .style('padding', '10px 15px')
+            .style('font-size', '14px')
+            .style('z-index', '1000')
+            .style('box-shadow', '0 4px 8px rgba(0,0,0,0.1)')
+            .style('pointer-events', 'none');
+
+        // Añadir los segmentos del pie
+        svg.selectAll('path')
+            .data(pie(data))
+            .enter()
+            .append('path')
+            .attr('d', arc)
+            .attr('fill', d => color(d.data.thematic_areas__name))
+            .attr('stroke', 'white')
+            .style('stroke-width', '2px')
+            .style('cursor', 'pointer')
+            .on('click', function(event, d) {
+                event.stopPropagation();
+                d3.selectAll('.info-box').style('display', 'none');
+                // Calcular la posición relativa al contenedor del gráfico
+                const containerRect = document.getElementById('areasChart').getBoundingClientRect();
+                const xPos = event.clientX - containerRect.left;
+                const yPos = event.clientY - containerRect.top;
+                // Dimensiones del info box
+                const infoBoxWidth = 180;
+                const infoBoxHeight = 70;
+                let finalX = xPos;
+                let finalY = yPos - infoBoxHeight - 10;
+                if (finalX + infoBoxWidth/2 > containerRect.width) {
+                    finalX = containerRect.width - infoBoxWidth/2;
+                } else if (finalX - infoBoxWidth/2 < 0) {
+                    finalX = infoBoxWidth/2;
+                }
+                if (finalY < 0) {
+                    finalY = yPos + 10;
+                }
+                const percentage = (d.data.count / d3.sum(data, d => d.count) * 100).toFixed(1);
+                const infoBoxContent = `
+                    <div style="font-weight: bold; margin-bottom: 5px;">${d.data.thematic_areas__name}</div>
+                    <div>Publicaciones: ${d.data.count}</div>
+                    <div>Porcentaje: ${percentage}%</div>
+                `;
+                // Cambiar el borde del info box al color del segmento
+                const borderColor = color(d.data.thematic_areas__name);
+                infoBox.html(infoBoxContent)
+                    .style('display', 'block')
+                    .style('left', (finalX - infoBoxWidth/2) + 'px')
+                    .style('top', finalY + 'px')
+                    .style('border', `2px solid ${borderColor}`);
+            });
+
+        // Cerrar info box al pinchar fuera
+        document.getElementById('areasChart').addEventListener('click', function(event) {
+            if (!event.target.closest('path')) {
+                d3.selectAll('.info-box').style('display', 'none');
+            }
+        });
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('#areasChart')) {
+                d3.selectAll('.info-box').style('display', 'none');
+            }
+        });
     }
+
+    function updateAreasBarChart(data) {
+        // Filtrar valores nulos
+        data = data.filter(d => d.thematic_areas__name !== null);
+    
+        // Agrupar las áreas menos representativas en 'Otras'
+        const N = 25;
+        if (data.length > N) {
+            const sorted = data.slice().sort((a, b) => b.count - a.count);
+            const topN = sorted.slice(0, N);
+            const rest = sorted.slice(N);
+            const otrasCount = rest.reduce((sum, d) => sum + d.count, 0);
+            data = [...topN, {thematic_areas__name: 'Otras', count: otrasCount}];
+        }
+    
+        // Limpiar el contenedor
+        d3.select('#areasChart').html('');
+    
+        // Dimensiones y márgenes
+        const margin = { top: 20, right: 20, bottom: 30, left: 60 };
+        const width = document.getElementById('areasChart').clientWidth - margin.left - margin.right;
+        const height = 300 - margin.top - margin.bottom;
+    
+        const svg = d3.select('#areasChart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .style('display', 'block')
+            .style('margin', '0 auto')
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+        const x = d3.scaleBand()
+            .domain(data.map(d => d.thematic_areas__name))
+            .range([0, width])
+            .padding(0.2);
+    
+        const y = d3.scaleLinear()
+            .domain([0, d3.max(data, d => d.count)])
+            .nice()
+            .range([height, 0]);
+    
+        svg.append('g')
+            .attr('transform', `translate(0,${height})`)
+            // .call(d3.axisBottom(x))
+            // .selectAll('text')
+            // .attr('transform', 'rotate(-45)')
+            // .style('text-anchor', 'end')
+            // .style('font-size', '11px');
+            // Quitamos las etiquetas del eje X
+            .call(d3.axisBottom(x).tickFormat(''));
+    
+        svg.append('g')
+            .call(d3.axisLeft(y).ticks(height / 40));
+    
+        const color = d3.scaleOrdinal()
+            .domain(data.map(d => d.thematic_areas__name))
+            .range(d3.schemeCategory10);
+    
+        // Info box para el clic
+        const infoBox = d3.select('#areasChart')
+            .append('div')
+            .attr('class', 'info-box')
+            .style('display', 'none')
+            .style('position', 'absolute')
+            .style('background-color', 'white')
+            .style('border', '2px solid #2196f3')
+            .style('border-radius', '6px')
+            .style('padding', '10px 15px')
+            .style('font-size', '14px')
+            .style('z-index', '1000')
+            .style('box-shadow', '0 4px 8px rgba(0,0,0,0.1)')
+            .style('pointer-events', 'none');
+    
+        svg.selectAll('.bar')
+            .data(data)
+            .enter()
+            .append('rect')
+            .attr('class', 'bar')
+            .attr('x', d => x(d.thematic_areas__name))
+            .attr('y', d => y(d.count))
+            .attr('width', x.bandwidth())
+            .attr('height', d => height - y(d.count))
+            .attr('fill', d => color(d.thematic_areas__name))
+            .style('cursor', 'pointer')
+            .on('click', function(event, d) {
+                event.stopPropagation();
+                d3.selectAll('.info-box').style('display', 'none');
+                const containerRect = document.getElementById('areasChart').getBoundingClientRect();
+                const xPos = event.clientX - containerRect.left;
+                const yPos = event.clientY - containerRect.top;
+                const infoBoxWidth = 180;
+                const infoBoxHeight = 70;
+                let finalX = xPos;
+                let finalY = yPos - infoBoxHeight - 10;
+                if (finalX + infoBoxWidth/2 > containerRect.width) {
+                    finalX = containerRect.width - infoBoxWidth/2;
+                } else if (finalX - infoBoxWidth/2 < 0) {
+                    finalX = infoBoxWidth/2;
+                }
+                if (finalY < 0) {
+                    finalY = yPos + 10;
+                }
+                const percentage = (d.count / d3.sum(data, d => d.count) * 100).toFixed(1);
+                const infoBoxContent = `
+                    <div style="font-weight: bold; margin-bottom: 5px;">${d.thematic_areas__name}</div>
+                    <div>Publicaciones: ${d.count}</div>
+                    <div>Porcentaje: ${percentage}%</div>
+                `;
+                const borderColor = color(d.thematic_areas__name);
+                infoBox.html(infoBoxContent)
+                    .style('display', 'block')
+                    .style('left', (finalX - infoBoxWidth/2) + 'px')
+                    .style('top', finalY + 'px')
+                    .style('border', `2px solid ${borderColor}`);
+            });
+    
+        // Cerrar info box al pinchar fuera
+        document.getElementById('areasChart').addEventListener('click', function(event) {
+            if (!event.target.closest('rect')) {
+                d3.selectAll('.info-box').style('display', 'none');
+            }
+        });
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('#areasChart')) {
+                d3.selectAll('.info-box').style('display', 'none');
+            }
+        });
+    
+        // Títulos
+        svg.append('text')
+            .attr('transform', 'rotate(-90)')
+            .attr('y', -margin.left + 20)
+            .attr('x', -height / 2)
+            .attr('dy', '1em')
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .text('Número de publicaciones');
+    
+        // No añadir título del eje X ni etiquetas
+    }    
 
     function updateInstitutionsChart(data) {
         // TODO: Implementar la actualización del gráfico de instituciones
@@ -426,15 +731,12 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Types data:', data);
     }
 
-    // Event listeners para los botones de vista
+    // --- LÍNEA TEMPORAL: LÓGICA DE BOTONES ---
     document.querySelectorAll('[data-view]').forEach(button => {
         button.addEventListener('click', function() {
             if (!this.disabled) {
-                // Remover clase active de todos los botones
                 document.querySelectorAll('[data-view]').forEach(btn => btn.classList.remove('active'));
-                // Añadir clase active al botón clickeado
                 this.classList.add('active');
-                // Actualizar visualizaciones
                 updateVisualizations();
             }
         });
