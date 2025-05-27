@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Publication, Author, Institution, InstitutionMetric, ThematicArea, Keyword, ThematicCluster, ReportTemplate, PublicationMetric, PublicationDuplication
+from .models import Publication, Author, Institution, InstitutionMetric, ThematicArea, Keyword, ThematicCluster, ReportTemplate, PublicationMetric
 
 @admin.register(Publication)
 class PublicationAdmin(admin.ModelAdmin):
@@ -11,9 +11,9 @@ class PublicationAdmin(admin.ModelAdmin):
         - Enables search by title and DOI.
         - Adds filters by year, publication type, and open access status.
     """
-    list_display = ("title", "year", "publication_type", "source", "open_access")
+    list_display = ("title", "year", "publication_type", "source")
     search_fields = ("title", "doi")
-    list_filter = ("year", "publication_type", "open_access")
+    list_filter = ("year", "publication_type")
 
 
 @admin.register(PublicationMetric)
@@ -29,21 +29,6 @@ class PublicationMetricAdmin(admin.ModelAdmin):
     list_display = ("publication", "source", "year", "impact_factor", "quartile", "percentile", "position")
     list_filter = ("source", "year")
     search_fields = ("publication__title",)
-
-
-@admin.register(PublicationDuplication)
-class PublicationDuplicationAdmin(admin.ModelAdmin):
-    """
-    Admin configuration for the PublicationDuplication model.
-
-    Features:
-        - list_display: Shows the publication title, duplication status, and CSIC indicator.
-        - search_fields: Enables quick lookup by publication title.
-        - list_filter: Provides sidebar filters for duplicated and CSIC-related flags.
-    """
-    list_display = ("publication", "is_duplicated", "is_csic")
-    search_fields = ("publication__title",)
-    list_filter = ("is_duplicated", "is_csic")
 
 
 @admin.register(Author)

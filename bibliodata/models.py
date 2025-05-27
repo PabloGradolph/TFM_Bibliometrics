@@ -1,105 +1,142 @@
 from django.db import models
 
 class Publication(models.Model):
-    """
-    Represents a scientific publication registered in the GESBIB database.
-
-    Fields:
-        - gb_id: Internal identifier from GESBIB (unique).
-        - title: Title of the publication.
-        - doi: Digital Object Identifier (optional).
-        - year: Year of publication.
-        - publication_date: Exact date of publication (optional).
-        - publication_type: Normalized type (e.g., article, conference paper...).
-        - source: Name of the journal or conference (optional).
-        - wos_id / scopus_id / indices_id / digital_csic_id / conciencia_id: External database IDs (optional).
-        - open_access: Boolean indicating if the publication is open access.
-        - is_csic: Boolean flag if the publication is CSIC-related.
-        - thematic_areas: Many-to-many relation with ThematicArea.
-    """
     gb_id = models.CharField("GESBIB ID", max_length=50, unique=True)
     title = models.TextField("Title")
-    doi = models.CharField("DOI", max_length=100, blank=True, null=True)
+    title_link = models.URLField("Link to title", blank=True, null=True)
+    doi = models.JSONField("DOI(s)", blank=True, null=True)
     year = models.IntegerField("Year")
-    publication_date = models.DateField("Publication date", blank=True, null=True)
-    publication_type = models.CharField("Normalized type", max_length=100)
+    publication_date = models.CharField("Publication date (yyyy-mm-dd)", max_length=20, blank=True, null=True)
+    publication_type = models.JSONField("Normalized type(s)", blank=True,  null=True)
     source = models.CharField("Source", max_length=255, blank=True, null=True)
+    source_link = models.URLField("Source link", blank=True, null=True)
+    source_id = models.CharField("Source ID", max_length=100, blank=True, null=True)
+    editorial = models.CharField("Editorial", max_length=255, blank=True, null=True)
+    editorial_link = models.URLField("Editorial link", blank=True, null=True)
     
-    wos_id = models.CharField("Web of Science ID", max_length=50, blank=True, null=True)
-    scopus_id = models.CharField("Scopus ID", max_length=50, blank=True, null=True)
-    indices_id = models.CharField("ÍnDICEs ID", max_length=50, blank=True, null=True)
-    digital_csic_id = models.CharField("Digital.CSIC ID", max_length=50, blank=True, null=True)
-    conciencia_id = models.CharField("Conciencia ID", max_length=50, blank=True, null=True)
+    aa_link = models.URLField("External PDF link (AA)", blank=True, null=True)
+    extra_sources = models.JSONField("Sources (WOS, SCOPUS...)", blank=True, null=True)
+    extra_links = models.JSONField("Extra source links", blank=True, null=True)
 
-    open_access = models.BooleanField("Open access", default=False)
-    is_csic = models.BooleanField("CSIC Publication?", default=True)
+    citations = models.IntegerField("Citations", blank=True, null=True)
+    international_collab = models.FloatField("International collaboration", blank=True, null=True)
+
+    language = models.CharField("Language", max_length=20, blank=True, null=True)
+    abstract = models.TextField("Abstract", blank=True, null=True)
+
+    isbn = models.JSONField("ISBNs (for books)", blank=True, null=True)
+    issns = models.JSONField("ISSNs", blank=True, null=True)
+
+    conference_name = models.JSONField("Conference name(s)", blank=True, null=True)
+    conference_location = models.JSONField("Conference location(s)", blank=True, null=True)
+    conference_date = models.JSONField("Conference date(s)", blank=True, null=True)
+
+    keywords_all = models.JSONField("All keywords", blank=True, null=True)
+    num_countries = models.IntegerField("Number of countries", blank=True, null=True)
+    num_spanish_affils = models.IntegerField("Number of Spanish affiliations", blank=True, null=True)
+    num_foreign_affils = models.IntegerField("Number of foreign affiliations", blank=True, null=True)
+
+    ccaas = models.JSONField("CCAA (Spanish Autonomous Communities)", blank=True, null=True)
+    provinces = models.JSONField("Provinces", blank=True, null=True)
+    areas_all = models.JSONField("All thematic areas", blank=True, null=True)
 
     thematic_areas = models.ManyToManyField("ThematicArea", related_name="publications")
+
+    other_authors = models.JSONField("Non-IPBLN authors (raw names)", blank=True, null=True)
+    affiliations = models.JSONField("Full affiliation strings", blank=True, null=True)
+    institutions = models.ManyToManyField("Institution", related_name="publications", blank=True)
 
 
     def __str__(self):
         return f"{self.title[:80]}..."
-    
+
 
 class PublicationMetric(models.Model):
     """
-    Stores bibliometric indicators for a publication, optionally by year and source.
+    Represents a bibliometric indicator associated with a scientific publication.
+
+    This model stores a single metric value for a given publication, source (e.g., WoS, Scopus, Dimensions),
+    and metric type (e.g., Journal Impact Factor, SJR, CiteScore, Citations, etc.) for a specific year.
+    It follows a normalized structure: each row stores one metric per publication per year, avoiding redundant
+    and null-heavy fields.
 
     Fields:
-        - publication: Related Publication object.
-        - source: Metric source (e.g., JCR, SJR, CiteScore, JCI, Dimensions).
-        - year: Year of the metric (if available).
-        - impact_factor: Raw impact factor (e.g., JCR IF, SJR IF).
-        - quartile: Quartile label (e.g., Q1, Q2...).
-        - quartile_value: Numeric quartile (1, 2, 3, 4).
-        - percentile: Percentile value in the source.
-        - position: Rank position in source category.
-        - influence_score: Other index (e.g., Article Influence Score, Dimensions RCR/FCR).
-    """
+    --------
+    - publication: Foreign key to the related Publication instance.
+    - source: The origin of the metric (WoS, Scopus, or Dimensions).
+    - metric_type: The specific type of metric being stored (e.g., 'jif', 'sjr', 'citations', etc.).
+    - year: The year in which the metric was reported.
 
+    - source_journal_name: Name of the journal to which the metric refers (if applicable).
+    - source_journal_link: Link to the journal source (from the impact CSV or metadata).
+    
+    - impact_factor: Stores the numerical value of the metric (e.g., JIF, SJR, CiteScore, RCR, etc.).
+    - quartile: Label of the quartile (e.g., Q1, D1).
+    - quartile_value: Numeric quartile equivalent (1 = Q1/D1, 2 = Q2/D2, etc.).
+    - percentile: Percentile rank of the metric in its subject area.
+    - position: Rank position in the subject category (e.g., "24/110").
+    - subject_areas: List of subject areas or categories relevant to this metric (JSON field).
+
+    - influence_score: Only used if the metric_type is 'influence' (e.g., Article Influence Score).
+    - international_collab: Optional boolean indicating if international collaboration is flagged in the metric record.
+
+    Constraints:
+    ------------
+    - One metric entry per (publication, source, metric_type, year).
+    - Designed to support parsing from multiple data sources (CSV, JSON).
+
+    Usage:
+    ------
+    - For a given publication, this model can store multiple metric rows for the same year,
+      one for each combination of metric type and source.
+    - It supports flexible retrieval and display of bibliometric indicators in dashboards or reports.
+    """
+        
     SOURCE_CHOICES = [
-        ("jcr", "JCR"),
-        ("sjr", "SJR"),
-        ("citescore", "CiteScore"),
-        ("jci", "JCI"),
+        ("wos", "WoS"),
+        ("scopus", "Scopus"),
         ("dimensions", "Dimensions"),
     ]
 
+    METRIC_TYPE_CHOICES = [
+        ("jif", "Journal Impact Factor"),
+        ("jci", "Journal Citation Indicator"),
+        ("sjr", "SJR"),
+        ("citescore", "CiteScore"),
+        ("influence", "Article Influence Score"),
+        ("citations", "Citations"),
+        ("recent_citations", "Recent Citations (2y)"),
+        ("fcr", "Field Citation Ratio"),
+        ("rcr", "Relative Citation Ratio"),
+    ]
+
     publication = models.ForeignKey("Publication", on_delete=models.CASCADE, related_name="metrics")
+
     source = models.CharField("Metric source", max_length=50, choices=SOURCE_CHOICES)
+    metric_type = models.CharField("Metric type", max_length=50, choices=METRIC_TYPE_CHOICES, default="Not specified")
     year = models.IntegerField("Metric year", blank=True, null=True)
 
-    impact_factor = models.FloatField("Impact factor", blank=True, null=True)
+    source_journal_name = models.CharField("Journal name for metric", max_length=255, blank=True, null=True)
+    source_journal_link = models.URLField("Link to journal", blank=True, null=True)
+
+    impact_factor = models.FloatField("Impact factor / value", blank=True, null=True)
     quartile = models.CharField("Quartile (e.g., Q1)", max_length=10, blank=True, null=True)
     quartile_value = models.IntegerField("Quartile (numeric)", blank=True, null=True)
     percentile = models.FloatField("Percentile", blank=True, null=True)
-    position = models.IntegerField("Position", blank=True, null=True)
-    influence_score = models.FloatField("Influence score", blank=True, null=True)
+    position = models.CharField("Position", max_length=50, blank=True, null=True)
+    subject_areas = models.JSONField("Subject areas", blank=True, null=True)
+
+    influence_score = models.FloatField("Influence score (if applicable)", blank=True, null=True)
+
+    international_collab = models.FloatField("International collaboration (metric)", blank=True, null=True)
 
     class Meta:
-        unique_together = ("publication", "source", "year")
+        unique_together = ("publication", "source", "metric_type", "year")
         ordering = ["publication", "source", "year"]
 
     def __str__(self):
-        return f"{self.publication.title[:50]} - {self.source.upper()} {self.year or ''}".strip()
-    
+        return f"{self.publication.title[:60]} - {self.source.upper()} {self.metric_type.upper()} {self.year or ''}"
 
-class PublicationDuplication(models.Model):
-    """
-    Registers duplication or metadata validation information for publications.
-
-    Fields:
-        - publication: Related publication.
-        - is_duplicated: Boolean flag for duplicated entries.
-        - remarks: Optional notes or reasons.
-    """
-    publication = models.OneToOneField("Publication", on_delete=models.CASCADE, related_name="duplication_info")
-    is_duplicated = models.BooleanField("Duplicated?", default=False)
-    is_csic = models.BooleanField("CSIC Publication?", default=True)
-    remarks = models.TextField("Remarks", blank=True, null=True)
-
-    def __str__(self):
-        return f"{self.publication.title[:50]} - Duplicated: {self.is_duplicated}"
     
     
 class Author(models.Model):

@@ -13,8 +13,8 @@ Outputs:
 import pandas as pd
 
 # Load both input CSV files
-items_df = pd.read_csv('data/data/IPBLN/csv/items_IPBLN.csv', sep=',', dtype=str)
-impact_df = pd.read_csv('data/data/IPBLN/csv/impact_IPBLN.csv', sep=',', dtype=str)
+items_df = pd.read_csv('data/data/IPBLN/csv/items_only_IPBLN.csv', sep='\t', dtype=str)
+impact_df = pd.read_csv('data/data/IPBLN/csv/impact_only_IPBLN.csv', sep='\t', dtype=str)
 
 # Count occurrences of id_publicacion in each file
 items_counts = items_df['id_publicacion'].value_counts()
