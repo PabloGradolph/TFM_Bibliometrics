@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load i18n %}
+{% load static %}
 
 {% block title %}{% trans "Dashboard - Bibliometrics CSIC" %}{% endblock %}
 
@@ -16,14 +17,20 @@
     <div class="col-12">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">{% trans "Filters" %}</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title">{% trans "Filters" %}</h5>
+                    <button class="btn btn-outline-secondary btn-sm" id="clearFilters">
+                        <i class="fas fa-times me-1"></i>{% trans "Clear Filters" %}
+                    </button>
+                </div>
                 <div class="row g-3">
                     <div class="col-md-3">
                         <div class="form-group">
                             <label for="yearFilter" class="form-label">{% trans "Year" %}</label>
-                            <select class="form-select" id="yearFilter">
-                                <option value="">{% trans "All years" %}</option>
-                            </select>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="yearFrom" placeholder="{% trans 'From' %}">
+                                <input type="number" class="form-control" id="yearTo" placeholder="{% trans 'To' %}">
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -32,6 +39,9 @@
                             <select class="form-select" id="areaFilter">
                                 <option value="">{% trans "All areas" %}</option>
                             </select>
+                            <div id="selectedAreas" class="mt-2">
+                                <!-- Selected areas will be added here -->
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -40,6 +50,9 @@
                             <select class="form-select" id="institutionFilter">
                                 <option value="">{% trans "All institutions" %}</option>
                             </select>
+                            <div id="selectedInstitutions" class="mt-2">
+                                <!-- Selected institutions will be added here -->
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -48,6 +61,9 @@
                             <select class="form-select" id="typeFilter">
                                 <option value="">{% trans "All types" %}</option>
                             </select>
+                            <div id="selectedTypes" class="mt-2">
+                                <!-- Selected types will be added here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -138,11 +154,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    // Initialize visualizations when the page loads
-    document.addEventListener('DOMContentLoaded', function() {
-        // Placeholder for visualization initialization code
-        console.log('Dashboard loaded');
-    });
-</script>
-{% endblock %} 
+    <script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}
