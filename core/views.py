@@ -1,6 +1,6 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
-from bibliodata.models import Publication, Institution, ThematicArea
+from bibliodata.models import Publication, Institution, ThematicArea, Author
 from django.db.models import Count, Min, Max, Q
 
 # Create your views here.
@@ -113,3 +113,79 @@ def get_filtered_data(request):
         'institutions': institutions_data,
         'types': types_data
     })
+
+def get_author_suggestions(request):
+    query = request.GET.get('q', '').strip()
+    if not query:
+        return JsonResponse({'suggestions': []})
+
+    # Buscar autores que coincidan con la consulta
+    authors = Author.objects.filter(
+        name__icontains=query
+    ).values('name').annotate(
+        count=Count('publications')
+    ).order_by('-count', 'name')[:10]  # Limitar a 10 sugerencias
+
+    return JsonResponse({
+        'suggestions': list(authors)
+    })
+
+def search_publications(request):
+    query = request.GET.get('q', '').strip()
+    author = request.GET.get('author', '').strip()
+    if not query and not author:
+        return JsonResponse({'results': []})
+
+    # Construir la consulta base
+    publications = Publication.objects.all()
+
+    # Si hay un autor seleccionado, filtrar por ese autor
+    if author:
+        publications = publications.filter(authors__name=author)
+    # Si hay una consulta de texto, buscar en títulos Y áreas temáticas
+    elif query:
+        publications = publications.filter(
+            Q(title__icontains=query) |
+            Q(thematic_areas__name__icontains=query)
+        )
+
+    # Ordenar y limitar resultados
+    publications = publications.distinct().order_by('-year', '-publication_date')[:50]
+
+    results = []
+    for pub in publications:
+        # Obtener los autores de la publicación
+        authors = [author.name for author in pub.authors.all()]
+        
+        # Obtener las instituciones
+        institutions = [inst.name for inst in pub.institutions.all()]
+        
+        # Obtener las áreas temáticas
+        areas = [area.name for area in pub.thematic_areas.all()]
+        
+        results.append({
+            'id': pub.id,
+            'title': pub.title,
+            'year': pub.year,
+            'publication_type': pub.publication_type,
+            'authors': authors,
+            'institutions': institutions,
+            'areas': areas,
+            'url': pub.url if hasattr(pub, 'url') else None
+        })
+
+    return JsonResponse({'results': results})
+
+def publication_detail(request, publication_id):
+    # Obtener la publicación por su ID, o mostrar 404 si no existe
+    publication = get_object_or_404(Publication, id=publication_id)
+
+    # Puedes pasar la información que necesites a la plantilla
+    context = {
+        'publication': publication,
+        'authors': publication.authors.all(),
+        'institutions': publication.institutions.all(),
+        'areas': publication.thematic_areas.all(),
+    }
+    
+    return render(request, 'core/publication_detail.html', context)

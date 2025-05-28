@@ -9,11 +9,234 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedAreas = document.getElementById('selectedAreas');
     const selectedInstitutions = document.getElementById('selectedInstitutions');
     const selectedTypes = document.getElementById('selectedTypes');
+    const standardSearch = document.getElementById('standardSearch');
+    const standardSearchBtn = document.getElementById('standardSearchBtn');
+    const searchSuggestions = document.getElementById('searchSuggestions');
+    const selectedAuthor = document.getElementById('selectedAuthor');
+    const authorLimitMessage = document.getElementById('authorLimitMessage');
 
     // Almacenar las selecciones
     let selectedAreasList = new Set();
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
+
+    // Variables para el autocompletado
+    let selectedAuthorName = null;
+    let searchTimeout = null;
+
+    // Función para actualizar el estado del botón de búsqueda
+    function updateSearchButton() {
+        if (selectedAuthorName) {
+            standardSearchBtn.classList.remove('btn-primary', 'btn-success');
+            standardSearchBtn.classList.add('btn-secondary');
+            standardSearchBtn.disabled = true;
+        } else {
+            standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
+            standardSearchBtn.classList.remove('btn-success', 'btn-secondary');
+            standardSearchBtn.classList.add('btn-primary');
+            standardSearchBtn.disabled = false;
+        }
+    }
+
+    // Función para mostrar sugerencias de autores
+    function showAuthorSuggestions(query) {
+        if (!query || selectedAuthorName) {
+            searchSuggestions.style.display = 'none';
+            return;
+        }
+
+        fetch(`/api/search/authors/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const suggestionsList = searchSuggestions.querySelector('.list-group');
+                suggestionsList.innerHTML = '';
+
+                if (data.suggestions.length === 0) {
+                    searchSuggestions.style.display = 'none';
+                    return;
+                }
+
+                data.suggestions.forEach(author => {
+                    const item = document.createElement('a');
+                    item.href = '#';
+                    item.className = 'list-group-item list-group-item-action';
+                    item.innerHTML = `
+                        ${author.name}
+                        <span class="badge bg-secondary float-end">${author.count} pub.</span>
+                    `;
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        selectAuthor(author.name);
+                    });
+                    suggestionsList.appendChild(item);
+                });
+
+                searchSuggestions.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error fetching author suggestions:', error);
+                searchSuggestions.style.display = 'none';
+            });
+    }
+
+    // Función para seleccionar un autor
+    function selectAuthor(authorName) {
+        selectedAuthorName = authorName;
+        standardSearch.value = '';
+        standardSearch.disabled = true;
+        searchSuggestions.style.display = 'none';
+        authorLimitMessage.style.display = 'block';
+        updateSearchButton();
+
+        // Crear el badge del autor seleccionado
+        selectedAuthor.innerHTML = `
+            <span class="badge bg-primary me-2 mb-2">
+                ${authorName}
+                <button type="button" class="btn-close btn-close-white ms-1" 
+                        style="font-size: 0.5rem; vertical-align: middle;"
+                        aria-label="Remove"></button>
+            </span>
+        `;
+
+        // Añadir evento para eliminar el autor
+        selectedAuthor.querySelector('.btn-close').addEventListener('click', () => {
+            selectedAuthorName = null;
+            selectedAuthor.innerHTML = '';
+            standardSearch.disabled = false;
+            authorLimitMessage.style.display = 'none';
+            updateSearchButton();
+        });
+    }
+
+    // Función para realizar la búsqueda
+    function performSearch() {
+        if (!selectedAuthorName && !standardSearch.value.trim()) return;
+
+        // Mostrar indicador de carga
+        standardSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        // Construir la URL de búsqueda
+        const params = new URLSearchParams();
+        if (selectedAuthorName) {
+            params.append('author', selectedAuthorName);
+        } else {
+            params.append('q', standardSearch.value.trim());
+        }
+
+        // Realizar la búsqueda
+        fetch(`/api/search/?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                // Restaurar el botón
+                standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
+
+                // Crear y mostrar el modal de resultados
+                showSearchResults(data.results);
+            })
+            .catch(error => {
+                console.error('Error performing search:', error);
+                standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
+                alert('Error al realizar la búsqueda. Por favor, inténtelo de nuevo.');
+            });
+    }
+
+    // Función para mostrar los resultados de búsqueda
+    function showSearchResults(results) {
+        // Crear el modal si no existe
+        let modal = document.getElementById('searchResultsModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'searchResultsModal';
+            modal.className = 'modal fade';
+            modal.setAttribute('tabindex', '-1');
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Resultados de la búsqueda</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="searchResultsList"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Actualizar el contenido del modal
+        const resultsList = document.getElementById('searchResultsList');
+        if (results.length === 0) {
+            resultsList.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
+        } else {
+            resultsList.innerHTML = results.map(result => `
+                <div class="card mb-3">
+                    <div class="card-body" data-publication-id="${result.id}" style="cursor: pointer;">
+                        <h5 class="card-title">${result.title}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">
+                            ${result.year} - ${result.publication_type}
+                        </h6>
+                        <p class="card-text">
+                            <strong>Autores:</strong> ${result.authors.join(', ')}<br>
+                            <strong>Instituciones:</strong> ${result.institutions.join(', ')}<br>
+                            <strong>Áreas:</strong> ${result.areas.join(', ')}
+                        </p>
+                        ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">Ver publicación</a>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Añadir evento de clic a cada tarjeta de resultado
+        resultsList.querySelectorAll('.card-body').forEach(cardBody => {
+            cardBody.addEventListener('click', function() {
+                const publicationId = this.dataset.publicationId;
+                if (publicationId) {
+                    // Redirigir a la página de detalle de publicación
+                    window.location.href = `/publication/${publicationId}/`;
+                }
+            });
+        });
+
+        // Mostrar el modal
+        const modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
+
+    // Event listeners para el autocompletado
+    standardSearch.addEventListener('input', function() {
+        if (selectedAuthorName) return;
+
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            showAuthorSuggestions(this.value.trim());
+        }, 300);
+    });
+
+    standardSearch.addEventListener('focus', function() {
+        if (this.value.trim() && !selectedAuthorName) {
+            showAuthorSuggestions(this.value.trim());
+        }
+    });
+
+    // Cerrar sugerencias al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#standardSearch') && !e.target.closest('#searchSuggestions')) {
+            searchSuggestions.style.display = 'none';
+        }
+    });
+
+    // Event listeners para la búsqueda
+    standardSearchBtn.addEventListener('click', performSearch);
+    standardSearch.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
+
+    // Inicializar estado del botón al cargar la página
+    updateSearchButton();
 
     // Cargar los datos de los filtros
     loadFilterData();
@@ -209,7 +432,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Configuración del gráfico
         const margin = {top: 20, right: 20, bottom: 70, left: 60};
         const width = document.getElementById('timelineChart').clientWidth - margin.left - margin.right;
-        const height = 260 - margin.top - margin.bottom;
+        const height = 300 - margin.top - margin.bottom;
 
         // Crear el SVG
         const svg = d3.select('#timelineChart')
@@ -480,7 +703,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Configuración del gráfico
         const margin = {top: 20, right: 20, bottom: 70, left: 60};
         const width = document.getElementById('areasChart').clientWidth - margin.left - margin.right;
-        const height = 300 - margin.top - margin.bottom;
+        const height = 320 - margin.top - margin.bottom;
         const radius = Math.min(width, height) / 2;
 
         // Crear el SVG
@@ -718,7 +941,13 @@ document.addEventListener('DOMContentLoaded', function() {
             .style('font-size', '12px')
             .text('Número de publicaciones');
     
-        // No añadir título del eje X ni etiquetas
+        // Añadir título del eje X
+        svg.append('text')
+            .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 20})`)
+            .attr('dy', '1em')
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .text('Áreas temáticas');
     }    
 
     function updateInstitutionsChart(data) {

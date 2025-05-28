@@ -220,4 +220,46 @@ msgid "Trend"
 msgstr "Tendencia"
 
 msgid "Change"
-msgstr "Cambio" 
+msgstr "Cambio"
+
+msgid "Search Publications & Authors"
+msgstr "Buscar publicaciones y autores"
+
+msgid "Search by publication title or author name..."
+msgstr "Buscar por título de publicación o nombre de autor..."
+
+msgid "AI-Powered Search"
+msgstr "Búsqueda inteligente (IA)"
+
+msgid "Coming Soon"
+msgstr "Próximamente"
+
+msgid "Ask anything about the publications..."
+msgstr "Pregunta cualquier cosa sobre las publicaciones..."
+
+msgid "Clear Filters"
+msgstr "Limpiar filtros"
+
+msgid "No results found."
+msgstr "No se encontraron resultados."
+
+msgid "Search Results"
+msgstr "Resultados de la búsqueda"
+
+msgid "Authors"
+msgstr "Autores"
+
+msgid "Institutions"
+msgstr "Instituciones"
+
+msgid "Areas"
+msgstr "Áreas"
+
+msgid "View publication"
+msgstr "Ver publicación"
+
+msgid "pub."
+msgstr "pub." 
+
+msgid "Only one author can be selected at a time."
+msgstr "Sólo un autor puede ser seleccionado a la vez." 

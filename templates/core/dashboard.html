@@ -5,6 +5,24 @@
 {% block title %}{% trans "Dashboard - Bibliometrics CSIC" %}{% endblock %}
 
 {% block content %}
+<style>
+    .dashboard-card {
+        position: relative;
+        z-index: 1;
+    }
+    .search-container {
+        position: relative;
+        z-index: 2;
+    }
+    /* Estilo para hacer las tarjetas de resultados clicables */
+    #searchResultsList .card {
+        cursor: pointer;
+    }
+    #searchResultsList .card:hover {
+        background-color: #f8f9fa; /* Opcional: Cambiar fondo al pasar el ratón */
+    }
+</style>
+
 <div class="row justify-content-center">
     <div class="col-12 text-center mb-5">
         <h1>{% trans "Dashboard" %}</h1>
@@ -12,10 +30,67 @@
     </div>
 </div>
 
+<!-- Search Section -->
+<div class="row mb-4 search-container">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Standard Search -->
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="standardSearch" class="form-label">
+                                <i class="fas fa-search me-1"></i>{% trans "Search Publications & Authors" %}
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="standardSearch" 
+                                       placeholder="{% trans 'Search by publication title or author name...' %}">
+                                <button class="btn btn-primary" id="standardSearchBtn">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <!-- Mensaje de límite de autor -->
+                            <div id="authorLimitMessage" class="form-text" style="display: none;">
+                                {% trans "Only one author can be selected at a time." %}
+                            </div>
+                            <!-- Contenedor para las sugerencias -->
+                            <div id="searchSuggestions" class="position-absolute w-100" style="z-index: 9999; display: none;">
+                                <div class="list-group shadow-sm" style="max-height: 300px; overflow-y: auto;">
+                                    <!-- Las sugerencias se añadirán aquí dinámicamente -->
+                                </div>
+                            </div>
+                            <!-- Contenedor para el autor seleccionado -->
+                            <div id="selectedAuthor" class="mt-2">
+                                <!-- El badge del autor seleccionado se añadirá aquí -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- AI Search -->
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="aiSearch" class="form-label">
+                                <i class="fas fa-robot me-1"></i>{% trans "AI-Powered Search" %}
+                                <span class="badge bg-info ms-1">{% trans "Coming Soon" %}</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiSearch" 
+                                       placeholder="{% trans 'Ask anything about the publications...' %}" disabled>
+                                <button class="btn btn-secondary" id="aiSearchBtn" disabled>
+                                    <i class="fas fa-robot"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Filters Section -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card">
+        <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title">{% trans "Filters" %}</h5>
@@ -76,7 +151,7 @@
 <div class="row g-4">
     <!-- Timeline Chart -->
     <div class="col-md-6">
-        <div class="card h-100">
+        <div class="card h-100 dashboard-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Publication Timeline" %}</h5>
@@ -92,7 +167,7 @@
 
     <!-- Areas Distribution -->
     <div class="col-md-6">
-        <div class="card h-100">
+        <div class="card h-100 dashboard-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Areas Distribution" %}</h5>
@@ -108,7 +183,7 @@
 
     <!-- Collaboration Network -->
     <div class="col-12">
-        <div class="card">
+        <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Collaboration Network" %}</h5>
@@ -124,7 +199,7 @@
 
     <!-- Metrics Table -->
     <div class="col-12">
-        <div class="card">
+        <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Key Metrics" %}</h5>
