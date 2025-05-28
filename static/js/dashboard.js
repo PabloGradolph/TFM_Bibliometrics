@@ -105,7 +105,11 @@ document.addEventListener('DOMContentLoaded', function() {
             standardSearch.disabled = false;
             authorLimitMessage.style.display = 'none';
             updateSearchButton();
+            updateVisualizations(); // Actualizar gráficos al eliminar el autor
         });
+
+        // Actualizar los gráficos con el autor seleccionado
+        updateVisualizations();
     }
 
     // Función para realizar la búsqueda
@@ -394,13 +398,18 @@ document.addEventListener('DOMContentLoaded', function() {
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
         params.append('view_type', filters.view_type);
+        
+        // Añadir el autor seleccionado si existe
+        if (selectedAuthorName) {
+            params.append('author', selectedAuthorName);
+        }
 
         // Obtener los datos filtrados
         fetch(`/api/dashboard/data/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 // Actualizar la línea de tiempo
-                updateTimeline(data.timeline, filters.view_type);
+                updateTimeline(data.timeline, filters.view_type, data.timeline_info);
                 // Guardar y renderizar áreas según el botón activo
                 lastAreasData = data.areas;
                 // Si ninguno está activo, activa Circular por defecto
@@ -425,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Funciones para actualizar cada visualización
-    function updateTimeline(data, viewType) {
+    function updateTimeline(data, viewType, timelineInfo) {
         // Limpiar el contenedor
         d3.select('#timelineChart').html('');
 
@@ -681,6 +690,44 @@ document.addEventListener('DOMContentLoaded', function() {
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
             .text(viewType === 'monthly' ? 'Mes' : 'Año');
+
+        // Añadir mensaje informativo sobre publicaciones sin mes
+        if (viewType === 'monthly' && timelineInfo && timelineInfo.no_month_count > 0) {
+            const infoMessage = d3.select('#timelineChart')
+                .append('div')
+                .attr('class', 'alert alert-info')
+                .style('position', 'absolute')
+                .style('top', '50px')  // Cambiado de 10px a 50px para que aparezca más abajo
+                .style('right', '10px')
+                .style('padding', '8px 12px')
+                .style('font-size', '12px')
+                .style('border-radius', '4px')
+                .style('background-color', '#e3f2fd')
+                .style('border', '1px solid #2196f3')
+                .style('color', '#0d47a1')
+                .style('z-index', '1000')
+                .style('display', 'flex')
+                .style('align-items', 'center')
+                .style('gap', '8px')
+                .style('max-width', '300px');
+
+            const percentage = ((timelineInfo.no_month_count / timelineInfo.total_count) * 100).toFixed(1);
+            
+            // Crear el contenido del mensaje
+            infoMessage.html(`
+                <div style="flex-grow: 1;">
+                    <i class="fas fa-info-circle"></i>
+                    ${timelineInfo.no_month_count} publicación(es) sin mes asignado 
+                    se han contabilizado en enero
+                </div>
+                <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
+            `);
+
+            // Añadir evento para cerrar el mensaje
+            infoMessage.select('.btn-close').on('click', function() {
+                infoMessage.remove();
+            });
+        }
     }
 
     function updateAreasChart(data) {

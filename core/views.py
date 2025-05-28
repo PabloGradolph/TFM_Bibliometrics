@@ -41,7 +41,8 @@ def get_filtered_data(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
-    view_type = request.GET.get('view_type', 'yearly')  # Nuevo parámetro para el tipo de vista
+    view_type = request.GET.get('view_type', 'yearly')
+    author = request.GET.get('author')
 
     # Construir el query base
     query = Publication.objects.all()
@@ -60,6 +61,59 @@ def get_filtered_data(request):
         for type in types:
             type_query |= Q(publication_type__icontains=type)
         query = query.filter(type_query)
+    if author:
+        query = query.filter(authors__name=author)
+
+    # Diccionario para convertir nombres de meses a números
+    month_map = {
+        'jan': 1, 'january': 1,
+        'feb': 2, 'february': 2,
+        'mar': 3, 'march': 3,
+        'apr': 4, 'april': 4,
+        'may': 5,
+        'jun': 6, 'june': 6,
+        'jul': 7, 'july': 7,
+        'aug': 8, 'august': 8,
+        'sep': 9, 'september': 9,
+        'oct': 10, 'october': 10,
+        'nov': 11, 'november': 11,
+        'dec': 12, 'december': 12
+    }
+
+    def extract_month(date_str):
+        if not date_str:
+            return 1  # Fallback a enero si no hay fecha
+
+        date_str = date_str.strip().lower()
+        
+        # Formato yyyy-mm-dd o yyyy/mm/dd
+        if '-' in date_str or '/' in date_str:
+            separator = '-' if '-' in date_str else '/'
+            parts = date_str.split(separator)
+            if len(parts) >= 2:
+                try:
+                    month = int(parts[1])
+                    if 1 <= month <= 12:
+                        return month
+                except ValueError:
+                    pass
+
+        # Formato Month-Month Year o Month/Month Year
+        for separator in ['-', '/']:
+            if separator in date_str:
+                parts = date_str.split(separator)
+                if len(parts) >= 2:
+                    # Intentar obtener el segundo mes del rango
+                    second_month = parts[1].strip().split()[0]  # Tomar solo la primera palabra
+                    if second_month in month_map:
+                        return month_map[second_month]
+
+        # Formato Month Year
+        for month_name, month_num in month_map.items():
+            if month_name in date_str:
+                return month_num
+
+        return 1  # Fallback a enero si no se puede determinar el mes
 
     # Obtener datos para las visualizaciones
     if view_type == 'monthly' and year_from and year_to and year_from == year_to:
@@ -70,21 +124,28 @@ def get_filtered_data(request):
         # Crear un diccionario con todos los meses del año
         months_data = {month: 0 for month in range(1, 13)}
         
-        # Obtener los conteos mensuales
+        # Obtener las publicaciones del año
         publications = query.filter(year=year)
+        
+        # Contador para publicaciones sin mes asignado
+        no_month_count = 0
+        
+        # Procesar cada publicación
         for pub in publications:
-            if pub.publication_date:
-                try:
-                    # Intentar extraer el mes de la fecha de publicación
-                    month = int(pub.publication_date.split('-')[1])
-                    months_data[month] += 1
-                except (IndexError, ValueError):
-                    # Si no se puede extraer el mes, usar el mes 1 como fallback
-                    months_data[1] += 1
+            if not pub.publication_date:
+                no_month_count += 1
+            month = extract_month(pub.publication_date)
+            months_data[month] += 1
         
         # Convertir a lista de objetos para el JSON
         timeline_data = [{'year': year, 'month': month, 'count': count} 
                         for month, count in months_data.items()]
+
+        # Añadir información sobre publicaciones sin mes
+        timeline_info = {
+            'no_month_count': no_month_count,
+            'total_count': sum(months_data.values())
+        }
     else:
         # Vista anual (comportamiento original)
         min_year = int(year_from) if year_from else Publication.objects.aggregate(Min('year'))['year__min']
@@ -102,6 +163,7 @@ def get_filtered_data(request):
         
         # Convertir a lista de objetos para el JSON
         timeline_data = [{'year': year, 'count': count} for year, count in timeline_data.items()]
+        timeline_info = None
 
     areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id')).order_by('-count'))
     institutions_data = list(query.values('institutions__name').annotate(count=Count('id')).order_by('-count'))
@@ -109,6 +171,7 @@ def get_filtered_data(request):
 
     return JsonResponse({
         'timeline': timeline_data,
+        'timeline_info': timeline_info,
         'areas': areas_data,
         'institutions': institutions_data,
         'types': types_data

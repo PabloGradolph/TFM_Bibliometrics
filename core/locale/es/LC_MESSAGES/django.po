@@ -204,8 +204,8 @@ msgstr "Fuerza"
 msgid "Matrix"
 msgstr "Matriz"
 
-msgid "Key Metrics"
-msgstr "Métricas Clave"
+msgid "Publications & Metrics"
+msgstr "Publicaciones y Métricas"
 
 msgid "Export"
 msgstr "Exportar"
