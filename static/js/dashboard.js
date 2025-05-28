@@ -429,8 +429,130 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateInstitutionsChart(data.institutions);
                 // Actualizar el gráfico de tipos
                 updateTypesChart(data.types);
+                
+                // Actualizar la tabla de publicaciones
+                updatePublicationsTable(1);
             })
             .catch(error => console.error('Error updating visualizations:', error));
+    }
+
+    function updatePublicationsTable(page = 1) {
+        const filters = {
+            year_from: yearFrom.value,
+            year_to: yearTo.value,
+            areas: Array.from(selectedAreasList),
+            institutions: Array.from(selectedInstitutionsList),
+            types: Array.from(selectedTypesList),
+            page: page
+        };
+
+        // Construir la URL con los parámetros de filtrado
+        const params = new URLSearchParams();
+        if (filters.year_from) params.append('year_from', filters.year_from);
+        if (filters.year_to) params.append('year_to', filters.year_to);
+        filters.areas.forEach(area => params.append('areas', area));
+        filters.institutions.forEach(institution => params.append('institutions', institution));
+        filters.types.forEach(type => params.append('types', type));
+        params.append('page', filters.page);
+        
+        // Añadir el autor seleccionado si existe
+        if (selectedAuthorName) {
+            params.append('author', selectedAuthorName);
+        }
+
+        // Obtener los datos de publicaciones
+        fetch(`/api/dashboard/publications/?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.getElementById('metricsTable');
+                const pagination = document.getElementById('publicationsPagination');
+                if (!tableBody || !pagination) return;
+
+                const { data: publications, pagination: paginationData } = data.publications;
+
+                // Actualizar la tabla
+                tableBody.innerHTML = publications.map(pub => {
+                    // Ordenar las métricas en un orden específico
+                    const orderedMetrics = [
+                        { key: 'Dimensions Citations', label: 'Dimensions Citations' },
+                        { key: 'WoS Citations', label: 'WoS Citations' },
+                        { key: 'Scopus Citations', label: 'Scopus Citations' },
+                        { key: 'FCR', label: 'FCR' },
+                        { key: 'RCR', label: 'RCR' }
+                    ];
+
+                    return `
+                        <tr class="publication-row" data-publication-id="${pub.id}" style="cursor: pointer;">
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pub.title}</td>
+                            ${orderedMetrics.map(({ key }) => {
+                                const metric = pub.metrics[key];
+                                const displayValue = (metric && metric.value !== null) ? metric.value : '';
+                                return `<td>${displayValue}</td>`;
+                            }).join('')}
+                            <td>${pub.international_collab !== null ? pub.international_collab : '-'}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Actualizar la paginación
+                if (paginationData.total_pages > 1) {
+                    let paginationHTML = `
+                        <li class="page-item ${paginationData.current_page === 1 ? 'disabled' : ''}">
+                            <a class="page-link" href="#" data-page="1">&laquo;</a>
+                        </li>
+                        <li class="page-item ${paginationData.current_page === 1 ? 'disabled' : ''}">
+                            <a class="page-link" href="#" data-page="${paginationData.current_page - 1}">&lt;</a>
+                        </li>
+                    `;
+
+                    // Mostrar páginas alrededor de la actual
+                    const startPage = Math.max(1, paginationData.current_page - 2);
+                    const endPage = Math.min(paginationData.total_pages, paginationData.current_page + 2);
+
+                    for (let i = startPage; i <= endPage; i++) {
+                        paginationHTML += `
+                            <li class="page-item ${i === paginationData.current_page ? 'active' : ''}">
+                                <a class="page-link" href="#" data-page="${i}">${i}</a>
+                            </li>
+                        `;
+                    }
+
+                    paginationHTML += `
+                        <li class="page-item ${paginationData.current_page === paginationData.total_pages ? 'disabled' : ''}">
+                            <a class="page-link" href="#" data-page="${paginationData.current_page + 1}">&gt;</a>
+                        </li>
+                        <li class="page-item ${paginationData.current_page === paginationData.total_pages ? 'disabled' : ''}">
+                            <a class="page-link" href="#" data-page="${paginationData.total_pages}">&raquo;</a>
+                        </li>
+                    `;
+
+                    pagination.innerHTML = paginationHTML;
+                } else {
+                    pagination.innerHTML = '';
+                }
+
+                // Añadir eventos para la paginación
+                pagination.querySelectorAll('.page-link').forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const page = parseInt(this.dataset.page);
+                        if (!isNaN(page)) {
+                            updatePublicationsTable(page);
+                        }
+                    });
+                });
+
+                // Añadir eventos para las filas de publicaciones
+                tableBody.querySelectorAll('.publication-row').forEach(row => {
+                    row.addEventListener('click', function() {
+                        const publicationId = this.dataset.publicationId;
+                        if (publicationId) {
+                            window.location.href = `/publication/${publicationId}/`;
+                        }
+                    });
+                });
+            })
+            .catch(error => console.error('Error updating publications table:', error));
     }
 
     // Funciones para actualizar cada visualización

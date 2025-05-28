@@ -252,3 +252,110 @@ def publication_detail(request, publication_id):
     }
     
     return render(request, 'core/publication_detail.html', context)
+
+def get_publications_data(request):
+    # Obtener los parámetros de filtrado
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    author = request.GET.get('author')
+    page = int(request.GET.get('page', 1))
+    per_page = 20
+
+    # Construir el query base
+    query = Publication.objects.all()
+
+    # Aplicar filtros
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for type in types:
+            type_query |= Q(publication_type__icontains=type)
+        query = query.filter(type_query)
+    if author:
+        query = query.filter(authors__name=author)
+
+    # Obtener el total de publicaciones para la paginación
+    total_publications = query.count()
+    total_pages = (total_publications + per_page - 1) // per_page
+
+    # Obtener las publicaciones paginadas
+    start = (page - 1) * per_page
+    end = start + per_page
+    publications = query.order_by('-year', '-publication_date')[start:end]
+
+    # Preparar los datos de las publicaciones con sus métricas
+    publications_data = []
+    for pub in publications:
+        # Obtener las métricas específicas
+        metrics = {}
+        
+        # Dimensions citations
+        dim_citations = pub.metrics.filter(source='dimensions', metric_type='citations').order_by('-year').first()
+        if dim_citations:
+            metrics['Dimensions Citations'] = {
+                'value': dim_citations.impact_factor,
+                'year': dim_citations.year
+            }
+        
+        # WoS citations
+        wos_citations = pub.metrics.filter(source='wos', metric_type='citations').order_by('-year').first()
+        if wos_citations:
+            metrics['WoS Citations'] = {
+                'value': wos_citations.impact_factor,
+                'year': wos_citations.year
+            }
+        
+        # Scopus citations
+        scopus_citations = pub.metrics.filter(source='scopus', metric_type='citations').order_by('-year').first()
+        if scopus_citations:
+            metrics['Scopus Citations'] = {
+                'value': scopus_citations.impact_factor,
+                'year': scopus_citations.year
+            }
+        
+        # Dimensions FCR
+        dim_fcr = pub.metrics.filter(source='dimensions', metric_type='fcr').order_by('-year').first()
+        if dim_fcr:
+            metrics['FCR'] = {
+                'value': dim_fcr.impact_factor,
+                'year': dim_fcr.year
+            }
+        
+        # Dimensions RCR
+        dim_rcr = pub.metrics.filter(source='dimensions', metric_type='rcr').order_by('-year').first()
+        if dim_rcr:
+            metrics['RCR'] = {
+                'value': dim_rcr.impact_factor,
+                'year': dim_rcr.year
+            }
+
+        publications_data.append({
+            'id': pub.id,
+            'title': pub.title,
+            'year': pub.year,
+            'publication_type': pub.publication_type[0] if isinstance(pub.publication_type, list) and pub.publication_type else pub.publication_type,
+            'metrics': metrics,
+            'international_collab': pub.international_collab
+        })
+
+    return JsonResponse({
+        'publications': {
+            'data': publications_data,
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_items': total_publications,
+                'per_page': per_page
+            }
+        }
+    })
