@@ -196,16 +196,20 @@
 
     <!-- Collaboration Network -->
     <div class="col-12">
-        <div class="card dashboard-card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="card-title mb-0">{% trans "Collaboration Network" %}</h5>
-                    <div class="btn-group">
-                        <button class="btn btn-outline-primary btn-sm" data-network-view="force">{% trans "Force" %}</button>
-                        <button class="btn btn-outline-primary btn-sm" data-network-view="matrix">{% trans "Matrix" %}</button>
+        <div class="row h-100" id="collaborationRow">
+            <div class="col-12 h-100" id="networkCol">
+                <div class="card dashboard-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">{% trans "Collaboration Network" %}</h5>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-primary btn-sm" data-network-view="force">{% trans "Force" %}</button>
+                                <button class="btn btn-outline-primary btn-sm" data-network-view="matrix">{% trans "Matrix" %}</button>
+                            </div>
+                        </div>
+                        <div id="networkChart" style="height: 400px;"></div>
                     </div>
                 </div>
-                <div id="networkChart" style="height: 400px;"></div>
             </div>
         </div>
     </div>
@@ -230,7 +234,7 @@
                                 <th>{% trans "Scopus Citations" %}</th>
                                 <th>{% trans "FCR" %}</th>
                                 <th>{% trans "RCR" %}</th>
-                                <th>{% trans "Colab. Internac." %}</th>
+                                <th>{% trans "International Collaboration" %}</th>
                             </tr>
                         </thead>
                         <tbody id="metricsTable">
@@ -250,5 +254,10 @@
 {% endblock %}
 
 {% block extra_js %}
+    <script>
+        // Variable global con el idioma actual
+        window.CURRENT_LANGUAGE = '{{ LANGUAGE_CODE }}';
+        console.log('Current language:', window.CURRENT_LANGUAGE);
+    </script>
     <script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}

@@ -263,3 +263,18 @@ msgstr "pub."
 
 msgid "Only one author can be selected at a time."
 msgstr "Sólo un autor puede ser seleccionado a la vez." 
+
+msgid "Title"
+msgstr "Título"
+
+msgid "Dimensions Citations"
+msgstr "Citas Dimensions"
+
+msgid "WoS Citations"
+msgstr "Citas WoS"
+
+msgid "Scopus Citations"
+msgstr "Citas Scopus"
+
+msgid "International Collaboration"
+msgstr "Colaboración Internacional"

@@ -105,11 +105,148 @@ document.addEventListener('DOMContentLoaded', function() {
             standardSearch.disabled = false;
             authorLimitMessage.style.display = 'none';
             updateSearchButton();
+            
+            // Eliminar la card de métricas del autor del DOM
+            const authorMetricsCard = document.getElementById('authorMetricsCard');
+            if (authorMetricsCard) {
+                authorMetricsCard.remove();
+            }
+            
+            // Ajustar la columna de la red de colaboración
+            const networkCol = document.getElementById('networkCol');
+            if (networkCol) {
+                networkCol.className = 'col-12';
+            }
+            
             updateVisualizations(); // Actualizar gráficos al eliminar el autor
         });
 
+        // Crear y añadir la card de métricas del autor al DOM
+        const collaborationRow = document.getElementById('collaborationRow');
+        const authorMetricsCard = document.createElement('div');
+        authorMetricsCard.id = 'authorMetricsCard';
+        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 h-100';
+        
+        // Extraer el idioma de la URL
+        const currentLang = window.location.pathname.split('/')[1];
+        const cardTitle = currentLang === 'es' ? 'Resumen de Métricas del Autor' : 'Author Metrics Summary';
+        
+        authorMetricsCard.innerHTML = `
+            <div class="card dashboard-card h-100">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">${cardTitle}</h5>
+                    </div>
+                    <div id="authorMetricsContent" class="flex-grow-1">
+                        <!-- El contenido se actualizará dinámicamente -->
+                    </div>
+                </div>
+            </div>
+        `;
+        collaborationRow.appendChild(authorMetricsCard);
+
+        // Ajustar la columna de la red de colaboración
+        const networkCol = document.getElementById('networkCol');
+        if (networkCol) {
+            networkCol.className = 'col-12 col-md-6';
+        }
+
         // Actualizar los gráficos con el autor seleccionado
         updateVisualizations();
+    }
+
+    // Función para actualizar las métricas del autor
+    function updateAuthorMetrics(data) {
+        if (!selectedAuthorName) return;
+
+        const metricsContent = document.getElementById('authorMetricsContent');
+        if (!metricsContent) return;
+
+        // Calcular métricas agregadas
+        const metrics = {
+            'Dimensions Citations': { total: 0, avg: 0 },
+            'WoS Citations': { total: 0, avg: 0 },
+            'Scopus Citations': { total: 0, avg: 0 },
+            'FCR': { total: 0, avg: 0 },
+            'RCR': { total: 0, avg: 0 }
+        };
+
+        let totalPublications = data.publications.data.length;
+        let internationalCollabCount = 0;
+
+        data.publications.data.forEach(pub => {
+            // Sumar citas
+            Object.keys(metrics).forEach(metric => {
+                const value = pub.metrics[metric]?.value;
+                if (value !== null && value !== undefined) {
+                    metrics[metric].total += value;
+                }
+            });
+
+            // Contar colaboraciones internacionales
+            if (pub.international_collab) {
+                internationalCollabCount++;
+            }
+        });
+
+        // Calcular promedios
+        Object.keys(metrics).forEach(metric => {
+            metrics[metric].avg = totalPublications > 0 ? 
+                (metrics[metric].total / totalPublications).toFixed(2) : 0;
+        });
+
+        // Calcular porcentaje de colaboración internacional
+        const internationalCollabPercentage = totalPublications > 0 ?
+            ((internationalCollabCount / totalPublications) * 100).toFixed(1) : 0;
+
+        // Crear el contenido HTML
+        metricsContent.innerHTML = `
+            <div class="mb-4">
+                <h6 class="text-muted mb-3">{% trans "Total Publications" %}</h6>
+                <h3 class="mb-0">${totalPublications}</h3>
+            </div>
+            <div class="mb-4">
+                <h6 class="text-muted mb-3">{% trans "Citations" %}</h6>
+                <div class="row g-3">
+                    ${Object.entries(metrics).map(([metric, values]) => `
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body p-3">
+                                    <h6 class="card-subtitle mb-2 text-muted">${metric}</h6>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="small text-muted">{% trans "Total" %}</div>
+                                            <div class="h5 mb-0">${values.total}</div>
+                                        </div>
+                                        <div class="text-end">
+                                            <div class="small text-muted">{% trans "Avg" %}</div>
+                                            <div class="h5 mb-0">${values.avg}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div>
+                <h6 class="text-muted mb-3">{% trans "International Collaboration" %}</h6>
+                <div class="card bg-light">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="small text-muted">{% trans "Publications with International Collaboration" %}</div>
+                                <div class="h5 mb-0">${internationalCollabCount}</div>
+                            </div>
+                            <div class="text-end">
+                                <div class="small text-muted">{% trans "Percentage" %}</div>
+                                <div class="h5 mb-0">${internationalCollabPercentage}%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // Función para realizar la búsqueda
@@ -146,6 +283,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para mostrar los resultados de búsqueda
     function showSearchResults(results) {
+        const currentLang = window.location.pathname.split('/')[1];
+        const searchResults = currentLang === 'es' ? 'Resultados de la búsqueda' : 'Search Results';
+
         // Crear el modal si no existe
         let modal = document.getElementById('searchResultsModal');
         if (!modal) {
@@ -157,7 +297,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h5 class="modal-title">Resultados de la búsqueda</h5>
+                            <h5 class="modal-title">${searchResults}</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
@@ -431,7 +571,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateTypesChart(data.types);
                 
                 // Actualizar la tabla de publicaciones
-                updatePublicationsTable(1);
+                updatePublicationsTable(1).then(() => {
+                    // Actualizar las métricas del autor si hay un autor seleccionado
+                    if (selectedAuthorName) {
+                        updateAuthorMetrics(data);
+                    }
+                });
             })
             .catch(error => console.error('Error updating visualizations:', error));
     }
@@ -460,28 +605,103 @@ document.addEventListener('DOMContentLoaded', function() {
             params.append('author', selectedAuthorName);
         }
 
-        // Obtener los datos de publicaciones
-        fetch(`/api/dashboard/publications/?${params.toString()}`)
-            .then(response => response.json())
+        // Retornar la promesa de fetch
+        return fetch(`/api/dashboard/publications/?${params.toString()}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
                 const tableBody = document.getElementById('metricsTable');
                 const pagination = document.getElementById('publicationsPagination');
-                if (!tableBody || !pagination) return;
+                if (!tableBody || !pagination) {
+                    return Promise.reject('Required elements not found');
+                }
 
                 const { data: publications, pagination: paginationData } = data.publications;
 
-                // Actualizar la tabla
-                tableBody.innerHTML = publications.map(pub => {
-                    // Ordenar las métricas en un orden específico
-                    const orderedMetrics = [
-                        { key: 'Dimensions Citations', label: 'Dimensions Citations' },
-                        { key: 'WoS Citations', label: 'WoS Citations' },
-                        { key: 'Scopus Citations', label: 'Scopus Citations' },
-                        { key: 'FCR', label: 'FCR' },
-                        { key: 'RCR', label: 'RCR' }
-                    ];
+                // Ordenar las métricas en un orden específico
+                const orderedMetrics = [
+                    { key: 'Dimensions Citations', label: 'Dimensions Citations' },
+                    { key: 'WoS Citations', label: 'WoS Citations' },
+                    { key: 'Scopus Citations', label: 'Scopus Citations' },
+                    { key: 'FCR', label: 'FCR' },
+                    { key: 'RCR', label: 'RCR' },
+                    { key: 'International Collaboration', label: 'International Collaboration' }
+                ];
 
-                    return `
+                // Crear el encabezado de la tabla con iconos de ordenación
+                const tableHeader = document.createElement('thead');
+                tableHeader.innerHTML = `
+                    <tr>
+                        <th style="max-width: 300px;">Título</th>
+                        ${orderedMetrics.map(({ key, label }) => `
+                            <th class="sortable" data-metric="${key}">
+                                ${label}
+                                <i class="fas fa-sort ms-1"></i>
+                            </th>
+                        `).join('')}
+                    </tr>
+                `;
+
+                // Añadir el encabezado a la tabla
+                const table = tableBody.closest('table');
+                if (table) {
+                    const existingHeader = table.querySelector('thead');
+                    if (existingHeader) {
+                        existingHeader.remove();
+                    }
+                    table.insertBefore(tableHeader, tableBody);
+                }
+
+                // Función para ordenar las publicaciones
+                function sortPublications(metric, direction) {
+                    publications.sort((a, b) => {
+                        const valueA = a.metrics[metric]?.value ?? -Infinity;
+                        const valueB = b.metrics[metric]?.value ?? -Infinity;
+                        return direction === 'asc' ? valueA - valueB : valueB - valueA;
+                    });
+                }
+
+                // Estado de ordenación actual
+                let currentSort = {
+                    metric: null,
+                    direction: 'desc'
+                };
+
+                // Añadir eventos de clic a los encabezados ordenables
+                tableHeader.querySelectorAll('.sortable').forEach(header => {
+                    header.addEventListener('click', function() {
+                        const metric = this.dataset.metric;
+                        const icon = this.querySelector('i');
+
+                        // Resetear todos los iconos
+                        tableHeader.querySelectorAll('.sortable i').forEach(i => {
+                            i.className = 'fas fa-sort ms-1';
+                        });
+
+                        // Actualizar el estado de ordenación
+                        if (currentSort.metric === metric) {
+                            currentSort.direction = currentSort.direction === 'desc' ? 'asc' : 'desc';
+                        } else {
+                            currentSort.metric = metric;
+                            currentSort.direction = 'desc';
+                        }
+
+                        // Actualizar el icono
+                        icon.className = `fas fa-sort-${currentSort.direction === 'desc' ? 'down' : 'up'} ms-1`;
+
+                        // Ordenar y actualizar la tabla
+                        sortPublications(metric, currentSort.direction);
+                        updateTableContent(publications);
+                    });
+                });
+
+                // Función para actualizar el contenido de la tabla
+                function updateTableContent(pubs) {
+                    tableBody.innerHTML = pubs.map(pub => `
                         <tr class="publication-row" data-publication-id="${pub.id}" style="cursor: pointer;">
                             <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pub.title}</td>
                             ${orderedMetrics.map(({ key }) => {
@@ -491,8 +711,21 @@ document.addEventListener('DOMContentLoaded', function() {
                             }).join('')}
                             <td>${pub.international_collab !== null ? pub.international_collab : '-'}</td>
                         </tr>
-                    `;
-                }).join('');
+                    `).join('');
+
+                    // Añadir eventos para las filas de publicaciones
+                    tableBody.querySelectorAll('.publication-row').forEach(row => {
+                        row.addEventListener('click', function() {
+                            const publicationId = this.dataset.publicationId;
+                            if (publicationId) {
+                                window.location.href = `/publication/${publicationId}/`;
+                            }
+                        });
+                    });
+                }
+
+                // Actualizar el contenido inicial de la tabla
+                updateTableContent(publications);
 
                 // Actualizar la paginación
                 if (paginationData.total_pages > 1) {
@@ -542,17 +775,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 });
 
-                // Añadir eventos para las filas de publicaciones
-                tableBody.querySelectorAll('.publication-row').forEach(row => {
-                    row.addEventListener('click', function() {
-                        const publicationId = this.dataset.publicationId;
-                        if (publicationId) {
-                            window.location.href = `/publication/${publicationId}/`;
-                        }
-                    });
-                });
+                return Promise.resolve();
             })
-            .catch(error => console.error('Error updating publications table:', error));
+            .catch(error => {
+                console.error('Error updating publications table:', error);
+                return Promise.reject(error);
+            });
     }
 
     // Funciones para actualizar cada visualización
