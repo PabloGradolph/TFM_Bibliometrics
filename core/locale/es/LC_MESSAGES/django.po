@@ -195,8 +195,8 @@ msgstr "Circular"
 msgid "Bar"
 msgstr "Barras"
 
-msgid "Collaboration Network"
-msgstr "Red de Colaboración"
+msgid "Interactive Collaboration Network"
+msgstr "Red de Colaboración Interactiva"
 
 msgid "Force"
 msgstr "Fuerza"

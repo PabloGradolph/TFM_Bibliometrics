@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from bibliodata.models import Publication, Institution, ThematicArea, Author
 from django.db.models import Count, Min, Max, Q
+from collections import defaultdict
 
 # Create your views here.
 
@@ -358,4 +359,63 @@ def get_publications_data(request):
                 'per_page': per_page
             }
         }
+    })
+
+def get_collaboration_network(request):
+    # Obtener los parámetros de filtrado
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+
+    # Construir el query base
+    query = Publication.objects.all()
+
+    # Aplicar filtros
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for type in types:
+            type_query |= Q(publication_type__icontains=type)
+        query = query.filter(type_query)
+
+    # Obtener todas las publicaciones filtradas
+    publications = query.prefetch_related('authors')
+
+    # Crear diccionarios para almacenar nodos y enlaces
+    nodes = set()
+    edges = defaultdict(int)
+
+    # Procesar cada publicación
+    for pub in publications:
+        # Obtener todos los autores de la publicación
+        authors = list(pub.authors.all())
+        
+        # Añadir autores como nodos
+        for author in authors:
+            nodes.add(author.name)
+        
+        # Crear enlaces entre todos los pares de autores
+        for i in range(len(authors)):
+            for j in range(i + 1, len(authors)):
+                # Ordenar los nombres para mantener consistencia en las claves
+                author_pair = tuple(sorted([authors[i].name, authors[j].name]))
+                edges[author_pair] += 1
+
+    # Convertir los datos al formato esperado por el frontend
+    nodes_data = [{'id': name, 'label': name} for name in nodes]
+    edges_data = [{'source': source, 'target': target, 'weight': weight} 
+                 for (source, target), weight in edges.items()]
+
+    return JsonResponse({
+        'nodes': nodes_data,
+        'edges': edges_data
     })

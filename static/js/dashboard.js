@@ -548,6 +548,17 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/api/dashboard/data/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
+
+                // Obtener datos de la red de colaboración
+                fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateCollaborationNetwork(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching collaboration network data:', error);
+                });
+
                 // Actualizar la línea de tiempo
                 updateTimeline(data.timeline, filters.view_type, data.timeline_info);
                 // Guardar y renderizar áreas según el botón activo
@@ -565,10 +576,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     currentAreasView = 'pie';
                 }
                 renderAreasChart(data.areas);
-                // Actualizar el gráfico de instituciones
-                updateInstitutionsChart(data.institutions);
-                // Actualizar el gráfico de tipos
-                updateTypesChart(data.types);
                 
                 // Actualizar la tabla de publicaciones
                 updatePublicationsTable(1).then(() => {
@@ -1345,17 +1352,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
             .text('Áreas temáticas');
-    }    
-
-    function updateInstitutionsChart(data) {
-        // TODO: Implementar la actualización del gráfico de instituciones
-        console.log('Institutions data:', data);
-    }
-
-    function updateTypesChart(data) {
-        // TODO: Implementar la actualización del gráfico de tipos
-        console.log('Types data:', data);
-    }
+    }  
 
     // --- LÍNEA TEMPORAL: LÓGICA DE BOTONES ---
     document.querySelectorAll('[data-view]').forEach(button => {
@@ -1424,4 +1421,46 @@ document.addEventListener('DOMContentLoaded', function() {
         
         updateVisualizations();
     });
+
+    let renderer = null;
+    
+    // Función para actualizar la red de colaboración
+    function updateCollaborationNetwork(data) {
+        // Si ya existe un grafo, eliminar el anterior
+        if (renderer) {
+            renderer.kill();
+            renderer = null;
+        }
+
+        // Crear grafo vacío con Graphology
+        const graph = new graphology.Graph();
+
+        // Añadir nodos
+        data.nodes.forEach(function(node) {
+            graph.addNode(node.id, {
+            label: node.label,
+            size: 5,
+            color: '#1f77b4'
+            });
+        });
+
+        // Añadir enlaces
+        data.edges.forEach(function(edge) {
+            if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
+            graph.addEdge(edge.source, edge.target, {
+                size: Math.min(5 + edge.weight, 15),
+                weight: edge.weight,
+                color: '#999'
+            });
+            }
+        });
+
+        // Aplicar layout ForceAtlas2
+        const settings = forceAtlas2.inferSettings(graph);
+        forceAtlas2.assign(graph, { iterations: 100, settings: settings });
+
+        // Seleccionar contenedor y dibujar con sigma
+        const container = document.getElementById('graph-container');
+        renderer = new sigma.Sigma(graph, container);
+    }
 }); 
