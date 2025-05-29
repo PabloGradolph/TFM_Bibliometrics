@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from bibliodata.models import Publication, Institution, ThematicArea, Author
 from django.db.models import Count, Min, Max, Q
 from collections import defaultdict
+import random
 
 # Create your views here.
 
@@ -368,6 +369,7 @@ def get_collaboration_network(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
+    author = request.GET.get('author')  # Nuevo parámetro para el autor específico
 
     # Construir el query base
     query = Publication.objects.all()
@@ -387,6 +389,10 @@ def get_collaboration_network(request):
             type_query |= Q(publication_type__icontains=type)
         query = query.filter(type_query)
 
+    # Si hay un autor específico, filtrar por sus publicaciones
+    if author:
+        query = query.filter(authors__name=author)
+
     # Obtener todas las publicaciones filtradas
     publications = query.prefetch_related('authors')
 
@@ -400,8 +406,8 @@ def get_collaboration_network(request):
         authors = list(pub.authors.all())
         
         # Añadir autores como nodos
-        for author in authors:
-            nodes.add(author.name)
+        for author2 in authors:
+            nodes.add(author2.name)
         
         # Crear enlaces entre todos los pares de autores
         for i in range(len(authors)):
@@ -411,9 +417,28 @@ def get_collaboration_network(request):
                 edges[author_pair] += 1
 
     # Convertir los datos al formato esperado por el frontend
-    nodes_data = [{'id': name, 'label': name} for name in nodes]
-    edges_data = [{'source': source, 'target': target, 'weight': weight} 
-                 for (source, target), weight in edges.items()]
+    nodes_data = [{
+        'id': name,
+        'label': name,
+        'x': random.random(),
+        'y': random.random(),
+        'is_selected': name == author if author else False  # Marcar el autor seleccionado
+    } for name in nodes]
+
+    edges_data = [{
+        'source': source,
+        'target': target,
+        'weight': weight
+    } for (source, target), weight in edges.items()]
+
+    counter = 0
+    for node in nodes_data:
+        if node['id'] is None or node['label'] is None or node['x'] == 0 or node['y'] == 0 or node['is_selected'] == None:
+            counter += 1
+    for edge in edges_data:
+        if edge['source'] is None or edge['target'] is None or edge['weight'] == 0:
+            counter += 1
+    print(counter)
 
     return JsonResponse({
         'nodes': nodes_data,

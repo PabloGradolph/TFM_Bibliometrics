@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
+import EdgeCurveProgram from "@sigma/edge-curve";
 
 export function initFiltersAndSearch() {
     // Referencias a los elementos del DOM
@@ -1432,41 +1433,126 @@ export function initFiltersAndSearch() {
     
     // Función para actualizar la red de colaboración
     function updateCollaborationNetwork(data) {
-        // Si ya existe un grafo, eliminar el anterior
-        if (renderer) {
-            renderer.kill();
-            renderer = null;
-        }
-
-        // Crear grafo vacío con Graphology
+        const container = document.getElementById('collaborationNetwork');
+        if (!container) return;
+        container.innerHTML = '';
+      
+        // Crear el grafo
         const graph = new Graph();
-
-        // Añadir nodos
-        data.nodes.forEach(function(node) {
-            graph.addNode(node.id, {
+      
+        // Calcular grados para ajustar el tamaño del nodo
+        const degreeMap = {};
+        data.edges.forEach(edge => {
+          degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
+          degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
+        });
+      
+        // Añadir nodos con posición inicial aleatoria y tamaño proporcional al grado
+        data.nodes.forEach(node => {
+          const degree = degreeMap[node.id] || 1;
+          graph.addNode(node.id, {
             label: node.label,
-            size: 5,
-            color: '#1f77b4'
-            });
+            x: Math.random() * 1000,
+            y: Math.random() * 1000,
+            size: node.is_selected ? Math.max(4, Math.log(degree + 1) * 1.5) : Math.max(2, Math.log(degree + 1)), // Nodo más grande para el autor seleccionado
+            color: node.is_selected ? '#ff5722' : '#2196f3',  // Color naranja para el autor seleccionado
+            highlighted: node.is_selected  // Marcar como destacado si es el autor seleccionado
+          });
         });
-
-        // Añadir enlaces
-        data.edges.forEach(function(edge) {
+      
+        // Añadir aristas con grosor proporcional al peso
+        data.edges.forEach(edge => {
             if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-            graph.addEdge(edge.source, edge.target, {
-                size: Math.min(5 + edge.weight, 15),
-                weight: edge.weight,
-                color: '#999'
-            });
+              const weight = edge.weight || 1;
+              const sourceNode = graph.getNodeAttributes(edge.source);
+              const targetNode = graph.getNodeAttributes(edge.target);
+              const isHighlighted = sourceNode.highlighted || targetNode.highlighted;
+          
+              graph.addEdge(edge.source, edge.target, {
+                weight: weight,
+                size: isHighlighted ? Math.max(0.2, Math.log10(weight + 1) * 0.8) : Math.max(0.1, Math.log10(weight + 1) * 0.6), // Aristas más gruesas para conexiones del autor seleccionado
+                color: isHighlighted ? '#ff5722' : 'rgba(150, 150, 150, 0.65)',  // Color naranja sólido para las conexiones del autor seleccionado
+                type: 'curve',
+              });
             }
+          });
+      
+        // Aplicar layout ForceAtlas2
+        forceAtlas2.assign(graph, {
+          iterations: 300,
+          settings: {
+            gravity: 1.2,
+            scalingRatio: 15,
+            strongGravityMode: true,
+            barnesHutOptimize: true,
+            adjustSizes: true,
+            edgeWeightInfluence: 1
+          }
+        });
+      
+        // Renderizar con Sigma
+        renderer = new Sigma(graph, container, {
+          minCameraRatio: 0.1,
+          maxCameraRatio: 10,
+          labelRenderedSizeThreshold: 6,
+          defaultNodeColor: '#2196f3',
+          defaultEdgeColor: '#999',
+          defaultNodeSize: 8,
+          defaultEdgeType: "curve",
+          edgeProgramClasses: {
+            curve: EdgeCurveProgram,
+          },
+          renderLabels: true,
+          labelDensity: 0.07,
+          zIndex: true,
+          enableEdgeHovering: true,
+          enableNodeHovering: true,
+          enableCamera: true
+        });
+      
+        // Tooltip simple con el título del nodo
+        renderer.on('enterNode', ({ node }) => {
+          container.setAttribute('title', graph.getNodeAttribute(node, 'label'));
+        });
+      
+        renderer.getCamera().animatedReset({ duration: 500 });
+
+        // Mostrar mensaje informativo sobre el número de nodos y enlaces
+        const infoMessage = d3.select('#collaborationNetwork')
+            .append('div')
+            .attr('class', 'alert alert-info')
+            .style('position', 'absolute')
+            .style('top', '50px')  // Cambiado de 10px a 50px para que aparezca debajo del título
+            .style('right', '10px')
+            .style('padding', '8px 12px')
+            .style('font-size', '12px')
+            .style('border-radius', '4px')
+            .style('background-color', '#e3f2fd')
+            .style('border', '1px solid #2196f3')
+            .style('color', '#0d47a1')
+            .style('z-index', '1000')
+            .style('display', 'flex')
+            .style('align-items', 'center')
+            .style('gap', '8px')
+            .style('max-width', '300px');
+
+        const numNodes = graph.order;
+        const numEdges = graph.size;
+        
+        // Crear el contenido del mensaje
+        infoMessage.html(`
+            <div style="flex-grow: 1;">
+                <i class="fas fa-info-circle"></i>
+                La red contiene ${numNodes} autores y ${numEdges} colaboraciones
+            </div>
+            <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
+        `);
+
+        // Añadir evento para cerrar el mensaje
+        infoMessage.select('.btn-close').on('click', function() {
+            infoMessage.remove();
         });
 
-        // Aplicar layout ForceAtlas2
-        const settings = forceAtlas2.inferSettings(graph);
-        forceAtlas2.assign(graph, { iterations: 100, settings: settings });
-
-        // Seleccionar contenedor y dibujar con sigma
-        const container = document.getElementById('graph-container');
-        renderer = new Sigma(graph, container);
-    }
+        renderer.getCamera().animatedReset({ duration: 500 });
+    }      
 }
