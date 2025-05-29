@@ -1,4 +1,10 @@
-document.addEventListener('DOMContentLoaded', function() {
+// filters_search.js
+import * as d3 from 'd3';
+import Graph from 'graphology';
+import Sigma from 'sigma';
+import forceAtlas2 from 'graphology-layout-forceatlas2';
+
+export function initFiltersAndSearch() {
     // Referencias a los elementos del DOM
     const yearFrom = document.getElementById('yearFrom');
     const yearTo = document.getElementById('yearTo');
@@ -15,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedAuthor = document.getElementById('selectedAuthor');
     const authorLimitMessage = document.getElementById('authorLimitMessage');
 
-    // Almacenar las selecciones
+     // Almacenar las selecciones
     let selectedAreasList = new Set();
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
@@ -121,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
             updateVisualizations(); // Actualizar gráficos al eliminar el autor
         });
 
-        // Crear y añadir la card de métricas del autor al DOM
+         // Crear y añadir la card de métricas del autor al DOM
         const collaborationRow = document.getElementById('collaborationRow');
         const authorMetricsCard = document.createElement('div');
         authorMetricsCard.id = 'authorMetricsCard';
@@ -1433,7 +1439,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Crear grafo vacío con Graphology
-        const graph = new graphology.Graph();
+        const graph = new Graph();
 
         // Añadir nodos
         data.nodes.forEach(function(node) {
@@ -1461,6 +1467,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Seleccionar contenedor y dibujar con sigma
         const container = document.getElementById('graph-container');
-        renderer = new sigma.Sigma(graph, container);
+        renderer = new Sigma(graph, container);
     }
-}); 
+}
