@@ -168,7 +168,16 @@ def get_filtered_data(request):
         timeline_data = [{'year': year, 'count': count} for year, count in timeline_data.items()]
         timeline_info = None
 
+    # Procesar áreas temáticas para el gráfico circular
     areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id')).order_by('-count'))
+    
+    # Procesar para mostrar top 10 + Otros
+    if len(areas_data) > 14:
+        top_15_areas = areas_data[:14]
+        other_areas = areas_data[14:]
+        other_count = sum(area['count'] for area in other_areas)
+        areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
+    
     institutions_data = list(query.values('institutions__name').annotate(count=Count('id')).order_by('-count'))
     types_data = list(query.values('publication_type').annotate(count=Count('id')).order_by('-count'))
 

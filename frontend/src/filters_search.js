@@ -1099,20 +1099,21 @@ export function initFiltersAndSearch() {
         data = data.filter(d => d.thematic_areas__name !== null);
 
         // Agrupar las áreas menos representativas en 'Otras'
-        const N = 25;
+        const N = 14;
         if (data.length > N) {
             const sorted = data.slice().sort((a, b) => b.count - a.count);
             const topN = sorted.slice(0, N);
             const rest = sorted.slice(N);
             const otrasCount = rest.reduce((sum, d) => sum + d.count, 0);
-            data = [...topN, {thematic_areas__name: 'Otras', count: otrasCount}];
+            // Poner "Otras" al principio del array
+            data = [{thematic_areas__name: 'Otras', count: otrasCount}, ...topN];
         }
 
         // Limpiar el contenedor
         d3.select('#areasChart').html('');
 
         // Configuración del gráfico
-        const margin = {top: 20, right: 20, bottom: 70, left: 60};
+        const margin = {top: 20, right: 150, bottom: 20, left: 20}; // Aumentado el margen derecho para la leyenda
         const width = document.getElementById('areasChart').clientWidth - margin.left - margin.right;
         const height = 320 - margin.top - margin.bottom;
         const radius = Math.min(width, height) / 2;
@@ -1125,7 +1126,7 @@ export function initFiltersAndSearch() {
             .style('display', 'block')
             .style('margin', '0 auto')
             .append('g')
-            .attr('transform', `translate(${width/2 + margin.left},${height/2 + margin.top})`);
+            .attr('transform', `translate(${radius + margin.left},${height/2 + margin.top})`);
 
         // Escala de colores
         const color = d3.scaleOrdinal()
@@ -1199,6 +1200,32 @@ export function initFiltersAndSearch() {
                     .style('left', (finalX - infoBoxWidth/2) + 'px')
                     .style('top', finalY + 'px')
                     .style('border', `2px solid ${borderColor}`);
+            });
+
+        // Añadir la leyenda
+        const legend = svg.append('g')
+            .attr('transform', `translate(${radius + 20}, ${-height/2})`);
+
+        const legendItem = legend.selectAll('.legend-item')
+            .data(data)
+            .enter()
+            .append('g')
+            .attr('class', 'legend-item')
+            .attr('transform', (d, i) => `translate(0, ${i * 20})`);
+
+        legendItem.append('rect')
+            .attr('width', 15)
+            .attr('height', 15)
+            .attr('fill', d => color(d.thematic_areas__name));
+
+        legendItem.append('text')
+            .attr('x', 20)
+            .attr('y', 12)
+            .style('font-size', '10px')
+            .text(d => {
+                const name = d.thematic_areas__name;
+                const percentage = (d.count / d3.sum(data, d => d.count) * 100).toFixed(1);
+                return `${name} (${d.count} pubs, ${percentage}%)`;
             });
 
         // Cerrar info box al pinchar fuera
