@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from bibliodata.models import Publication, Institution, ThematicArea, Author
 from django.db.models import Count, Min, Max, Q
 from collections import defaultdict
+from itertools import combinations
 import random
 
 # Create your views here.
@@ -363,18 +364,15 @@ def get_publications_data(request):
     })
 
 def get_collaboration_network(request):
-    # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
-    author = request.GET.get('author')  # Nuevo parámetro para el autor específico
+    author = request.GET.get('author')
 
-    # Construir el query base
     query = Publication.objects.all()
 
-    # Aplicar filtros
     if year_from:
         query = query.filter(year__gte=year_from)
     if year_to:
@@ -388,57 +386,41 @@ def get_collaboration_network(request):
         for type in types:
             type_query |= Q(publication_type__icontains=type)
         query = query.filter(type_query)
-
-    # Si hay un autor específico, filtrar por sus publicaciones
     if author:
         query = query.filter(authors__name=author)
 
-    # Obtener todas las publicaciones filtradas
     publications = query.prefetch_related('authors')
+    valid_ids = set(Author.objects.values_list('gesbib_id', flat=True))
 
-    # Crear diccionarios para almacenar nodos y enlaces
+    edges = []
     nodes = set()
-    edges = defaultdict(int)
 
-    # Procesar cada publicación
     for pub in publications:
-        # Obtener todos los autores de la publicación
-        authors = list(pub.authors.all())
-        
-        # Añadir autores como nodos
-        for author2 in authors:
-            nodes.add(author2.name)
-        
-        # Crear enlaces entre todos los pares de autores
-        for i in range(len(authors)):
-            for j in range(i + 1, len(authors)):
-                # Ordenar los nombres para mantener consistencia en las claves
-                author_pair = tuple(sorted([authors[i].name, authors[j].name]))
-                edges[author_pair] += 1
+        ids = [str(a.gesbib_id) for a in pub.authors.all() if str(a.gesbib_id) in valid_ids]
+        ids = list(set(ids))
+        if len(ids) < 2:
+            continue
+        pares = combinations(sorted(ids), 2)
+        edges.extend(pares)
+        nodes.update(ids)
 
-    # Convertir los datos al formato esperado por el frontend
-    nodes_data = [{
-        'id': name,
-        'label': name,
-        'x': random.random(),
-        'y': random.random(),
-        'is_selected': name == author if author else False  # Marcar el autor seleccionado
-    } for name in nodes]
+    edge_counts = defaultdict(int)
+    for s, t in edges:
+        edge_counts[(s, t)] += 1
 
     edges_data = [{
-        'source': source,
-        'target': target,
-        'weight': weight
-    } for (source, target), weight in edges.items()]
+        'source': s,
+        'target': t,
+        'weight': w
+    } for (s, t), w in edge_counts.items()]
 
-    counter = 0
-    for node in nodes_data:
-        if node['id'] is None or node['label'] is None or node['x'] == 0 or node['y'] == 0 or node['is_selected'] == None:
-            counter += 1
-    for edge in edges_data:
-        if edge['source'] is None or edge['target'] is None or edge['weight'] == 0:
-            counter += 1
-    print(counter)
+    nodes_data = [{
+        'id': nid,
+        'label': Author.objects.get(gesbib_id=nid).name,
+        'x': random.random(),
+        'y': random.random(),
+        'is_selected': (nid == author) if author else False
+    } for nid in nodes]
 
     return JsonResponse({
         'nodes': nodes_data,
