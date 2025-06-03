@@ -5,6 +5,7 @@ import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import EdgeCurveProgram from "@sigma/edge-curve";
 
+
 export function initFiltersAndSearch() {
     // Referencias a los elementos del DOM
     const yearFrom = document.getElementById('yearFrom');
@@ -128,11 +129,11 @@ export function initFiltersAndSearch() {
             updateVisualizations(); // Actualizar gráficos al eliminar el autor
         });
 
-         // Crear y añadir la card de métricas del autor al DOM
+        // Crear y añadir la card de métricas del autor al DOM
         const collaborationRow = document.getElementById('collaborationRow');
         const authorMetricsCard = document.createElement('div');
         authorMetricsCard.id = 'authorMetricsCard';
-        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 h-100';
+        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-3 h-100';
         
         // Extraer el idioma de la URL
         const currentLang = window.location.pathname.split('/')[1];
@@ -145,7 +146,19 @@ export function initFiltersAndSearch() {
                         <h5 class="card-title mb-0">${cardTitle}</h5>
                     </div>
                     <div id="authorMetricsContent" class="flex-grow-1">
-                        <!-- El contenido se actualizará dinámicamente -->
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>{% trans "Metric" %}</th>
+                                        <th>{% trans "Value" %}</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="authorMetricsTable">
+                                    <!-- Data will be loaded dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -157,6 +170,60 @@ export function initFiltersAndSearch() {
         if (networkCol) {
             networkCol.className = 'col-12 col-md-6';
         }
+
+        // Obtener las métricas del autor
+        fetch(`/api/search/authors/?q=${encodeURIComponent(authorName)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.suggestions || data.suggestions.length === 0) {
+                    console.error('Author not found');
+                    return;
+                }
+                
+                // Obtener el ID del autor de la primera sugerencia
+                const authorId = data.suggestions[0].gesbib_id;
+                
+                // Ahora hacer la llamada a get_author_metrics con el ID
+                return fetch(`/api/author/metrics/?author_id=${encodeURIComponent(authorId)}`);
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error fetching author metrics:', data.error);
+                    return;
+                }
+                
+                const metricsTable = document.getElementById('authorMetricsTable');
+                if (!metricsTable) return;
+
+                // Mapeo de nombres de métricas a nombres más amigables
+                const metricNames = {
+                    'total_publications': 'Total Publications',
+                    'total_citations': 'Total Citations',
+                    'citations_wos': 'WoS Citations',
+                    'citations_scopus': 'Scopus Citations',
+                    'h_index': 'H-index',
+                    'h_index_gb': 'H-index (Google Scholar)',
+                    'h_index_h5gb': 'H5-index (Google Scholar)',
+                    'international_index': 'International Collaboration Index'
+                };
+
+                // Limpiar la tabla
+                metricsTable.innerHTML = '';
+
+                // Añadir cada métrica a la tabla
+                Object.entries(data.metrics).forEach(([key, value]) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${metricNames[key] || key}</td>
+                        <td>${value}</td>
+                    `;
+                    metricsTable.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching author metrics:', error);
+            });
 
         // Actualizar los gráficos con el autor seleccionado
         updateVisualizations();
@@ -892,34 +959,34 @@ export function initFiltersAndSearch() {
             .attr('d', line);
 
         // Tooltip
-        const tooltip = d3.select('#timelineChart')
-            .append('div')
-            .attr('class', 'tooltip')
-            .style('opacity', 0)
-            .style('position', 'absolute')
-            .style('background-color', 'rgba(255,255,255,0.95)')
-            .style('border', '1px solid #2196f3')
-            .style('border-radius', '4px')
-            .style('padding', '6px 10px')
-            .style('font-size', '13px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('box-shadow', '0 2px 4px rgba(0,0,0,0.1)');
+        const tooltip = document.createElement('div');
+        tooltip.className = 'tooltip';
+        tooltip.style.opacity = 0;
+        tooltip.style.position = 'absolute';
+        tooltip.style.backgroundColor = 'rgba(255,255,255,0.95)';
+        tooltip.style.border = '1px solid #2196f3';
+        tooltip.style.borderRadius = '4px';
+        tooltip.style.padding = '6px 10px';
+        tooltip.style.fontSize = '13px';
+        tooltip.style.pointerEvents = 'none';
+        tooltip.style.zIndex = '1000';
+        tooltip.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        document.body.appendChild(tooltip);
 
         // Info box para el clic
-        const infoBox = d3.select('#timelineChart')
-            .append('div')
-            .attr('class', 'info-box')
-            .style('display', 'none')
-            .style('position', 'absolute')
-            .style('background-color', 'white')
-            .style('border', '2px solid #2196f3')
-            .style('border-radius', '6px')
-            .style('padding', '10px 15px')
-            .style('font-size', '14px')
-            .style('z-index', '1000')
-            .style('box-shadow', '0 4px 8px rgba(0,0,0,0.1)')
-            .style('pointer-events', 'none');
+        const infoBox = document.createElement('div');
+        infoBox.className = 'info-box';
+        infoBox.style.display = 'none';
+        infoBox.style.position = 'absolute';
+        infoBox.style.backgroundColor = 'white';
+        infoBox.style.border = '2px solid #2196f3';
+        infoBox.style.borderRadius = '6px';
+        infoBox.style.padding = '10px 15px';
+        infoBox.style.fontSize = '14px';
+        infoBox.style.zIndex = '1000';
+        infoBox.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        infoBox.style.pointerEvents = 'none';
+        document.body.appendChild(infoBox);
 
         // Añadir puntos y eventos de tooltip y click
         svg.selectAll('.point')
@@ -938,9 +1005,7 @@ export function initFiltersAndSearch() {
                 d3.select(this)
                     .attr('r', 7)
                     .attr('fill', '#1976d2');
-                tooltip.transition()
-                    .duration(150)
-                    .style('opacity', 1);
+                tooltip.style.opacity = 1;
                 
                 let tooltipContent;
                 if (viewType === 'monthly') {
@@ -951,17 +1016,15 @@ export function initFiltersAndSearch() {
                     tooltipContent = `<b>Año:</b> ${d.year}<br><b>Publicaciones:</b> ${d.count}`;
                 }
                 
-                tooltip.html(tooltipContent)
-                    .style('left', (event.pageX - 30) + 'px')
-                    .style('top', (event.pageY - 40) + 'px');
+                tooltip.innerHTML = tooltipContent;
+                tooltip.style.left = `${event.pageX + 10}px`;
+                tooltip.style.top = `${event.pageY + 10}px`;
             })
             .on('mouseout', function() {
                 d3.select(this)
                     .attr('r', 5)
                     .attr('fill', '#2196f3');
-                tooltip.transition()
-                    .duration(200)
-                    .style('opacity', 0);
+                tooltip.style.opacity = 0;
             })
             .on('click', function(event, d) {
                 event.stopPropagation();
@@ -1010,10 +1073,10 @@ export function initFiltersAndSearch() {
                     `;
                 }
                 
-                infoBox.html(infoBoxContent)
-                    .style('display', 'block')
-                    .style('left', (finalX - infoBoxWidth/2) + 'px')
-                    .style('top', finalY + 'px');
+                infoBox.innerHTML = infoBoxContent;
+                infoBox.style.display = 'block';
+                infoBox.style.left = `${finalX - infoBoxWidth/2}px`;
+                infoBox.style.top = `${finalY}px`;
             });
 
         // Añadir evento de clic en el SVG para cerrar el info box
@@ -1463,123 +1526,236 @@ export function initFiltersAndSearch() {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
         container.innerHTML = '';
-      
-        // Crear el grafo
+    
         const graph = new Graph();
-      
-        // Calcular grados para ajustar el tamaño del nodo
+    
+        const colorPalette = [
+            "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6",
+            "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
+            "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
+        ];
+        const colorByCommunity = (community) => colorPalette[community % colorPalette.length];
+    
+        const communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
+        const nodesByCommunity = {};
+        communities.forEach(c => {
+            nodesByCommunity[c] = data.nodes.filter(n => parseInt(n.community) === c);
+        });
+    
+        const separation = 600;
+        const radiusPerCommunity = 350;
+        let angleBase = 0;
+    
+        communities.forEach((comm, i) => {
+            const nodes = nodesByCommunity[comm];
+            const angleStep = (2 * Math.PI) / nodes.length;
+            const cx = Math.cos(angleBase) * separation * 2;
+            const cy = Math.sin(angleBase) * separation * 2;
+            angleBase += (2 * Math.PI) / communities.length;
+    
+            nodes.forEach((node, j) => {
+                const angle = j * angleStep;
+                node.x = cx + radiusPerCommunity * Math.cos(angle);
+                node.y = cy + radiusPerCommunity * Math.sin(angle);
+            });
+        });
+    
         const degreeMap = {};
         data.edges.forEach(edge => {
-          degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
-          degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
+            degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
+            degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
         });
-      
-        // Añadir nodos con posición inicial aleatoria y tamaño proporcional al grado
+    
+        const topNodeByCommunity = {};
+        for (const [comm, nodes] of Object.entries(nodesByCommunity)) {
+            let topNode = null;
+            let maxDegree = -1;
+            nodes.forEach(n => {
+                const degree = degreeMap[n.id] || 0;
+                if (degree > maxDegree) {
+                    maxDegree = degree;
+                    topNode = n.id;
+                }
+            });
+            topNodeByCommunity[comm] = topNode;
+        }
+    
         data.nodes.forEach(node => {
-          const degree = degreeMap[node.id] || 1;
-          graph.addNode(node.id, {
-            label: node.label,
-            x: Math.random() * 1000,
-            y: Math.random() * 1000,
-            size: node.is_selected ? Math.max(4, Math.log(degree + 1) * 1.5) : Math.max(2, Math.log(degree + 1)), // Nodo más grande para el autor seleccionado
-            color: node.is_selected ? '#ff5722' : '#2196f3',  // Color naranja para el autor seleccionado
-            highlighted: node.is_selected  // Marcar como destacado si es el autor seleccionado
-          });
+            const comm = parseInt(node.community);
+            graph.addNode(node.id, {
+                label: node.label,
+                x: node.x,
+                y: node.y,
+                size: node.is_selected ? 18 : 12,
+                color: colorByCommunity(node.community),
+                highlighted: node.is_selected,
+                community: comm,
+                forceLabel: String(node.id) === String(topNodeByCommunity[comm])
+            });
         });
-      
-        // Añadir aristas con grosor proporcional al peso
+    
         data.edges.forEach(edge => {
             if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-              const weight = edge.weight || 1;
-              const sourceNode = graph.getNodeAttributes(edge.source);
-              const targetNode = graph.getNodeAttributes(edge.target);
-              const isHighlighted = sourceNode.highlighted || targetNode.highlighted;
-          
-              graph.addEdge(edge.source, edge.target, {
-                weight: weight,
-                size: isHighlighted ? Math.max(0.2, Math.log10(weight + 1) * 0.8) : Math.max(0.1, Math.log10(weight + 1) * 0.6), // Aristas más gruesas para conexiones del autor seleccionado
-                color: isHighlighted ? '#ff5722' : 'rgba(150, 150, 150, 0.65)',  // Color naranja sólido para las conexiones del autor seleccionado
-                type: 'curve',
-              });
+                const weight = edge.weight || 1;
+                const rawSize = Math.pow(weight, 0.7);
+                const edgeSize = Math.min(4.0, Math.max(1.5, rawSize));
+                const alpha = Math.min(0.9, 0.5 + 0.05 * weight);
+                const edgeColor = `rgba(3, 138, 255, ${alpha.toFixed(2)})`;
+                graph.addEdge(edge.source, edge.target, {
+                    size: edgeSize,
+                    color: edgeColor,
+                    type: 'curve'
+                });
             }
-          });
-      
-        // Aplicar layout ForceAtlas2
-        forceAtlas2.assign(graph, {
-          iterations: 300,
-          settings: {
-            gravity: 1.2,
-            scalingRatio: 15,
-            strongGravityMode: true,
-            barnesHutOptimize: true,
-            adjustSizes: true,
-            edgeWeightInfluence: 1
-          }
         });
-      
-        // Renderizar con Sigma
-        renderer = new Sigma(graph, container, {
-          minCameraRatio: 0.1,
-          maxCameraRatio: 10,
-          labelRenderedSizeThreshold: 6,
-          defaultNodeColor: '#2196f3',
-          defaultEdgeColor: '#999',
-          defaultNodeSize: 8,
-          defaultEdgeType: "curve",
-          edgeProgramClasses: {
-            curve: EdgeCurveProgram,
-          },
-          renderLabels: true,
-          labelDensity: 0.07,
-          zIndex: true,
-          enableEdgeHovering: true,
-          enableNodeHovering: true,
-          enableCamera: true
+    
+        // === Renderizar sin interacción activa ===
+        const renderer = new Sigma(graph, container, {
+            minCameraRatio: 0.1,
+            maxCameraRatio: 10,
+            defaultEdgeType: "curve",
+            edgeProgramClasses: {
+                curve: EdgeCurveProgram,
+            },
+            renderLabels: true,
+            labelDensity: 1,
+            labelGridCellSize: 300,
+            labelRenderedSizeThreshold: 0,
+            defaultLabelSize: 8,
+            zIndex: true,
+            enableEdgeHovering: false,
+            enableNodeHovering: false,
+            enableCamera: false
         });
-      
-        // Tooltip simple con el título del nodo
-        renderer.on('enterNode', ({ node }) => {
-          container.setAttribute('title', graph.getNodeAttribute(node, 'label'));
+    
+        // === Tooltip flotante
+        const tooltip = document.createElement('div');
+        Object.assign(tooltip.style, {
+            position: 'absolute',
+            backgroundColor: '#fff',
+            border: '1px solid #aaa',
+            padding: '4px 8px',
+            fontSize: '12px',
+            borderRadius: '4px',
+            pointerEvents: 'none',
+            display: 'none',
+            zIndex: 1000
         });
-      
+        document.body.appendChild(tooltip);
+    
+        // === Eventos definidos pero no activos hasta que se habiliten
+        const activateInteractivity = () => {
+            // === Mensaje informativo
+            const infoMessage = d3.select('#collaborationNetwork')
+                .append('div')
+                .attr('class', 'alert alert-info')
+                .style('position', 'absolute')
+                .style('top', '50px')
+                .style('right', '10px')
+                .style('padding', '8px 12px')
+                .style('font-size', '12px')
+                .style('border-radius', '4px')
+                .style('background-color', '#e3f2fd')
+                .style('border', '1px solid #2196f3')
+                .style('color', '#0d47a1')
+                .style('z-index', '1000')
+                .style('display', 'flex')
+                .style('align-items', 'center')
+                .style('gap', '8px')
+                .style('max-width', '300px');
+
+            infoMessage.html(`
+                <div style="flex-grow: 1;">
+                    <i class="fas fa-info-circle"></i>
+                    La red contiene ${graph.order} autores y ${graph.size} colaboraciones
+                </div>
+                <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
+            `);
+
+            infoMessage.select('.btn-close').on('click', function () {
+                infoMessage.remove();
+            });
+
+            renderer.setSettings({
+                enableEdgeHovering: true,
+                enableNodeHovering: true,
+                enableCamera: true
+            });
+    
+            renderer.on('enterNode', ({ node, event }) => {
+                const label = graph.getNodeAttribute(node, 'label');
+              
+                // Obtener vecinos y pesos
+                const neighbors = graph.neighbors(node);
+                const lines = [];
+              
+                neighbors.forEach(neighbor => {
+                  const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node); // red no dirigida
+                  const weight = graph.getEdgeAttribute(edge, 'size') || 1;
+                  const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
+                  lines.push(`• ${neighborLabel} (${weight})`);
+                });
+              
+                tooltip.innerText = `${label}\nColabora con:\n${lines.join('\n')}`;
+                tooltip.style.left = `${event.clientX + 10}px`;
+                tooltip.style.top = `${event.clientY + 10}px`;
+                tooltip.style.display = 'block';
+              
+                // Resaltar nodo y vecinos como ya haces
+                const visibleNodes = new Set(neighbors);
+                visibleNodes.add(node);
+                graph.forEachNode(n => {
+                  graph.setNodeAttribute(n, 'hidden', !visibleNodes.has(n));
+                  graph.setNodeAttribute(n, 'forceLabel', visibleNodes.has(n));
+                });
+              
+                graph.forEachEdge(e => {
+                  const source = graph.source(e);
+                  const target = graph.target(e);
+                  const visible = visibleNodes.has(source) && visibleNodes.has(target);
+                  graph.setEdgeAttribute(e, 'hidden', !visible);
+                });
+              });
+              
+    
+            renderer.on('leaveNode', () => {
+                tooltip.style.display = 'none';
+                graph.forEachNode(n => {
+                    graph.removeNodeAttribute(n, 'hidden');
+                    graph.setNodeAttribute(n, 'forceLabel', false);
+                });
+                graph.forEachEdge(e => {
+                    graph.removeEdgeAttribute(e, 'hidden');
+                });
+            });          
+        };
+    
+        // === Overlay para activar la red
+        const overlay = document.createElement('div');
+        overlay.innerText = 'Haz clic para activar la red';
+        Object.assign(overlay.style, {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#333',
+            cursor: 'pointer',
+            zIndex: 1000
+        });
+        container.appendChild(overlay);
+    
+        overlay.addEventListener('click', () => {
+            overlay.remove();
+            activateInteractivity();
+        });
+    
         renderer.getCamera().animatedReset({ duration: 500 });
-
-        // Mostrar mensaje informativo sobre el número de nodos y enlaces
-        const infoMessage = d3.select('#collaborationNetwork')
-            .append('div')
-            .attr('class', 'alert alert-info')
-            .style('position', 'absolute')
-            .style('top', '50px')  // Cambiado de 10px a 50px para que aparezca debajo del título
-            .style('right', '10px')
-            .style('padding', '8px 12px')
-            .style('font-size', '12px')
-            .style('border-radius', '4px')
-            .style('background-color', '#e3f2fd')
-            .style('border', '1px solid #2196f3')
-            .style('color', '#0d47a1')
-            .style('z-index', '1000')
-            .style('display', 'flex')
-            .style('align-items', 'center')
-            .style('gap', '8px')
-            .style('max-width', '300px');
-
-        const numNodes = graph.order;
-        const numEdges = graph.size;
-        
-        // Crear el contenido del mensaje
-        infoMessage.html(`
-            <div style="flex-grow: 1;">
-                <i class="fas fa-info-circle"></i>
-                La red contiene ${numNodes} autores y ${numEdges} colaboraciones
-            </div>
-            <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
-        `);
-
-        // Añadir evento para cerrar el mensaje
-        infoMessage.select('.btn-close').on('click', function() {
-            infoMessage.remove();
-        });
-
-        renderer.getCamera().animatedReset({ duration: 500 });
-    }      
+    }           
 }

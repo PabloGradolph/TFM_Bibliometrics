@@ -5,7 +5,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Bibliometrics CSIC\n"
+"Project-Id-Version: Bibliometrics IPBLN\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2024-03-19 12:00+0000\n"
 "PO-Revision-Date: 2024-03-19 12:00+0000\n"
@@ -18,8 +18,8 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: .\core\views.py
-msgid "Bibliometrics CSIC"
-msgstr "Bibliometría CSIC"
+msgid "Bibliometrics IPBLN"
+msgstr "Bibliometría IPBLN"
 
 #: .\core\views.py
 msgid "Dashboard"
@@ -46,17 +46,17 @@ msgid "Interactive web tool for scientific production analysis"
 msgstr "Herramienta web interactiva para el análisis de la producción científica"
 
 # home.html
-msgid "Home - Bibliometrics CSIC"
-msgstr "Inicio - Bibliometrics CSIC"
+msgid "Home - Bibliometrics IPBLN"
+msgstr "Inicio - Bibliometrics IPBLN"
 
-msgid "Welcome to Bibliometrics CSIC"
-msgstr "Bienvenido a Bibliometría CSIC"
+msgid "Welcome to Bibliometrics IPBLN"
+msgstr "Bienvenido a Bibliometría IPBLN"
 
 msgid "Data Analysis"
 msgstr "Análisis de Datos"
 
-msgid "Explore and analyze CSIC's scientific production with interactive visualizations."
-msgstr "Explore y analice la producción científica del CSIC con visualizaciones interactivas."
+msgid "Explore and analyze IPBLN's scientific production with interactive visualizations."
+msgstr "Explore y analice la producción científica del IPBLN con visualizaciones interactivas."
 
 msgid "Collaboration Networks"
 msgstr "Redes de Colaboración"
@@ -86,11 +86,11 @@ msgid "Go to Dashboard"
 msgstr "Ir al Panel de Control"
 
 # about.html
-msgid "About - Bibliometrics CSIC"
-msgstr "Acerca de - Bibliometrics CSIC"
+msgid "About - Bibliometrics IPBLN"
+msgstr "Acerca de - Bibliometrics IPBLN"
 
-msgid "About Bibliometrics CSIC"
-msgstr "Acerca de Bibliometrics CSIC"
+msgid "About Bibliometrics IPBLN"
+msgstr "Acerca de Bibliometría IPBLN"
 
 msgid "Features"
 msgstr "Características"
@@ -144,8 +144,8 @@ msgid "Research Topics"
 msgstr "Temas de Investigación"
 
 # dashboard.html
-msgid "Dashboard - Bibliometrics CSIC"
-msgstr "Panel de Control - Bibliometrics CSIC"
+msgid "Dashboard - Bibliometrics IPBLN"
+msgstr "Panel de Control - Bibliometrics IPBLN"
 
 msgid "Interactive visualizations of scientific production"
 msgstr "Visualizaciones interactivas de la producción científica"
@@ -195,8 +195,8 @@ msgstr "Circular"
 msgid "Bar"
 msgstr "Barras"
 
-msgid "Interactive Collaboration Network"
-msgstr "Red de Colaboración Interactiva"
+msgid "Interactive Co-authorship network between IPs"
+msgstr "Red de Colaboración Interactiva (entre IPs)"
 
 msgid "Force"
 msgstr "Fuerza"

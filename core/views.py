@@ -5,6 +5,8 @@ from django.db.models import Count, Min, Max, Q
 from collections import defaultdict
 from itertools import combinations
 import random
+import networkx as nx
+from community import community_louvain
 
 # Create your views here.
 
@@ -372,66 +374,107 @@ def get_publications_data(request):
         }
     })
 
+import csv
+import random
+from collections import defaultdict
+from django.http import JsonResponse
+from bibliodata.models import Author  # Para mapear nombres
+
 def get_collaboration_network(request):
-    year_from = request.GET.get('year_from')
-    year_to = request.GET.get('year_to')
-    areas = request.GET.getlist('areas')
-    institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
-    author = request.GET.get('author')
+    nodes_path = "analysis/data/networks/lab_nodes.csv"
+    edges_path = "analysis/data/networks/lab_edges.csv"
+    selected_author_id = request.GET.get('author')  # puede ser gesbib_id
 
-    query = Publication.objects.all()
+    # === Leer nodos ===
+    nodes_data = []
+    valid_ids = set()
+    id_to_name = {}
 
-    if year_from:
-        query = query.filter(year__gte=year_from)
-    if year_to:
-        query = query.filter(year__lte=year_to)
-    if areas:
-        query = query.filter(thematic_areas__name__in=areas)
-    if institutions:
-        query = query.filter(institutions__name__in=institutions)
-    if types:
-        type_query = Q()
-        for type in types:
-            type_query |= Q(publication_type__icontains=type)
-        query = query.filter(type_query)
-    if author:
-        query = query.filter(authors__name=author)
+    with open(nodes_path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row["Id"].strip()
+            try:
+                author = Author.objects.get(name__iexact=name)
+                author_id = str(author.gesbib_id)
+            except Author.DoesNotExist:
+                continue
 
-    publications = query.prefetch_related('authors')
-    valid_ids = set(Author.objects.values_list('gesbib_id', flat=True))
+            valid_ids.add(author_id)
+            id_to_name[author_id] = name
 
-    edges = []
-    nodes = set()
+    # === Leer aristas y construir grafo ===
+    G = nx.Graph()
 
-    for pub in publications:
-        ids = [str(a.gesbib_id) for a in pub.authors.all() if str(a.gesbib_id) in valid_ids]
-        ids = list(set(ids))
-        if len(ids) < 2:
-            continue
-        pares = combinations(sorted(ids), 2)
-        edges.extend(pares)
-        nodes.update(ids)
+    with open(edges_path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                source = Author.objects.get(name__iexact=row["Source"]).gesbib_id
+                target = Author.objects.get(name__iexact=row["Target"]).gesbib_id
+                source = str(source)
+                target = str(target)
+            except Author.DoesNotExist:
+                continue
 
-    edge_counts = defaultdict(int)
-    for s, t in edges:
-        edge_counts[(s, t)] += 1
+            if source in valid_ids and target in valid_ids:
+                weight = int(row["Weight"])
+                G.add_edge(source, target, weight=weight)
 
-    edges_data = [{
-        'source': s,
-        'target': t,
-        'weight': w
-    } for (s, t), w in edge_counts.items()]
+    print(G.number_of_nodes())
+    # === Aplicar Louvain ===
+    partition = community_louvain.best_partition(G, weight='weight')
 
-    nodes_data = [{
-        'id': nid,
-        'label': Author.objects.get(gesbib_id=nid).name,
-        'x': random.random(),
-        'y': random.random(),
-        'is_selected': (nid == author) if author else False
-    } for nid in nodes]
+    # === Preparar nodos con comunidades ===
+    nodes_data = []
+    for node in G.nodes():
+        nodes_data.append({
+            "id": node,
+            "label": id_to_name.get(node, node),
+            "x": random.random() * 1000,
+            "y": random.random() * 1000,
+            "is_selected": (node == selected_author_id),
+            "community": partition.get(node, -1)
+        })
+
+    # === Preparar aristas ===
+    edges_data = []
+    for u, v, data in G.edges(data=True):
+        edges_data.append({
+            "source": u,
+            "target": v,
+            "weight": data.get("weight", 1)
+        })
 
     return JsonResponse({
-        'nodes': nodes_data,
-        'edges': edges_data
+        "nodes": nodes_data,
+        "edges": edges_data
     })
+
+def get_author_metrics(request):
+    author_id = request.GET.get('author_id')
+    if not author_id:
+        return JsonResponse({'error': 'No author ID provided'}, status=400)
+    
+    try:
+        author = Author.objects.get(gesbib_id=author_id)
+        metrics = {
+            'total_publications': author.total_publications,
+            'total_citations': author.total_citations,
+            'citations_wos': author.citations_wos,
+            'citations_scopus': author.citations_scopus,
+            'h_index': author.h_index,
+            'h_index_gb': author.h_index_gb,
+            'h_index_h5gb': author.h_index_h5gb,
+            'international_index': author.international_index
+        }
+        
+        # Remove None values
+        metrics = {k: v for k, v in metrics.items() if v is not None}
+        
+        return JsonResponse({
+            'author_name': author.name,
+            'metrics': metrics
+        })
+    except Author.DoesNotExist:
+        return JsonResponse({'error': 'Author not found'}, status=404)

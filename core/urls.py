@@ -11,5 +11,6 @@ urlpatterns = [
     path('api/dashboard/collaboration-network/', views.get_collaboration_network, name='get_collaboration_network'),
     path('api/search/', views.search_publications, name='search_publications'),
     path('api/search/authors/', views.get_author_suggestions, name='get_author_suggestions'),
+    path('api/author/metrics/', views.get_author_metrics, name='get_author_metrics'),
     path('publication/<int:publication_id>/', views.publication_detail, name='publication_detail'),
 ] 

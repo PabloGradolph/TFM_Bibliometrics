@@ -82,6 +82,7 @@ class Command(BaseCommand):
                     "ccaas": clean_list(jv("ccaa")), # Lista a editar
                     "provinces": clean_list(jv("provincia")), # Lista a editar
                     "areas_all": jv("area_all"), # Lista
+                    "jcr_materias": clean_list(jv("jcr_materia")),
                 }
             )
 
@@ -126,7 +127,11 @@ class Command(BaseCommand):
             obj.institutions.set(institutions_objs)
 
             # === Temáticas ===
-            for area in jv("area_all") or []:
+            areas = jv("area_all") or []
+            if not areas:
+                areas = clean_list(jv("jcr_materia")) or []
+
+            for area in areas:
                 area_obj, _ = ThematicArea.objects.get_or_create(name=area.strip())
                 obj.thematic_areas.add(area_obj)
 

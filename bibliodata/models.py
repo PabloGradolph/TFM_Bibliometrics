@@ -41,6 +41,7 @@ class Publication(models.Model):
     areas_all = models.JSONField("All thematic areas", blank=True, null=True)
 
     thematic_areas = models.ManyToManyField("ThematicArea", related_name="publications")
+    jcr_materias = models.JSONField("JCR materias", blank=True, null=True)
 
     other_authors = models.JSONField("Non-IPBLN authors (raw names)", blank=True, null=True)
     affiliations = models.JSONField("Full affiliation strings", blank=True, null=True)
