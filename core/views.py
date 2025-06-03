@@ -383,7 +383,7 @@ from bibliodata.models import Author  # Para mapear nombres
 def get_collaboration_network(request):
     nodes_path = "analysis/data/networks/lab_nodes.csv"
     edges_path = "analysis/data/networks/lab_edges.csv"
-    selected_author_id = request.GET.get('author')  # puede ser gesbib_id
+    selected_author_name = request.GET.get('author')  # puede ser gesbib_id
 
     # === Leer nodos ===
     nodes_data = []
@@ -410,10 +410,8 @@ def get_collaboration_network(request):
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                source = Author.objects.get(name__iexact=row["Source"]).gesbib_id
-                target = Author.objects.get(name__iexact=row["Target"]).gesbib_id
-                source = str(source)
-                target = str(target)
+                source = str(Author.objects.get(name__iexact=row["Source"]).gesbib_id)
+                target = str(Author.objects.get(name__iexact=row["Target"]).gesbib_id)
             except Author.DoesNotExist:
                 continue
 
@@ -433,7 +431,7 @@ def get_collaboration_network(request):
             "label": id_to_name.get(node, node),
             "x": random.random() * 1000,
             "y": random.random() * 1000,
-            "is_selected": (node == selected_author_id),
+            "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
             "community": partition.get(node, -1)
         })
 
@@ -452,13 +450,14 @@ def get_collaboration_network(request):
     })
 
 def get_author_metrics(request):
-    author_id = request.GET.get('author_id')
-    if not author_id:
-        return JsonResponse({'error': 'No author ID provided'}, status=400)
+    author_name = request.GET.get('author_id')  # Ahora recibimos el nombre
+    if not author_name:
+        return JsonResponse({'error': 'No author name provided'}, status=400)
     
     try:
-        author = Author.objects.get(gesbib_id=author_id)
+        author = Author.objects.get(name=author_name)
         metrics = {
+            'orcid': author.orcid_link,
             'total_publications': author.total_publications,
             'total_citations': author.total_citations,
             'citations_wos': author.citations_wos,

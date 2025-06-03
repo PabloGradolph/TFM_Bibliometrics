@@ -24,6 +24,11 @@ class Command(BaseCommand):
         created, updated = 0, 0
 
         for gesbib_id, json_author in json_data.items():
+            # Omitir entradas mal formateadas
+            if not isinstance(json_author, dict) or "error" in json_author:
+                self.stdout.write(self.style.WARNING(f"❗ Datos inválidos para el autor {gesbib_id}, se omite"))
+                continue
+
             row = csv_data.get(gesbib_id)
             if not row:
                 self.stdout.write(self.style.WARNING(f"❗ Autor {gesbib_id} no está en el CSV"))

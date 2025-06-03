@@ -133,12 +133,14 @@ export function initFiltersAndSearch() {
         const collaborationRow = document.getElementById('collaborationRow');
         const authorMetricsCard = document.createElement('div');
         authorMetricsCard.id = 'authorMetricsCard';
-        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-3 h-100';
+        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-10 h-100';
         
         // Extraer el idioma de la URL
         const currentLang = window.location.pathname.split('/')[1];
         const cardTitle = currentLang === 'es' ? 'Resumen de Métricas del Autor' : 'Author Metrics Summary';
-        
+        const metricsTitle = currentLang === 'es' ? 'Métrica' : 'Metrics';
+        const valuesTitle = currentLang === 'es' ? 'Valor' : 'Value';
+
         authorMetricsCard.innerHTML = `
             <div class="card dashboard-card h-100">
                 <div class="card-body d-flex flex-column">
@@ -150,8 +152,8 @@ export function initFiltersAndSearch() {
                             <table class="table table-hover">
                                 <thead>
                                     <tr>
-                                        <th>{% trans "Metric" %}</th>
-                                        <th>{% trans "Value" %}</th>
+                                        <th>${metricsTitle}</th>
+                                        <th>${valuesTitle}</th>
                                     </tr>
                                 </thead>
                                 <tbody id="authorMetricsTable">
@@ -168,24 +170,15 @@ export function initFiltersAndSearch() {
         // Ajustar la columna de la red de colaboración
         const networkCol = document.getElementById('networkCol');
         if (networkCol) {
-            networkCol.className = 'col-12 col-md-6';
+            networkCol.className = 'col-12 col-md-6 mb-10';
+        }
+        const pubsCol = document.getElementById('pubsCol');
+        if (pubsCol) {
+            pubsCol.className = 'col-12 mt-4';
         }
 
         // Obtener las métricas del autor
-        fetch(`/api/search/authors/?q=${encodeURIComponent(authorName)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (!data.suggestions || data.suggestions.length === 0) {
-                    console.error('Author not found');
-                    return;
-                }
-                
-                // Obtener el ID del autor de la primera sugerencia
-                const authorId = data.suggestions[0].gesbib_id;
-                
-                // Ahora hacer la llamada a get_author_metrics con el ID
-                return fetch(`/api/author/metrics/?author_id=${encodeURIComponent(authorId)}`);
-            })
+        fetch(`/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -198,6 +191,7 @@ export function initFiltersAndSearch() {
 
                 // Mapeo de nombres de métricas a nombres más amigables
                 const metricNames = {
+                    'orcid': 'ORCID',
                     'total_publications': 'Total Publications',
                     'total_citations': 'Total Citations',
                     'citations_wos': 'WoS Citations',
@@ -214,10 +208,21 @@ export function initFiltersAndSearch() {
                 // Añadir cada métrica a la tabla
                 Object.entries(data.metrics).forEach(([key, value]) => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${metricNames[key] || key}</td>
-                        <td>${value}</td>
-                    `;
+                
+                    if (key === 'orcid' && typeof value === 'string' && value.trim() !== '') {
+                        // Forzar https y generar enlace clicable
+                        const url = value.replace(/^http:/, 'https:');
+                        row.innerHTML = `
+                            <td>${metricNames[key]}</td>
+                            <td><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></td>
+                        `;
+                    } else {
+                        row.innerHTML = `
+                            <td>${metricNames[key] || key}</td>
+                            <td>${value}</td>
+                        `;
+                    }
+                
                     metricsTable.appendChild(row);
                 });
             })
@@ -227,100 +232,6 @@ export function initFiltersAndSearch() {
 
         // Actualizar los gráficos con el autor seleccionado
         updateVisualizations();
-    }
-
-    // Función para actualizar las métricas del autor
-    function updateAuthorMetrics(data) {
-        if (!selectedAuthorName) return;
-
-        const metricsContent = document.getElementById('authorMetricsContent');
-        if (!metricsContent) return;
-
-        // Calcular métricas agregadas
-        const metrics = {
-            'Dimensions Citations': { total: 0, avg: 0 },
-            'WoS Citations': { total: 0, avg: 0 },
-            'Scopus Citations': { total: 0, avg: 0 },
-            'FCR': { total: 0, avg: 0 },
-            'RCR': { total: 0, avg: 0 }
-        };
-
-        let totalPublications = data.publications.data.length;
-        let internationalCollabCount = 0;
-
-        data.publications.data.forEach(pub => {
-            // Sumar citas
-            Object.keys(metrics).forEach(metric => {
-                const value = pub.metrics[metric]?.value;
-                if (value !== null && value !== undefined) {
-                    metrics[metric].total += value;
-                }
-            });
-
-            // Contar colaboraciones internacionales
-            if (pub.international_collab) {
-                internationalCollabCount++;
-            }
-        });
-
-        // Calcular promedios
-        Object.keys(metrics).forEach(metric => {
-            metrics[metric].avg = totalPublications > 0 ? 
-                (metrics[metric].total / totalPublications).toFixed(2) : 0;
-        });
-
-        // Calcular porcentaje de colaboración internacional
-        const internationalCollabPercentage = totalPublications > 0 ?
-            ((internationalCollabCount / totalPublications) * 100).toFixed(1) : 0;
-
-        // Crear el contenido HTML
-        metricsContent.innerHTML = `
-            <div class="mb-4">
-                <h6 class="text-muted mb-3">{% trans "Total Publications" %}</h6>
-                <h3 class="mb-0">${totalPublications}</h3>
-            </div>
-            <div class="mb-4">
-                <h6 class="text-muted mb-3">{% trans "Citations" %}</h6>
-                <div class="row g-3">
-                    ${Object.entries(metrics).map(([metric, values]) => `
-                        <div class="col-6">
-                            <div class="card bg-light">
-                                <div class="card-body p-3">
-                                    <h6 class="card-subtitle mb-2 text-muted">${metric}</h6>
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <div class="small text-muted">{% trans "Total" %}</div>
-                                            <div class="h5 mb-0">${values.total}</div>
-                                        </div>
-                                        <div class="text-end">
-                                            <div class="small text-muted">{% trans "Avg" %}</div>
-                                            <div class="h5 mb-0">${values.avg}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            <div>
-                <h6 class="text-muted mb-3">{% trans "International Collaboration" %}</h6>
-                <div class="card bg-light">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="small text-muted">{% trans "Publications with International Collaboration" %}</div>
-                                <div class="h5 mb-0">${internationalCollabCount}</div>
-                            </div>
-                            <div class="text-end">
-                                <div class="small text-muted">{% trans "Percentage" %}</div>
-                                <div class="h5 mb-0">${internationalCollabPercentage}%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
     }
 
     // Función para realizar la búsqueda
@@ -653,10 +564,6 @@ export function initFiltersAndSearch() {
                 
                 // Actualizar la tabla de publicaciones
                 updatePublicationsTable(1).then(() => {
-                    // Actualizar las métricas del autor si hay un autor seleccionado
-                    if (selectedAuthorName) {
-                        updateAuthorMetrics(data);
-                    }
                 });
             })
             .catch(error => console.error('Error updating visualizations:', error));
@@ -1731,23 +1638,25 @@ export function initFiltersAndSearch() {
         };
     
         // === Overlay para activar la red
+        container.style.position = 'relative'; // asegúrate de que sea relativo
         const overlay = document.createElement('div');
-        overlay.innerText = 'Haz clic para activar la red';
+        overlay.innerText = 'Haz click para activar la red';
         Object.assign(overlay.style, {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(255,255,255,0.85)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: '#333',
-            cursor: 'pointer',
-            zIndex: 1000
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '24px',
+        fontWeight: 'bold',
+        color: '#333',
+        cursor: 'pointer',
+        zIndex: 1000,
+        borderRadius: getComputedStyle(container).borderRadius // hereda el redondeado
         });
         container.appendChild(overlay);
     
