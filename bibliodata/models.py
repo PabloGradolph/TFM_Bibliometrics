@@ -203,6 +203,10 @@ class Author(models.Model):
 
     publications = models.ManyToManyField("Publication", related_name="authors")
 
+    department = models.CharField("Department", max_length=200, blank=True, null=True)
+    lovaina_community = models.IntegerField("Lovaina Community", blank=True, null=True)
+    leiden_community = models.IntegerField("Leiden Community", blank=True, null=True)
+
     def __str__(self):
         return self.name
 

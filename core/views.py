@@ -1,12 +1,15 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from bibliodata.models import Publication, Institution, ThematicArea, Author
-from django.db.models import Count, Min, Max, Q
-from collections import defaultdict
+from django.db.models import Count, Min, Max, Q, F
 from itertools import combinations
 import random
 import networkx as nx
 from community import community_louvain
+import csv
+import random
+from django.http import JsonResponse
+from bibliodata.models import Author  # Para mapear nombres
 
 # Create your views here.
 
@@ -20,23 +23,97 @@ def about(request):
     return render(request, 'core/about.html')
 
 def get_filter_data(request):
-    # Obtener años disponibles con conteo de publicaciones
-    years = Publication.objects.values('year').annotate(count=Count('id')).order_by('year')
-    
-    # Obtener áreas temáticas
-    areas = ThematicArea.objects.values('name').annotate(count=Count('publications')).order_by('-count')
-    
-    # Obtener instituciones (solo las que tienen publicaciones)
-    institutions = Institution.objects.filter(publications__isnull=False).values('name').annotate(count=Count('publications')).order_by('-count')
-    
-    # Obtener tipos de publicación
-    pub_types = Publication.objects.values('publication_type').annotate(count=Count('id')).order_by('-count')
-    
+    # Obtener los parámetros de filtrado
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    author = request.GET.get('author')
+
+    # Construir el query base sin aplicar los filtros de área, institución y tipo aún
+    base_query = Publication.objects.all()
+
+    # Aplicar filtros de año y autor al query base
+    if year_from:
+        base_query = base_query.filter(year__gte=year_from)
+    if year_to:
+        base_query = base_query.filter(year__lte=year_to)
+    if author:
+        base_query = base_query.filter(authors__name=author)
+
+    # Obtener años disponibles con conteo de publicaciones (basado en query completamente filtrado para años)
+    # Note: Years query should still consider all filters including areas/institutions/types
+    # This part might need clarification depending on desired year filter interaction
+    # For now, let's keep it based on the final 'query' object as before for simplicity, or revisit if needed.
+    # Let's rebuild the main query to include areas/institutions/types for counting years.
+    query_with_all_filters = base_query
+    if areas:
+        query_with_all_filters = query_with_all_filters.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query_with_all_filters = query_with_all_filters.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for type_item in types:
+            type_query |= Q(publication_type__icontains=type_item)
+        query_with_all_filters = query_with_all_filters.filter(type_query)
+
+    years = query_with_all_filters.values('year').annotate(count=Count('id')).order_by('year')
+
+    # --- Obtener áreas temáticas con conteo ---
+    # Count based on base_query (filtered by year/author) + other filters (institutions, types) but NOT areas
+    areas_query = base_query
+    if institutions:
+        areas_query = areas_query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for type_item in types:
+            type_query |= Q(publication_type__icontains=type_item)
+        areas_query = areas_query.filter(type_query)
+
+    # Use aggregation to get counts for areas
+    areas_with_counts = areas_query.values('thematic_areas__name')\
+        .annotate(name=F('thematic_areas__name'), count=Count('id'))\
+        .filter(count__gt=0, thematic_areas__name__isnull=False)\
+        .order_by('-count', 'name')
+
+    # --- Obtener instituciones con conteo ---
+    # Count based on base_query (filtered by year/author) + other filters (areas, types) but NOT institutions
+    institutions_query = base_query
+    if areas:
+        institutions_query = institutions_query.filter(thematic_areas__name__in=areas)
+    if types:
+        type_query = Q()
+        for type_item in types:
+            type_query |= Q(publication_type__icontains=type_item)
+        institutions_query = institutions_query.filter(type_query)
+
+    # Use aggregation to get counts for institutions
+    institutions_with_counts = institutions_query.values('institutions__name')\
+        .annotate(name=F('institutions__name'), count=Count('id'))\
+        .filter(count__gt=0, institutions__name__isnull=False)\
+        .order_by('-count', 'name')
+
+    # --- Obtener tipos de publicación con conteo ---
+    # Count based on base_query (filtered by year/author) + other filters (areas, institutions) but NOT types
+    types_query = base_query
+    if areas:
+        types_query = types_query.filter(thematic_areas__name__in=areas)
+    # Filter by institutions if selected
+    if institutions:
+        types_query = types_query.filter(institutions__name__in=institutions)
+
+    # Use aggregation to get counts for types
+    types_with_counts = types_query.values('publication_type')\
+        .annotate(count=Count('id'))\
+        .filter(count__gt=0, publication_type__isnull=False)\
+        .order_by('-count', 'publication_type')
+
     return JsonResponse({
         'years': list(years),
-        'areas': list(areas),
-        'institutions': list(institutions),
-        'publication_types': list(pub_types)
+        'areas': list(areas_with_counts),
+        'institutions': list(institutions_with_counts),
+        'publication_types': list(types_with_counts)
     })
 
 def get_filtered_data(request):
@@ -276,7 +353,7 @@ def get_publications_data(request):
     types = request.GET.getlist('types')
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
-    per_page = 20
+    per_page = 50
 
     # Construir el query base
     query = Publication.objects.all()
@@ -374,22 +451,18 @@ def get_publications_data(request):
         }
     })
 
-import csv
-import random
-from collections import defaultdict
-from django.http import JsonResponse
-from bibliodata.models import Author  # Para mapear nombres
-
 def get_collaboration_network(request):
     nodes_path = "analysis/data/networks/lab_nodes.csv"
     edges_path = "analysis/data/networks/lab_edges.csv"
-    selected_author_name = request.GET.get('author')  # puede ser gesbib_id
+    selected_author_name = request.GET.get('author')
 
-    # === Leer nodos ===
     nodes_data = []
     valid_ids = set()
     id_to_name = {}
+    id_to_community = {}
 
+    # === Leer nodos y cargar info de la DB ===
+    G = nx.Graph()
     with open(nodes_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -397,15 +470,18 @@ def get_collaboration_network(request):
             try:
                 author = Author.objects.get(name__iexact=name)
                 author_id = str(author.gesbib_id)
+                community = getattr(author, 'lovaina_community', -1)
             except Author.DoesNotExist:
                 continue
 
             valid_ids.add(author_id)
             id_to_name[author_id] = name
+            id_to_community[author_id] = community
+
+            # 🔥 AÑADIR EL NODO AL GRAFO EXPLÍCITAMENTE
+            G.add_node(author_id)
 
     # === Leer aristas y construir grafo ===
-    G = nx.Graph()
-
     with open(edges_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -419,12 +495,7 @@ def get_collaboration_network(request):
                 weight = int(row["Weight"])
                 G.add_edge(source, target, weight=weight)
 
-    print(G.number_of_nodes())
-    # === Aplicar Louvain ===
-    partition = community_louvain.best_partition(G, weight='weight')
-
-    # === Preparar nodos con comunidades ===
-    nodes_data = []
+    # === Preparar nodos usando la comunidad desde la base de datos ===
     for node in G.nodes():
         nodes_data.append({
             "id": node,
@@ -432,7 +503,7 @@ def get_collaboration_network(request):
             "x": random.random() * 1000,
             "y": random.random() * 1000,
             "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
-            "community": partition.get(node, -1)
+            "community": id_to_community.get(node, -1)
         })
 
     # === Preparar aristas ===

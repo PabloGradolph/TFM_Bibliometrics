@@ -23,13 +23,13 @@ export function initFiltersAndSearch() {
     const selectedAuthor = document.getElementById('selectedAuthor');
     const authorLimitMessage = document.getElementById('authorLimitMessage');
 
-     // Almacenar las selecciones
+    // Almacenar las selecciones
     let selectedAreasList = new Set();
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
+    let selectedAuthorName = null;
 
     // Variables para el autocompletado
-    let selectedAuthorName = null;
     let searchTimeout = null;
 
     // Función para actualizar el estado del botón de búsqueda
@@ -87,7 +87,7 @@ export function initFiltersAndSearch() {
             });
     }
 
-    // Función para seleccionar un autor
+    // Event listener para el autor seleccionado
     function selectAuthor(authorName) {
         selectedAuthorName = authorName;
         standardSearch.value = '';
@@ -126,7 +126,7 @@ export function initFiltersAndSearch() {
                 networkCol.className = 'col-12';
             }
             
-            updateVisualizations(); // Actualizar gráficos al eliminar el autor
+            updateFilters(); // Actualizar filtros al eliminar el autor
         });
 
         // Crear y añadir la card de métricas del autor al DOM
@@ -140,7 +140,7 @@ export function initFiltersAndSearch() {
         const cardTitle = currentLang === 'es' ? 'Resumen de Métricas del Autor' : 'Author Metrics Summary';
         const metricsTitle = currentLang === 'es' ? 'Métrica' : 'Metrics';
         const valuesTitle = currentLang === 'es' ? 'Valor' : 'Value';
-
+        
         authorMetricsCard.innerHTML = `
             <div class="card dashboard-card h-100">
                 <div class="card-body d-flex flex-column">
@@ -230,8 +230,16 @@ export function initFiltersAndSearch() {
                 console.error('Error fetching author metrics:', error);
             });
 
-        // Actualizar los gráficos con el autor seleccionado
-        updateVisualizations();
+        // Actualizar los filtros y visualizaciones con el autor seleccionado
+        updateFilters();
+    }
+
+    // Función para actualizar el autor seleccionado
+    function updateSelectedAuthor() {
+        if (selectedAuthorName) {
+            // Actualizar los filtros para reflejar las publicaciones del autor
+            updateFilters();
+        }
     }
 
     // Función para realizar la búsqueda
@@ -449,7 +457,7 @@ export function initFiltersAndSearch() {
         selectedAreas.innerHTML = '';
         selectedInstitutions.innerHTML = '';
         selectedTypes.innerHTML = '';
-        updateVisualizations();
+        updateFilters();
     }
 
     // --- ÁREAS TEMÁTICAS: LÓGICA DE BOTONES Y RENDER ---
@@ -1370,42 +1378,38 @@ export function initFiltersAndSearch() {
     });
 
     // Event listeners para los filtros
-    yearFrom.addEventListener('change', function() {
-        updateVisualizations();
-    });
-
-    yearTo.addEventListener('change', function() {
-        updateVisualizations();
-    });
-
-    areaFilter.addEventListener('change', function() {
-        if (this.value && !selectedAreasList.has(this.value)) {
-            selectedAreasList.add(this.value);
-            createBadge(this.value, selectedAreas, selectedAreasList);
-            updateVisualizations();
+    yearFrom.addEventListener('change', updateFilters);
+    yearTo.addEventListener('change', updateFilters);
+    areaFilter.addEventListener('change', () => {
+        const selectedArea = areaFilter.value;
+        if (selectedArea && !selectedAreasList.has(selectedArea)) {
+            selectedAreasList.add(selectedArea);
+            createBadge(selectedArea, selectedAreas, selectedAreasList);
+            updateFilters();
         }
-        this.value = ''; // Reset select
+        areaFilter.value = '';
     });
-
-    institutionFilter.addEventListener('change', function() {
-        if (this.value && !selectedInstitutionsList.has(this.value)) {
-            selectedInstitutionsList.add(this.value);
-            createBadge(this.value, selectedInstitutions, selectedInstitutionsList);
-            updateVisualizations();
+    institutionFilter.addEventListener('change', () => {
+        const selectedInstitution = institutionFilter.value;
+        if (selectedInstitution && !selectedInstitutionsList.has(selectedInstitution)) {
+            selectedInstitutionsList.add(selectedInstitution);
+            createBadge(selectedInstitution, selectedInstitutions, selectedInstitutionsList);
+            updateFilters();
         }
-        this.value = ''; // Reset select
+        institutionFilter.value = '';
     });
-
-    typeFilter.addEventListener('change', function() {
-        if (this.value && !selectedTypesList.has(this.value)) {
-            selectedTypesList.add(this.value);
-            createBadge(this.value, selectedTypes, selectedTypesList);
-            updateVisualizations();
+    typeFilter.addEventListener('change', () => {
+        const selectedType = typeFilter.value;
+        if (selectedType && !selectedTypesList.has(selectedType)) {
+            selectedTypesList.add(selectedType);
+            createBadge(selectedType, selectedTypes, selectedTypesList);
+            updateFilters();
         }
-        this.value = ''; // Reset select
+        typeFilter.value = '';
     });
 
-    clearFiltersBtn.addEventListener('click', function() {
+    // Event listener para limpiar filtros
+    clearFiltersBtn.addEventListener('click', () => {
         yearFrom.value = '';
         yearTo.value = '';
         selectedAreasList.clear();
@@ -1414,16 +1418,7 @@ export function initFiltersAndSearch() {
         selectedAreas.innerHTML = '';
         selectedInstitutions.innerHTML = '';
         selectedTypes.innerHTML = '';
-        
-        // Resetear botones de vista a anual
-        document.querySelectorAll('[data-view]').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.view === 'yearly') {
-                btn.classList.add('active');
-            }
-        });
-        
-        updateVisualizations();
+        updateFilters();
     });
 
     let renderer = null;
@@ -1432,6 +1427,12 @@ export function initFiltersAndSearch() {
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
+
+        // Limpiar el contenedor y destruir el renderer anterior si existe
+        if (renderer) {
+            renderer.kill();
+            renderer = null;
+        }
         container.innerHTML = '';
     
         const graph = new Graph();
@@ -1455,7 +1456,8 @@ export function initFiltersAndSearch() {
     
         communities.forEach((comm, i) => {
             const nodes = nodesByCommunity[comm];
-            const angleStep = (2 * Math.PI) / nodes.length;
+            const effectiveLength = Math.max(nodes.length, 4);
+            const angleStep = (2 * Math.PI) / effectiveLength;
             const cx = Math.cos(angleBase) * separation * 2;
             const cy = Math.sin(angleBase) * separation * 2;
             angleBase += (2 * Math.PI) / communities.length;
@@ -1516,8 +1518,8 @@ export function initFiltersAndSearch() {
             }
         });
     
-        // === Renderizar sin interacción activa ===
-        const renderer = new Sigma(graph, container, {
+        // Crear nuevo renderer
+        renderer = new Sigma(graph, container, {
             minCameraRatio: 0.1,
             maxCameraRatio: 10,
             defaultEdgeType: "curve",
@@ -1557,8 +1559,8 @@ export function initFiltersAndSearch() {
                 .append('div')
                 .attr('class', 'alert alert-info')
                 .style('position', 'absolute')
-                .style('top', '50px')
-                .style('right', '10px')
+                .style('top', '10px')
+                .style('left', '10px')
                 .style('padding', '8px 12px')
                 .style('font-size', '12px')
                 .style('border-radius', '4px')
@@ -1597,7 +1599,7 @@ export function initFiltersAndSearch() {
                 const lines = [];
               
                 neighbors.forEach(neighbor => {
-                  const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node); // red no dirigida
+                  const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node);
                   const weight = graph.getEdgeAttribute(edge, 'size') || 1;
                   const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
                   lines.push(`• ${neighborLabel} (${weight})`);
@@ -1608,7 +1610,7 @@ export function initFiltersAndSearch() {
                 tooltip.style.top = `${event.clientY + 10}px`;
                 tooltip.style.display = 'block';
               
-                // Resaltar nodo y vecinos como ya haces
+                // Resaltar nodo y vecinos
                 const visibleNodes = new Set(neighbors);
                 visibleNodes.add(node);
                 graph.forEachNode(n => {
@@ -1622,9 +1624,8 @@ export function initFiltersAndSearch() {
                   const visible = visibleNodes.has(source) && visibleNodes.has(target);
                   graph.setEdgeAttribute(e, 'hidden', !visible);
                 });
-              });
+            });
               
-    
             renderer.on('leaveNode', () => {
                 tooltip.style.display = 'none';
                 graph.forEachNode(n => {
@@ -1638,25 +1639,25 @@ export function initFiltersAndSearch() {
         };
     
         // === Overlay para activar la red
-        container.style.position = 'relative'; // asegúrate de que sea relativo
+        container.style.position = 'relative';
         const overlay = document.createElement('div');
         overlay.innerText = 'Haz click para activar la red';
         Object.assign(overlay.style, {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(255,255,255,0.85)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '24px',
-        fontWeight: 'bold',
-        color: '#333',
-        cursor: 'pointer',
-        zIndex: 1000,
-        borderRadius: getComputedStyle(container).borderRadius // hereda el redondeado
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#333',
+            cursor: 'pointer',
+            zIndex: 1000,
+            borderRadius: getComputedStyle(container).borderRadius
         });
         container.appendChild(overlay);
     
@@ -1667,4 +1668,92 @@ export function initFiltersAndSearch() {
     
         renderer.getCamera().animatedReset({ duration: 500 });
     }           
+
+    function updateFilters() {
+        const params = new URLSearchParams();
+        
+        // Añadir filtros de año
+        if (yearFrom.value) params.append('year_from', yearFrom.value);
+        if (yearTo.value) params.append('year_to', yearTo.value);
+        
+        // Añadir filtros de área
+        selectedAreasList.forEach(area => params.append('areas', area));
+        
+        // Añadir filtros de institución
+        selectedInstitutionsList.forEach(institution => params.append('institutions', institution));
+        
+        // Añadir filtros de tipo
+        selectedTypesList.forEach(type => params.append('types', type));
+
+        // Añadir autor seleccionado si existe
+        if (selectedAuthorName) {
+            params.append('author', selectedAuthorName);
+        }
+
+        // Extraer el idioma de la URL
+        const currentLang = window.location.pathname.split('/')[1];
+        const allAreas = currentLang === 'es' ? 'Todas las Áreas' : 'All areas';
+        const allInstitutions = currentLang === 'es' ? 'Todas las Instituciones' : 'All Institutions';
+        const allTypes = currentLang === 'es' ? 'Todos los tipos' : 'All types';
+
+        // Obtener datos actualizados de los filtros
+        fetch(`/api/dashboard/filters/?${params.toString()}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Actualizar áreas temáticas
+                areaFilter.innerHTML = `<option value="">${allAreas}</option>`;
+                data.areas.forEach(area => {
+                    const option = document.createElement('option');
+                    option.value = area.name;
+                    option.textContent = `${area.name} (${area.count})`;
+                    areaFilter.appendChild(option);
+                });
+
+                // Actualizar instituciones
+                institutionFilter.innerHTML = `<option value="">${allInstitutions}</option>`;
+                data.institutions.forEach(institution => {
+                    const option = document.createElement('option');
+                    option.value = institution.name;
+                    option.textContent = `${institution.name} (${institution.count})`;
+                    institutionFilter.appendChild(option);
+                });
+
+                // Actualizar tipos de publicación
+                typeFilter.innerHTML = `<option value="">${allTypes}</option>`;
+                data.publication_types.forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type.publication_type;
+                    option.textContent = `${type.publication_type} (${type.count})`;
+                    typeFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error updating filters:', error);
+                // Mostrar un mensaje de error al usuario
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'alert alert-danger';
+                errorMessage.style.position = 'fixed';
+                errorMessage.style.top = '20px';
+                errorMessage.style.right = '20px';
+                errorMessage.style.zIndex = '9999';
+                errorMessage.innerHTML = `
+                    <strong>Error:</strong> No se pudieron actualizar los filtros.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                document.body.appendChild(errorMessage);
+                
+                // Auto-cerrar el mensaje después de 5 segundos
+                setTimeout(() => {
+                    errorMessage.remove();
+                }, 5000);
+            });
+
+        // Actualizar visualizaciones
+        updateVisualizations();
+    }
 }

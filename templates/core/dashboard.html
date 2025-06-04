@@ -202,9 +202,18 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="card-title mb-0">{% trans "Interactive Co-authorship network between IPs" %}</h5>
-                            <div class="btn-group">
-                                <button class="btn btn-outline-primary btn-sm" data-network-view="force">{% trans "Force" %}</button>
-                                <button class="btn btn-outline-primary btn-sm" data-network-view="matrix">{% trans "Matrix" %}</button>
+                            <div class="d-flex gap-2">
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="communityViewDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                        {% trans "Community View" %}
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="communityViewDropdown">
+                                        <li><a class="dropdown-item" href="#" data-community-view="department">{% trans "By Department" %}</a></li>
+                                        <li><a class="dropdown-item active" href="#" data-community-view="modularity-7">{% trans "Best Modularity (7 communities)" %}</a></li>
+                                        <li><a class="dropdown-item" href="#" data-community-view="modularity-5">{% trans "Best Modularity (5 communities)" %}</a></li>
+                                        <li><a class="dropdown-item" href="#" data-community-view="keywords">{% trans "By Keywords" %}</a></li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         <div id="collaborationNetwork" style="height: 400px; width: 100%;"></div>
