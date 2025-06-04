@@ -353,7 +353,7 @@ def get_publications_data(request):
     types = request.GET.getlist('types')
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
-    per_page = 50
+    per_page = 20
 
     # Construir el query base
     query = Publication.objects.all()
@@ -470,16 +470,19 @@ def get_collaboration_network(request):
             try:
                 author = Author.objects.get(name__iexact=name)
                 author_id = str(author.gesbib_id)
-                community = getattr(author, 'lovaina_community', -1)
+                # Obtener el departamento y la comunidad de modularidad
+                department = getattr(author, 'department', 'Unknown') # Obtener el departamento
+                lovaina_community = getattr(author, 'lovaina_community', -1)
+                leiden_community = getattr(author, 'leiden_community', -1) # Obtener la comunidad de Leiden
             except Author.DoesNotExist:
                 continue
 
             valid_ids.add(author_id)
             id_to_name[author_id] = name
-            id_to_community[author_id] = community
+            id_to_community[author_id] = lovaina_community # Guardar comunidad de modularidad
 
             # 🔥 AÑADIR EL NODO AL GRAFO EXPLÍCITAMENTE
-            G.add_node(author_id)
+            G.add_node(author_id, department=department, lovaina_community=lovaina_community, leiden_community=leiden_community)
 
     # === Leer aristas y construir grafo ===
     with open(edges_path, encoding="utf-8") as f:
@@ -496,15 +499,40 @@ def get_collaboration_network(request):
                 G.add_edge(source, target, weight=weight)
 
     # === Preparar nodos usando la comunidad desde la base de datos ===
-    for node in G.nodes():
-        nodes_data.append({
-            "id": node,
-            "label": id_to_name.get(node, node),
-            "x": random.random() * 1000,
-            "y": random.random() * 1000,
-            "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
-            "community": id_to_community.get(node, -1)
-        })
+    # Determinar qué propiedad usar para la agrupación y coloración
+    view_type = request.GET.get('view_type', 'modularity-7') # Obtener el tipo de vista
+    
+    if view_type == 'department':
+        # Agrupar por departamento y asignar colores
+        # Necesitamos una escala de colores para los departamentos
+        # departments = sorted(list(set(data.nodes.map(n => n.department)))); # Esto lo haremos en el front, el back solo envia los datos
+        # Asignaremos colores y posicionamiento inicial en el frontend basado en department
+        for node in G.nodes():
+             nodes_data.append({
+                "id": node,
+                "label": id_to_name.get(node, node),
+                "x": random.random() * 1000, # Posicionamiento inicial aleatorio, el front lo ajustará
+                "y": random.random() * 1000,
+                "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
+                "community": G.nodes[node].get('lovaina_community', -1), # Seguir enviando la comunidad de modularidad
+                "department": G.nodes[node].get('department', 'Unknown'), # Enviar el departamento
+                "leiden_community": G.nodes[node].get('leiden_community', -1) # Enviar la comunidad de Leiden
+            })
+
+    else: # Default a modularidad 7 (o la que se pida)
+        # Usar la comunidad de modularidad para agrupación y coloración (lógica existente)
+         for node in G.nodes():
+            nodes_data.append({
+                "id": node,
+                "label": id_to_name.get(node, node),
+                "x": random.random() * 1000,
+                "y": random.random() * 1000,
+                "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
+                "community": G.nodes[node].get('lovaina_community', -1), # Usar la comunidad de modularidad
+                "department": G.nodes[node].get('department', 'Unknown'), # Enviar el departamento también
+                "leiden_community": G.nodes[node].get('leiden_community', -1) # Enviar la comunidad de Leiden
+            })
+
 
     # === Preparar aristas ===
     edges_data = []

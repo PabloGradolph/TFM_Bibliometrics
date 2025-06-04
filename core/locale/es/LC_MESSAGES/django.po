@@ -293,3 +293,6 @@ msgstr "Mejor Modularidad (5 comunidades)"
 
 msgid "By Keywords"
 msgstr "Por Palabras Clave"
+
+msgid "Show all Tags"
+msgstr "Mostrar etiquetas"

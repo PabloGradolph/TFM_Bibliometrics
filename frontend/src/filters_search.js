@@ -543,7 +543,10 @@ export function initFiltersAndSearch() {
             .then(data => {
 
                 // Obtener datos de la red de colaboración
-                fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+                const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
+                networkParams.append('view_type', currentCommunityView); // Añadir el tipo de vista de comunidad
+
+                fetch(`/api/dashboard/collaboration-network/?${networkParams.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     updateCollaborationNetwork(data);
@@ -1422,7 +1425,77 @@ export function initFiltersAndSearch() {
     });
 
     let renderer = null;
-    
+    let showAllLabels = false; // Estado para controlar la visualización de todas las etiquetas
+
+    // Event listener para el botón de mostrar/ocultar etiquetas
+    const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+    const currentLang = window.location.pathname.split('/')[1];
+    const extraLabels = currentLang === 'es' ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
+    const allLabels = currentLang === 'es' ? 'Mostrar etiquetas' : 'Show All Labels';
+    if (toggleLabelsBtn) {
+        toggleLabelsBtn.addEventListener('click', () => {
+            if (!renderer) return; // Asegurarse de que el renderer existe
+
+            showAllLabels = !showAllLabels; // Alternar el estado
+
+            if (showAllLabels) {
+                // Mostrar todas las etiquetas: ajustar settings para forzar renderizado
+                renderer.setSettings({
+                    labelDensity: Infinity,
+                    labelGridCellSize: 1,
+                    labelRenderedSizeThreshold: 0
+                });
+                // Actualizar texto del botón
+                toggleLabelsBtn.textContent = `${extraLabels}`;
+            } else {
+                // Volver al comportamiento por defecto (ocultar algunas etiquetas)
+                // Restaurar settings por defecto o los que generan el comportamiento deseado
+                 renderer.setSettings({
+                    labelDensity: 1,
+                    labelGridCellSize: 200,
+                    labelRenderedSizeThreshold: 0
+                });
+                 // Actualizar texto del botón
+                toggleLabelsBtn.textContent = `${allLabels}`;
+            }
+            renderer.refresh();
+        });
+    }
+
+    let currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
+
+    // Event listeners para las opciones del menú desplegable de vista de comunidad
+    document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevenir el comportamiento por defecto del enlace
+
+            const selectedView = this.dataset.communityView; // Obtener el tipo de vista del data-attribute
+
+            // Si ya es la vista actual, no hacer nada
+            if (currentCommunityView === selectedView) {
+                 // Actualizar visualmente el menú para marcar la opción activa (en caso de que no lo estuviera)
+                document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
+                    link.classList.remove('active');
+                });
+                this.classList.add('active');
+                return; // Salir de la función si la vista no cambia
+            }
+
+            currentCommunityView = selectedView; // Actualizar el estado
+
+            // Actualizar visualmente el menú para marcar la opción activa
+            document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
+                link.classList.remove('active');
+            });
+            this.classList.add('active');
+
+            // Actualizar la red con la nueva vista
+            // La función updateVisualizations ya llama a get_collaboration_network
+            // y le pasa los parámetros, solo necesitamos que incluya el view_type
+            updateVisualizations(); // Esto recarga los datos con el nuevo view_type y llama a updateCollaborationNetwork
+        });
+    });
+
     // Función para actualizar la red de colaboración
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
@@ -1434,75 +1507,146 @@ export function initFiltersAndSearch() {
             renderer = null;
         }
         container.innerHTML = '';
-    
+
         const graph = new Graph();
-    
+
         const colorPalette = [
             "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6",
             "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
-            "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
+            "#808000", "#ffd8b1", "#000075", "a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
         ];
+        // Escala de colores para los departamentos (solo 3 departamentos + Unknown)
+        const departmentColorScale = d3.scaleOrdinal()
+            .domain(['Departamento 1', 'Departamento 2', 'Departamento 3', 'Unknown']) // Reemplazar con los nombres reales de tus departamentos
+            .range(['#1f78b4', '#ff7f0e', '#2ca02c', '#999999']); // Colores distintivos + gris para Unknown
+
+
         const colorByCommunity = (community) => colorPalette[community % colorPalette.length];
-    
-        const communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
-        const nodesByCommunity = {};
-        communities.forEach(c => {
-            nodesByCommunity[c] = data.nodes.filter(n => parseInt(n.community) === c);
+
+
+        // --- Lógica de Posicionamiento Inicial por Grupo (Departamento o Comunidad) ---
+        // Determinar la propiedad de agrupación y obtener los grupos únicos
+        let groupByProp, groups;
+        if (currentCommunityView === 'department') {
+            groupByProp = 'department';
+            groups = [...new Set(data.nodes.map(n => n.department))];
+        } else if (currentCommunityView === 'modularity-5') { // Vista por comunidad de Leiden
+             groupByProp = 'leiden_community';
+             groups = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
+             // Asegurarse de que -1 (unknown) vaya al final
+             const unknownIndex = groups.indexOf(-1);
+             if (unknownIndex > -1) {
+                 groups.splice(unknownIndex, 1);
+                 groups.push(-1);
+             }
+        } else { // Default a modularidad 7 (o la vista de modularidad-7)
+            groupByProp = 'community'; // 'community' contiene lovaina_community
+            groups = [...new Set(data.nodes.map(n => parseInt(n.community)))];
+             // Asegurarse de que -1 (unknown) vaya al final
+             const unknownIndex = groups.indexOf(-1);
+             if (unknownIndex > -1) {
+                 groups.splice(unknownIndex, 1);
+                 groups.push(-1);
+             }
+        }
+        groups.sort((a, b) => a - b); // Ordenar grupos numéricamente
+
+        const nodesByGroup = {};
+        groups.forEach(group => {
+            // Asegurarse de que el valor del grupo sea el correcto (número o string)
+            if (groupByProp === 'department') {
+                 nodesByGroup[group] = data.nodes.filter(n => n[groupByProp] === group);
+            } else { // Comunidades de modularidad son números
+                 nodesByGroup[group] = data.nodes.filter(n => parseInt(n[groupByProp]) === group);
+            }
         });
-    
-        const separation = 600;
-        const radiusPerCommunity = 350;
-        let angleBase = 0;
-    
-        communities.forEach((comm, i) => {
-            const nodes = nodesByCommunity[comm];
-            const effectiveLength = Math.max(nodes.length, 4);
-            const angleStep = (2 * Math.PI) / effectiveLength;
-            const cx = Math.cos(angleBase) * separation * 2;
-            const cy = Math.sin(angleBase) * separation * 2;
-            angleBase += (2 * Math.PI) / communities.length;
-    
+
+        // Calcular posiciones iniciales circulares para cada grupo
+        const canvasCenterX = container.clientWidth / 2;
+        const canvasCenterY = container.clientHeight / 2;
+        const totalGroups = groups.length;
+        const overallRadius = Math.min(canvasCenterX, canvasCenterY) * 0.8; // Radio para distribuir los centros de los grupos
+        const groupRadius = overallRadius / Math.sqrt(totalGroups) * 0.5; // Radio aproximado para los nodos dentro de cada grupo
+
+        groups.forEach((group, i) => {
+            const nodes = nodesByGroup[group];
+            const effectiveNodesInGroup = Math.max(nodes.length, 5); // Mínimo para distribución circular
+            const angleStep = (2 * Math.PI) / effectiveNodesInGroup;
+            // Posición del centro del círculo de este grupo
+            const groupCenterX = canvasCenterX + overallRadius * Math.cos((2 * Math.PI * i) / totalGroups);
+            const groupCenterY = canvasCenterY + overallRadius * Math.sin((2 * Math.PI * i) / totalGroups);
+
             nodes.forEach((node, j) => {
                 const angle = j * angleStep;
-                node.x = cx + radiusPerCommunity * Math.cos(angle);
-                node.y = cy + radiusPerCommunity * Math.sin(angle);
+                node.x = groupCenterX + groupRadius * Math.cos(angle);
+                node.y = groupCenterY + groupRadius * Math.sin(angle);
             });
         });
-    
+        // --- Fin Lógica de Posicionamiento Inicial ---
+
+
         const degreeMap = {};
         data.edges.forEach(edge => {
             degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
             degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
         });
-    
-        const topNodeByCommunity = {};
-        for (const [comm, nodes] of Object.entries(nodesByCommunity)) {
-            let topNode = null;
-            let maxDegree = -1;
-            nodes.forEach(n => {
-                const degree = degreeMap[n.id] || 0;
-                if (degree > maxDegree) {
-                    maxDegree = degree;
-                    topNode = n.id;
-                }
-            });
-            topNodeByCommunity[comm] = topNode;
+
+        const topNodeByCommunity = {}; // Esto es relevante para vistas de modularidad
+        if (groupByProp !== 'department') { // Solo calcular nodo principal si no es vista por departamento
+            for (const [groupValue, nodes] of Object.entries(nodesByGroup)) {
+                let topNode = null;
+                let maxDegree = -1;
+                nodes.forEach(n => {
+                    const degree = degreeMap[n.id] || 0;
+                    if (degree > maxDegree) {
+                        maxDegree = degree;
+                        topNode = n.id;
+                    }
+                });
+                 // Evitar que un grupo vacío cause un error al intentar acceder a topNode
+                 if (nodes.length > 0) {
+                     topNodeByCommunity[groupValue] = topNode;
+                 }
+            }
         }
-    
+
+
         data.nodes.forEach(node => {
-            const comm = parseInt(node.community);
+            const comm = parseInt(node.community); // lovaina_community
+            const leidenComm = parseInt(node.leiden_community); // leiden_community
+            const dept = node.department;
+
+            let nodeColor;
+            let groupValueForColor; // El valor que usaremos para determinar el color
+
+            // Determinar el valor de agrupación y el color basado en la vista activa
+            if (currentCommunityView === 'department') {
+                 groupValueForColor = dept;
+                 nodeColor = departmentColorScale(groupValueForColor);
+            } else if (currentCommunityView === 'modularity-5') {
+                 groupValueForColor = leidenComm;
+                 nodeColor = colorByCommunity(groupValueForColor); // Usar la escala de color de comunidad para Leiden
+            } else { // Default a modularidad 7
+                 groupValueForColor = comm;
+                 nodeColor = colorByCommunity(groupValueForColor); // Usar la escala de color de comunidad para Lovain
+            }
+
             graph.addNode(node.id, {
                 label: node.label,
                 x: node.x,
                 y: node.y,
                 size: node.is_selected ? 18 : 12,
-                color: colorByCommunity(node.community),
+                color: nodeColor, // Usar el color determinado
                 highlighted: node.is_selected,
-                community: comm,
-                forceLabel: String(node.id) === String(topNodeByCommunity[comm])
+                community: comm, // Mantener lovaina_community en los atributos
+                department: dept, // Mantener department en los atributos
+                leiden_community: leidenComm, // Añadir leiden_community a los atributos
+                 // Forzar etiqueta principal solo si es una vista de modularidad y es el nodo principal del grupo actual
+                forceLabel: (groupByProp !== 'department') && (String(node.id) === String(topNodeByCommunity[node[groupByProp]])) // Usar groupProp para comparar con topNodeByCommunity
             });
         });
-    
+
+
         data.edges.forEach(edge => {
             if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
                 const weight = edge.weight || 1;
@@ -1517,7 +1661,7 @@ export function initFiltersAndSearch() {
                 });
             }
         });
-    
+
         // Crear nuevo renderer
         renderer = new Sigma(graph, container, {
             minCameraRatio: 0.1,
@@ -1536,7 +1680,7 @@ export function initFiltersAndSearch() {
             enableNodeHovering: false,
             enableCamera: false
         });
-    
+
         // === Tooltip flotante
         const tooltip = document.createElement('div');
         Object.assign(tooltip.style, {
@@ -1630,7 +1774,15 @@ export function initFiltersAndSearch() {
                 tooltip.style.display = 'none';
                 graph.forEachNode(n => {
                     graph.removeNodeAttribute(n, 'hidden');
-                    graph.setNodeAttribute(n, 'forceLabel', false);
+                    // Solo restablecer forceLabel si no estamos en la vista de mostrar todas las etiquetas
+                    if (!showAllLabels) {
+                         // Restaurar forceLabel basado en la lógica original para vistas de modularidad
+                         const comm = parseInt(graph.getNodeAttribute(n, 'community'));
+                         const isTopNode = String(graph.getNodeAttribute(n, 'id')) === String(topNodeByCommunity[comm]);
+                         graph.setNodeAttribute(n, 'forceLabel', (groupByProp === 'community') && isTopNode);
+                    } else {
+                         graph.setNodeAttribute(n, 'forceLabel', true); // Mantener forzada si showAllLabels es true
+                    }
                 });
                 graph.forEachEdge(e => {
                     graph.removeEdgeAttribute(e, 'hidden');
@@ -1667,6 +1819,65 @@ export function initFiltersAndSearch() {
         });
     
         renderer.getCamera().animatedReset({ duration: 500 });
+
+         // === Leyenda para la vista por departamento ===
+        // Solo mostrar leyenda para la vista por departamento
+        if (currentCommunityView === 'department') {
+            const legend = document.createElement('div');
+            legend.id = 'departmentLegend';
+            Object.assign(legend.style, {
+                position: 'absolute',
+                bottom: '10px', // Ajusta la posición según necesites
+                left: '10px',  // Ajusta la posición según necesites
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                padding: '10px',
+                fontSize: '12px',
+                zIndex: 1000 // Asegurarse de que esté sobre la red
+            });
+
+            // Obtener los departamentos únicos y ordenarlos (excluir Unknown si no se desea mostrar)
+            const departmentsToShow = [...new Set(data.nodes.map(n => n.department))].filter(d => d !== 'Unknown').sort();
+            // Si quieres incluir Unknown:
+            // const departmentsToShow = [...new Set(data.nodes.map(n => n.department))].sort();
+
+            // Añadir título a la leyenda (Opcional)
+            const legendTitle = document.createElement('div');
+            legendTitle.style.fontWeight = 'bold';
+             legendTitle.style.marginBottom = '5px';
+             const currentLang = window.location.pathname.split('/')[1];
+             legendTitle.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
+             legend.appendChild(legendTitle);
+
+            departmentsToShow.forEach(dept => {
+                const color = departmentColorScale(dept);
+                const legendItem = document.createElement('div');
+                Object.assign(legendItem.style, {
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '5px'
+                });
+
+                const colorSwatch = document.createElement('div');
+                Object.assign(colorSwatch.style, {
+                    width: '15px',
+                    height: '15px',
+                    backgroundColor: color,
+                    marginRight: '8px',
+                    border: '1px solid #000' // Borde para visibilidad en fondos claros
+                });
+
+                const deptName = document.createElement('span');
+                deptName.textContent = dept; // Usar el nombre del departamento
+
+                legendItem.appendChild(colorSwatch);
+                legendItem.appendChild(deptName);
+                legend.appendChild(legendItem);
+            });
+
+            container.appendChild(legend); // Añadir la leyenda al contenedor de la red
+        }
     }           
 
     function updateFilters() {
