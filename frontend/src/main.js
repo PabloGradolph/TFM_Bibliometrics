@@ -1,4 +1,4 @@
-import { initFiltersAndSearch } from './filters_search.js';
+import { initFiltersAndSearch } from './dashboard.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   initFiltersAndSearch();

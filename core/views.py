@@ -10,6 +10,8 @@ import csv
 import random
 from django.http import JsonResponse
 from bibliodata.models import Author  # Para mapear nombres
+import pandas as pd
+from networkx.exception import NetworkXError
 
 # Create your views here.
 
@@ -456,6 +458,72 @@ def get_collaboration_network(request):
     edges_path = "analysis/data/networks/lab_edges.csv"
     selected_author_name = request.GET.get('author')
 
+    # Si hay un autor seleccionado, crear una red específica para él desde la base de datos
+    if selected_author_name:
+        try:
+            # Obtener el autor seleccionado
+            selected_author = Author.objects.get(name__iexact=selected_author_name)
+            selected_author_id = str(selected_author.gesbib_id)
+
+            # Obtener todas las publicaciones del autor
+            author_publications = Publication.objects.filter(authors=selected_author)
+
+            # Crear un grafo para las colaboraciones
+            G = nx.Graph()
+            
+            # Añadir el autor seleccionado al grafo
+            G.add_node(selected_author_id, 
+                      label=selected_author.name,
+                      department=selected_author.department,
+                      is_selected=True)
+
+            # Para cada publicación, añadir los coautores y sus conexiones
+            for pub in author_publications:
+                coauthors = pub.authors.exclude(gesbib_id=selected_author.gesbib_id)
+                for coauthor in coauthors:
+                    coauthor_id = str(coauthor.gesbib_id)
+                    
+                    # Añadir el coautor al grafo si no existe
+                    if not G.has_node(coauthor_id):
+                        G.add_node(coauthor_id,
+                                 label=coauthor.name,
+                                 department=coauthor.department,
+                                 is_selected=False)
+                    
+                    # Añadir o actualizar el peso de la arista
+                    if G.has_edge(selected_author_id, coauthor_id):
+                        G[selected_author_id][coauthor_id]['weight'] += 1
+                    else:
+                        G.add_edge(selected_author_id, coauthor_id, weight=1)
+
+            # Preparar los datos para la respuesta
+            nodes = []
+            for node_id, node_data in G.nodes(data=True):
+                nodes.append({
+                    'id': node_id,
+                    'label': node_data['label'],
+                    'department': node_data['department'],
+                    'is_selected': node_data['is_selected']
+                })
+
+            edges = []
+            for source, target, data in G.edges(data=True):
+                edges.append({
+                    'source': source,
+                    'target': target,
+                    'weight': data['weight']
+                })
+
+            return JsonResponse({
+                'nodes': nodes,
+                'edges': edges,
+                'is_author_view': True
+            })
+        except Author.DoesNotExist:
+            # Si el autor no existe, devolver la red completa
+            pass
+
+    # Si no hay autor seleccionado, usar la lógica original con los CSV
     nodes_data = []
     valid_ids = set()
     id_to_name = {}
@@ -471,17 +539,16 @@ def get_collaboration_network(request):
                 author = Author.objects.get(name__iexact=name)
                 author_id = str(author.gesbib_id)
                 # Obtener el departamento y la comunidad de modularidad
-                department = getattr(author, 'department', 'Unknown') # Obtener el departamento
+                department = getattr(author, 'department', 'Unknown')
                 lovaina_community = getattr(author, 'lovaina_community', -1)
-                leiden_community = getattr(author, 'leiden_community', -1) # Obtener la comunidad de Leiden
+                leiden_community = getattr(author, 'leiden_community', -1)
             except Author.DoesNotExist:
                 continue
 
             valid_ids.add(author_id)
             id_to_name[author_id] = name
-            id_to_community[author_id] = lovaina_community # Guardar comunidad de modularidad
+            id_to_community[author_id] = lovaina_community
 
-            # 🔥 AÑADIR EL NODO AL GRAFO EXPLÍCITAMENTE
             G.add_node(author_id, department=department, lovaina_community=lovaina_community, leiden_community=leiden_community)
 
     # === Leer aristas y construir grafo ===
@@ -499,40 +566,32 @@ def get_collaboration_network(request):
                 G.add_edge(source, target, weight=weight)
 
     # === Preparar nodos usando la comunidad desde la base de datos ===
-    # Determinar qué propiedad usar para la agrupación y coloración
-    view_type = request.GET.get('view_type', 'modularity-7') # Obtener el tipo de vista
+    view_type = request.GET.get('view_type', 'modularity-7')
     
     if view_type == 'department':
-        # Agrupar por departamento y asignar colores
-        # Necesitamos una escala de colores para los departamentos
-        # departments = sorted(list(set(data.nodes.map(n => n.department)))); # Esto lo haremos en el front, el back solo envia los datos
-        # Asignaremos colores y posicionamiento inicial en el frontend basado en department
         for node in G.nodes():
-             nodes_data.append({
-                "id": node,
-                "label": id_to_name.get(node, node),
-                "x": random.random() * 1000, # Posicionamiento inicial aleatorio, el front lo ajustará
-                "y": random.random() * 1000,
-                "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
-                "community": G.nodes[node].get('lovaina_community', -1), # Seguir enviando la comunidad de modularidad
-                "department": G.nodes[node].get('department', 'Unknown'), # Enviar el departamento
-                "leiden_community": G.nodes[node].get('leiden_community', -1) # Enviar la comunidad de Leiden
-            })
-
-    else: # Default a modularidad 7 (o la que se pida)
-        # Usar la comunidad de modularidad para agrupación y coloración (lógica existente)
-         for node in G.nodes():
             nodes_data.append({
                 "id": node,
                 "label": id_to_name.get(node, node),
                 "x": random.random() * 1000,
                 "y": random.random() * 1000,
-                "is_selected": (str(id_to_name.get(node, node)) == str(selected_author_name)),
-                "community": G.nodes[node].get('lovaina_community', -1), # Usar la comunidad de modularidad
-                "department": G.nodes[node].get('department', 'Unknown'), # Enviar el departamento también
-                "leiden_community": G.nodes[node].get('leiden_community', -1) # Enviar la comunidad de Leiden
+                "is_selected": False,
+                "community": G.nodes[node].get('lovaina_community', -1),
+                "department": G.nodes[node].get('department', 'Unknown'),
+                "leiden_community": G.nodes[node].get('leiden_community', -1)
             })
-
+    else:
+        for node in G.nodes():
+            nodes_data.append({
+                "id": node,
+                "label": id_to_name.get(node, node),
+                "x": random.random() * 1000,
+                "y": random.random() * 1000,
+                "is_selected": False,
+                "community": G.nodes[node].get('lovaina_community', -1),
+                "department": G.nodes[node].get('department', 'Unknown'),
+                "leiden_community": G.nodes[node].get('leiden_community', -1)
+            })
 
     # === Preparar aristas ===
     edges_data = []
@@ -545,7 +604,8 @@ def get_collaboration_network(request):
 
     return JsonResponse({
         "nodes": nodes_data,
-        "edges": edges_data
+        "edges": edges_data,
+        "is_author_view": False
     })
 
 def get_author_metrics(request):

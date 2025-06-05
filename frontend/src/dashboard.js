@@ -1496,10 +1496,32 @@ export function initFiltersAndSearch() {
         });
     });
 
-    // Función para actualizar la red de colaboración
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
+
+        // Actualizar título del card si hay autor seleccionado
+        const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
+        if (data.is_author_view) {
+            const selectedAuthor = data.nodes.find(node => node.is_selected);
+            if (selectedAuthor) {
+                const currentLang = window.location.pathname.split('/')[1];
+                cardTitle.textContent = currentLang === 'es' 
+                    ? `Colaboraciones de ${selectedAuthor.label}`
+                    : `Collaborations of ${selectedAuthor.label}`;
+            }
+            // Ocultar el dropdown de vista de comunidades
+            const communityViewDropdown = document.querySelector('#communityViewDropdown').closest('.dropdown');
+            if (communityViewDropdown) {
+                communityViewDropdown.style.display = 'none';
+            }
+        } else {
+            // Mostrar el dropdown de vista de comunidades
+            const communityViewDropdown = document.querySelector('#communityViewDropdown').closest('.dropdown');
+            if (communityViewDropdown) {
+                communityViewDropdown.style.display = 'block';
+            }
+        }
 
         // Limpiar el contenedor y destruir el renderer anterior si existe
         if (renderer) {
@@ -1507,146 +1529,114 @@ export function initFiltersAndSearch() {
             renderer = null;
         }
         container.innerHTML = '';
-
         const graph = new Graph();
-
+    
         const colorPalette = [
             "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6",
             "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
-            "#808000", "#ffd8b1", "#000075", "a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
+            "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
         ];
-        // Escala de colores para los departamentos (solo 3 departamentos + Unknown)
+        const colorByCommunity = c => colorPalette[c % colorPalette.length];
+    
         const departmentColorScale = d3.scaleOrdinal()
-            .domain(['Departamento 1', 'Departamento 2', 'Departamento 3', 'Unknown']) // Reemplazar con los nombres reales de tus departamentos
-            .range(['#1f78b4', '#ff7f0e', '#2ca02c', '#999999']); // Colores distintivos + gris para Unknown
-
-
-        const colorByCommunity = (community) => colorPalette[community % colorPalette.length];
-
-
-        // --- Lógica de Posicionamiento Inicial por Grupo (Departamento o Comunidad) ---
-        // Determinar la propiedad de agrupación y obtener los grupos únicos
-        let groupByProp, groups;
-        if (currentCommunityView === 'department') {
-            groupByProp = 'department';
-            groups = [...new Set(data.nodes.map(n => n.department))];
-        } else if (currentCommunityView === 'modularity-5') { // Vista por comunidad de Leiden
-             groupByProp = 'leiden_community';
-             groups = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
-             // Asegurarse de que -1 (unknown) vaya al final
-             const unknownIndex = groups.indexOf(-1);
-             if (unknownIndex > -1) {
-                 groups.splice(unknownIndex, 1);
-                 groups.push(-1);
-             }
-        } else { // Default a modularidad 7 (o la vista de modularidad-7)
-            groupByProp = 'community'; // 'community' contiene lovaina_community
-            groups = [...new Set(data.nodes.map(n => parseInt(n.community)))];
-             // Asegurarse de que -1 (unknown) vaya al final
-             const unknownIndex = groups.indexOf(-1);
-             if (unknownIndex > -1) {
-                 groups.splice(unknownIndex, 1);
-                 groups.push(-1);
-             }
-        }
-        groups.sort((a, b) => a - b); // Ordenar grupos numéricamente
-
-        const nodesByGroup = {};
-        groups.forEach(group => {
-            // Asegurarse de que el valor del grupo sea el correcto (número o string)
-            if (groupByProp === 'department') {
-                 nodesByGroup[group] = data.nodes.filter(n => n[groupByProp] === group);
-            } else { // Comunidades de modularidad son números
-                 nodesByGroup[group] = data.nodes.filter(n => parseInt(n[groupByProp]) === group);
-            }
-        });
-
-        // Calcular posiciones iniciales circulares para cada grupo
-        const canvasCenterX = container.clientWidth / 2;
-        const canvasCenterY = container.clientHeight / 2;
-        const totalGroups = groups.length;
-        const overallRadius = Math.min(canvasCenterX, canvasCenterY) * 0.8; // Radio para distribuir los centros de los grupos
-        const groupRadius = overallRadius / Math.sqrt(totalGroups) * 0.5; // Radio aproximado para los nodos dentro de cada grupo
-
-        groups.forEach((group, i) => {
-            const nodes = nodesByGroup[group];
-            const effectiveNodesInGroup = Math.max(nodes.length, 5); // Mínimo para distribución circular
-            const angleStep = (2 * Math.PI) / effectiveNodesInGroup;
-            // Posición del centro del círculo de este grupo
-            const groupCenterX = canvasCenterX + overallRadius * Math.cos((2 * Math.PI * i) / totalGroups);
-            const groupCenterY = canvasCenterY + overallRadius * Math.sin((2 * Math.PI * i) / totalGroups);
-
-            nodes.forEach((node, j) => {
-                const angle = j * angleStep;
-                node.x = groupCenterX + groupRadius * Math.cos(angle);
-                node.y = groupCenterY + groupRadius * Math.sin(angle);
+            .domain(['Departamento 1', 'Departamento 2', 'Departamento 3', 'Unknown'])
+            .range(['#1f78b4', '#ff7f0e', '#2ca02c', '#999999']);
+    
+        // === Posicionar nodos según vista ===
+        if (data.is_author_view) {
+            const centerX = container.clientWidth / 2;
+            const centerY = container.clientHeight / 2;
+            const radius = 250;
+    
+            const authorNode = data.nodes.find(n => n.is_selected);
+            if (!authorNode) return;
+    
+            authorNode.x = centerX;
+            authorNode.y = centerY;
+    
+            const coauthors = data.nodes.filter(n => !n.is_selected);
+            const angleStep = (2 * Math.PI) / Math.max(coauthors.length, 1);
+    
+            coauthors.forEach((node, i) => {
+                const angle = i * angleStep;
+                node.x = centerX + radius * Math.cos(angle);
+                node.y = centerY + radius * Math.sin(angle);
             });
-        });
-        // --- Fin Lógica de Posicionamiento Inicial ---
-
-
+        } else {
+            let groupByProp, groups;
+            if (currentCommunityView === 'department') {
+                groupByProp = 'department';
+                groups = [...new Set(data.nodes.map(n => n.department))];
+            } else if (currentCommunityView === 'modularity-5') {
+                groupByProp = 'leiden_community';
+                groups = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
+            } else {
+                groupByProp = 'community';
+                groups = [...new Set(data.nodes.map(n => parseInt(n.community)))];
+            }
+    
+            const unknownIndex = groups.indexOf(-1);
+            if (unknownIndex > -1) {
+                groups.splice(unknownIndex, 1);
+                groups.push(-1);
+            }
+    
+            const nodesByGroup = {};
+            groups.forEach(group => {
+                nodesByGroup[group] = groupByProp === 'department'
+                    ? data.nodes.filter(n => n[groupByProp] === group)
+                    : data.nodes.filter(n => parseInt(n[groupByProp]) === group);
+            });
+    
+            const canvasCenterX = container.clientWidth / 2;
+            const canvasCenterY = container.clientHeight / 2;
+            const totalGroups = groups.length;
+            const overallRadius = Math.min(canvasCenterX, canvasCenterY) * 0.8;
+            const groupRadius = overallRadius / Math.sqrt(totalGroups) * 0.5;
+    
+            groups.forEach((group, i) => {
+                const nodes = nodesByGroup[group];
+                const angleStep = (2 * Math.PI) / Math.max(nodes.length, 5);
+                const cx = canvasCenterX + overallRadius * Math.cos((2 * Math.PI * i) / totalGroups);
+                const cy = canvasCenterY + overallRadius * Math.sin((2 * Math.PI * i) / totalGroups);
+                nodes.forEach((node, j) => {
+                    const angle = j * angleStep;
+                    node.x = cx + groupRadius * Math.cos(angle);
+                    node.y = cy + groupRadius * Math.sin(angle);
+                });
+            });
+        }
+    
         const degreeMap = {};
         data.edges.forEach(edge => {
             degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
             degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
         });
-
-        const topNodeByCommunity = {}; // Esto es relevante para vistas de modularidad
-        if (groupByProp !== 'department') { // Solo calcular nodo principal si no es vista por departamento
-            for (const [groupValue, nodes] of Object.entries(nodesByGroup)) {
-                let topNode = null;
-                let maxDegree = -1;
-                nodes.forEach(n => {
-                    const degree = degreeMap[n.id] || 0;
-                    if (degree > maxDegree) {
-                        maxDegree = degree;
-                        topNode = n.id;
-                    }
-                });
-                 // Evitar que un grupo vacío cause un error al intentar acceder a topNode
-                 if (nodes.length > 0) {
-                     topNodeByCommunity[groupValue] = topNode;
-                 }
-            }
-        }
-
-
+    
         data.nodes.forEach(node => {
-            const comm = parseInt(node.community); // lovaina_community
-            const leidenComm = parseInt(node.leiden_community); // leiden_community
+            const comm = parseInt(node.community);
+            const leiden = parseInt(node.leiden_community);
             const dept = node.department;
-
-            let nodeColor;
-            let groupValueForColor; // El valor que usaremos para determinar el color
-
-            // Determinar el valor de agrupación y el color basado en la vista activa
-            if (currentCommunityView === 'department') {
-                 groupValueForColor = dept;
-                 nodeColor = departmentColorScale(groupValueForColor);
-            } else if (currentCommunityView === 'modularity-5') {
-                 groupValueForColor = leidenComm;
-                 nodeColor = colorByCommunity(groupValueForColor); // Usar la escala de color de comunidad para Leiden
-            } else { // Default a modularidad 7
-                 groupValueForColor = comm;
-                 nodeColor = colorByCommunity(groupValueForColor); // Usar la escala de color de comunidad para Lovain
-            }
-
+    
+            const nodeColor = data.is_author_view
+                ? (node.is_selected ? '#e6194b' : '#bbbbbb')
+                : (currentCommunityView === 'department'
+                    ? departmentColorScale(dept)
+                    : (currentCommunityView === 'modularity-5'
+                        ? colorByCommunity(leiden)
+                        : colorByCommunity(comm)));
+    
             graph.addNode(node.id, {
                 label: node.label,
                 x: node.x,
                 y: node.y,
                 size: node.is_selected ? 18 : 12,
-                color: nodeColor, // Usar el color determinado
+                color: nodeColor,
                 highlighted: node.is_selected,
-                community: comm, // Mantener lovaina_community en los atributos
-                department: dept, // Mantener department en los atributos
-                leiden_community: leidenComm, // Añadir leiden_community a los atributos
-                 // Forzar etiqueta principal solo si es una vista de modularidad y es el nodo principal del grupo actual
-                forceLabel: (groupByProp !== 'department') && (String(node.id) === String(topNodeByCommunity[node[groupByProp]])) // Usar groupProp para comparar con topNodeByCommunity
+                forceLabel: showAllLabels
             });
         });
-
-
+    
         data.edges.forEach(edge => {
             if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
                 const weight = edge.weight || 1;
@@ -1661,15 +1651,12 @@ export function initFiltersAndSearch() {
                 });
             }
         });
-
-        // Crear nuevo renderer
+    
         renderer = new Sigma(graph, container, {
             minCameraRatio: 0.1,
             maxCameraRatio: 10,
             defaultEdgeType: "curve",
-            edgeProgramClasses: {
-                curve: EdgeCurveProgram,
-            },
+            edgeProgramClasses: { curve: EdgeCurveProgram },
             renderLabels: true,
             labelDensity: 1,
             labelGridCellSize: 300,
@@ -1680,8 +1667,7 @@ export function initFiltersAndSearch() {
             enableNodeHovering: false,
             enableCamera: false
         });
-
-        // === Tooltip flotante
+    
         const tooltip = document.createElement('div');
         Object.assign(tooltip.style, {
             position: 'absolute',
@@ -1696,9 +1682,7 @@ export function initFiltersAndSearch() {
         });
         document.body.appendChild(tooltip);
     
-        // === Eventos definidos pero no activos hasta que se habiliten
         const activateInteractivity = () => {
-            // === Mensaje informativo
             const infoMessage = d3.select('#collaborationNetwork')
                 .append('div')
                 .attr('class', 'alert alert-info')
@@ -1716,7 +1700,7 @@ export function initFiltersAndSearch() {
                 .style('align-items', 'center')
                 .style('gap', '8px')
                 .style('max-width', '300px');
-
+    
             infoMessage.html(`
                 <div style="flex-grow: 1;">
                     <i class="fas fa-info-circle"></i>
@@ -1724,11 +1708,8 @@ export function initFiltersAndSearch() {
                 </div>
                 <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
             `);
-
-            infoMessage.select('.btn-close').on('click', function () {
-                infoMessage.remove();
-            });
-
+            infoMessage.select('.btn-close').on('click', () => infoMessage.remove());
+    
             renderer.setSettings({
                 enableEdgeHovering: true,
                 enableNodeHovering: true,
@@ -1737,57 +1718,43 @@ export function initFiltersAndSearch() {
     
             renderer.on('enterNode', ({ node, event }) => {
                 const label = graph.getNodeAttribute(node, 'label');
-              
-                // Obtener vecinos y pesos
                 const neighbors = graph.neighbors(node);
                 const lines = [];
-              
+    
                 neighbors.forEach(neighbor => {
-                  const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node);
-                  const weight = graph.getEdgeAttribute(edge, 'size') || 1;
-                  const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
-                  lines.push(`• ${neighborLabel} (${weight})`);
+                    const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node);
+                    const weight = graph.getEdgeAttribute(edge, 'size') || 1;
+                    const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
+                    lines.push(`• ${neighborLabel} (${weight})`);
                 });
-              
+    
                 tooltip.innerText = `${label}\nColabora con:\n${lines.join('\n')}`;
                 tooltip.style.left = `${event.clientX + 10}px`;
                 tooltip.style.top = `${event.clientY + 10}px`;
                 tooltip.style.display = 'block';
-              
-                // Resaltar nodo y vecinos
+    
                 const visibleNodes = new Set(neighbors);
                 visibleNodes.add(node);
                 graph.forEachNode(n => {
-                  graph.setNodeAttribute(n, 'hidden', !visibleNodes.has(n));
-                  graph.setNodeAttribute(n, 'forceLabel', visibleNodes.has(n));
+                    graph.setNodeAttribute(n, 'hidden', !visibleNodes.has(n));
+                    graph.setNodeAttribute(n, 'forceLabel', showAllLabels || visibleNodes.has(n));
                 });
-              
                 graph.forEachEdge(e => {
-                  const source = graph.source(e);
-                  const target = graph.target(e);
-                  const visible = visibleNodes.has(source) && visibleNodes.has(target);
-                  graph.setEdgeAttribute(e, 'hidden', !visible);
+                    const src = graph.source(e);
+                    const tgt = graph.target(e);
+                    const visible = visibleNodes.has(src) && visibleNodes.has(tgt);
+                    graph.setEdgeAttribute(e, 'hidden', !visible);
                 });
             });
-              
+    
             renderer.on('leaveNode', () => {
                 tooltip.style.display = 'none';
                 graph.forEachNode(n => {
                     graph.removeNodeAttribute(n, 'hidden');
-                    // Solo restablecer forceLabel si no estamos en la vista de mostrar todas las etiquetas
-                    if (!showAllLabels) {
-                         // Restaurar forceLabel basado en la lógica original para vistas de modularidad
-                         const comm = parseInt(graph.getNodeAttribute(n, 'community'));
-                         const isTopNode = String(graph.getNodeAttribute(n, 'id')) === String(topNodeByCommunity[comm]);
-                         graph.setNodeAttribute(n, 'forceLabel', (groupByProp === 'community') && isTopNode);
-                    } else {
-                         graph.setNodeAttribute(n, 'forceLabel', true); // Mantener forzada si showAllLabels es true
-                    }
+                    graph.setNodeAttribute(n, 'forceLabel', showAllLabels);
                 });
-                graph.forEachEdge(e => {
-                    graph.removeEdgeAttribute(e, 'hidden');
-                });
-            });          
+                graph.forEachEdge(e => graph.removeEdgeAttribute(e, 'hidden'));
+            });
         };
     
         // === Overlay para activar la red
@@ -1812,7 +1779,6 @@ export function initFiltersAndSearch() {
             borderRadius: getComputedStyle(container).borderRadius
         });
         container.appendChild(overlay);
-    
         overlay.addEventListener('click', () => {
             overlay.remove();
             activateInteractivity();
@@ -1820,35 +1786,33 @@ export function initFiltersAndSearch() {
     
         renderer.getCamera().animatedReset({ duration: 500 });
 
-         // === Leyenda para la vista por departamento ===
-        // Solo mostrar leyenda para la vista por departamento
-        if (currentCommunityView === 'department') {
+        // === Leyenda para la vista por departamento ===
+        // Solo mostrar leyenda para la vista por departamento y cuando no hay autor seleccionado
+        if (currentCommunityView === 'department' && !data.is_author_view) {
             const legend = document.createElement('div');
             legend.id = 'departmentLegend';
             Object.assign(legend.style, {
                 position: 'absolute',
-                bottom: '10px', // Ajusta la posición según necesites
-                left: '10px',  // Ajusta la posición según necesites
+                bottom: '10px',
+                left: '10px',
                 backgroundColor: 'rgba(255,255,255,0.9)',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
                 padding: '10px',
                 fontSize: '12px',
-                zIndex: 1000 // Asegurarse de que esté sobre la red
+                zIndex: 1000
             });
 
             // Obtener los departamentos únicos y ordenarlos (excluir Unknown si no se desea mostrar)
             const departmentsToShow = [...new Set(data.nodes.map(n => n.department))].filter(d => d !== 'Unknown').sort();
-            // Si quieres incluir Unknown:
-            // const departmentsToShow = [...new Set(data.nodes.map(n => n.department))].sort();
 
-            // Añadir título a la leyenda (Opcional)
+            // Añadir título a la leyenda
             const legendTitle = document.createElement('div');
             legendTitle.style.fontWeight = 'bold';
-             legendTitle.style.marginBottom = '5px';
-             const currentLang = window.location.pathname.split('/')[1];
-             legendTitle.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
-             legend.appendChild(legendTitle);
+            legendTitle.style.marginBottom = '5px';
+            const currentLang = window.location.pathname.split('/')[1];
+            legendTitle.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
+            legend.appendChild(legendTitle);
 
             departmentsToShow.forEach(dept => {
                 const color = departmentColorScale(dept);
@@ -1865,20 +1829,21 @@ export function initFiltersAndSearch() {
                     height: '15px',
                     backgroundColor: color,
                     marginRight: '8px',
-                    border: '1px solid #000' // Borde para visibilidad en fondos claros
+                    border: '1px solid #000'
                 });
 
                 const deptName = document.createElement('span');
-                deptName.textContent = dept; // Usar el nombre del departamento
+                deptName.textContent = dept;
 
                 legendItem.appendChild(colorSwatch);
                 legendItem.appendChild(deptName);
                 legend.appendChild(legendItem);
             });
 
-            container.appendChild(legend); // Añadir la leyenda al contenedor de la red
+            container.appendChild(legend);
         }
-    }           
+    }
+               
 
     function updateFilters() {
         const params = new URLSearchParams();
