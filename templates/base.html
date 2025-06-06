@@ -266,8 +266,33 @@
         </div>
     </main>
 
+    <footer class="footer mt-auto py-4 bg-light">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6 mb-3 mb-md-0 d-flex justify-content-center justify-content-md-start align-items-center">
+                    <!-- Logos Institucionales -->
+                    <a href="https://www.ipb.csic.es/" target="_blank" rel="noopener noreferrer">
+                        <img src="{% static 'img/ipbln_logo.png' %}" alt="IPBLN Logo" style="height: 50px; margin-right: 20px;" class="img-fluid">
+                    </a>
+                    <a href="https://www.csic.es/es" target="_blank" rel="noopener noreferrer">
+                        <img src="{% static 'img/csic_logo.png' %}" alt="CSIC Logo" style="height: 50px;" class="img-fluid">
+                    </a>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <!-- Información del Creador y Redes -->
+                    <p class="text-muted mb-1">{% trans "Created by" %} <a href="https://pablogradolph.github.io/Portfolio/" target="_blank" rel="noopener noreferrer" class="text-muted">Pablo Gradolph Oliva</a></p>
+                    <p class="text-muted mb-0">&copy; {% now "Y" %} {% trans "Bibliometrics IPBLN" %} – TFM</p>
+                    <!-- Añade aquí otros enlaces a redes sociales si tienes las URLs -->
+                    <!-- Ejemplo: <a href="URL_LINKEDIN" target="_blank" rel="noopener noreferrer" class="text-muted me-2">LinkedIn</a> -->
+                </div>
+            </div>
+        </div>
+    </footer>
+
     <!-- Bootstrap JS -->
     <script src="{% static 'css/bootstrap.bundle.min.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'js/bundle.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html> 

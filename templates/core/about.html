@@ -55,12 +55,12 @@
                         {% trans "Bootstrap" %}
                     </li>
                     <li class="list-group-item d-flex align-items-center">
-                        <i class="fas fa-chart-pie text-primary me-3"></i>
-                        {% trans "D3.js" %}
+                        <i class="fas fa-chart-area text-primary me-3"></i>
+                        {% trans "D3.js & Sigma.js" %}
                     </li>
                     <li class="list-group-item d-flex align-items-center">
                         <i class="fas fa-database text-primary me-3"></i>
-                        {% trans "SQLite" %}
+                        {% trans "SQL" %}
                     </li>
                     <li class="list-group-item d-flex align-items-center">
                         <i class="fas fa-robot text-primary me-3"></i>
@@ -76,34 +76,28 @@
     <div class="col-12">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">{% trans "Data Analysis" %}</h5>
-                <p class="card-text">{% trans "Our tool provides comprehensive analysis of scientific production, including:" %}</p>
-                <div class="row g-4">
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <i class="fas fa-chart-line fa-3x text-primary mb-3"></i>
-                            <h6>{% trans "Publication Trends" %}</h6>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <i class="fas fa-quote-right fa-3x text-primary mb-3"></i>
-                            <h6>{% trans "Citation Impact" %}</h6>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <i class="fas fa-network-wired fa-3x text-primary mb-3"></i>
-                            <h6>{% trans "Collaboration Patterns" %}</h6>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <i class="fas fa-brain fa-3x text-primary mb-3"></i>
-                            <h6>{% trans "Research Topics" %}</h6>
-                        </div>
-                    </div>
-                </div>
+                <h5 class="card-title">{% trans "About IPBLN-CSIC" %}</h5>
+                <p class="card-text">
+                    {% trans "The Instituto de Parasitología y Biomedicina López-Neyra (IPBLN) is a research center of the Spanish National Research Council (CSIC) located in Granada, Spain." %}
+                    {% trans "It focuses on cutting-edge research in the fields of Parasitology and Biomedicine." %}
+                    {% trans "This tool was developed within the framework of a research project at IPBLN-CSIC to analyze its scientific production." %}
+                </p>
+                 <a href="https://www.ipb.csic.es/" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">{% trans "Visit IPBLN Website" %}</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{% trans "About the Creator" %}</h5>
+                <p class="card-text">
+                    {% trans "This interactive web tool was developed by Pablo Gradolph Oliva as part of his Master's Final Project in Data Science and Computer Engineering at the University of Granada." %}
+                    {% trans "He is currently continuing its development at IPBLN-CSIC through a JAE Intro 2025 grant. Pablo has a background in multidisciplinary sciences and a strong passion for programming and software development." %}
+                </p>
+                 <a href="https://pablogradolph.github.io/Portfolio/" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">{% trans "Visit Pablo's Portfolio" %}</a>
             </div>
         </div>
     </div>

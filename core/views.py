@@ -133,6 +133,16 @@ def get_filter_data(request):
         if not item['publication_type'].lower().startswith('comunicación')
     ]
 
+    filtered_types_with_counts = [
+        item for item in filtered_types_with_counts
+        if not item['publication_type'].lower().startswith('capítulo de')
+    ]
+
+    filtered_types_with_counts = [
+        item for item in filtered_types_with_counts
+        if not item['publication_type'].lower() == "artículo"
+    ]
+
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),

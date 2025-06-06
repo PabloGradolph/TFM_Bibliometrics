@@ -296,3 +296,33 @@ msgstr "Por Palabras Clave"
 
 msgid "Show all Tags"
 msgstr "Mostrar etiquetas"
+
+msgid "Created by"
+msgstr "Creado por"
+
+msgid "About IPBLN-CSIC"
+msgstr "Acerca del IPBLN-CSIC"
+
+msgid "The Instituto de Parasitología y Biomedicina López-Neyra (IPBLN) is a research center of the Spanish National Research Council (CSIC) located in Granada, Spain."
+msgstr "El Instituto de Parasitología y Biomedicina López-Neyra (IPBLN) es un centro de investigación del Consejo Superior de Investigaciones Científicas (CSIC) ubicado en Granada, España."
+
+msgid "It focuses on cutting-edge research in the fields of Parasitology and Biomedicine."
+msgstr "Se centra en investigación de vanguardia en los campos de la Parasitología y la Biomedicina."
+
+msgid "This tool was developed within the framework of a research project at IPBLN-CSIC to analyze its scientific production."
+msgstr "Esta herramienta fue desarrollada en el marco de un proyecto de investigación en el IPBLN-CSIC para analizar su producción científica."
+
+msgid "Visit IPBLN Website"
+msgstr "Visitar sitio web del IPBLN"
+
+msgid "About the Creator"
+msgstr "Acerca del Creador"
+
+msgid "This interactive web tool was developed by Pablo Gradolph Oliva as part of his Master's Final Project in Data Science and Computer Engineering at the University of Granada."
+msgstr "Esta herramienta web interactiva fue desarrollada por Pablo Gradolph Oliva como parte de su Trabajo de Fin de Máster en Ciencia de Datos e Ingeniería de Computadores en la Universidad de Granada."
+
+msgid "He is currently continuing its development at IPBLN-CSIC through a JAE Intro 2025 grant. Pablo has a background in multidisciplinary sciences and a strong passion for programming and software development."
+msgstr "Actualmente continúa su desarrollo en el IPBLN-CSIC a través de una beca JAE Intro 2025. Pablo tiene formación en ciencias multidisciplinares y una gran pasión por la programación y el desarrollo de software."
+
+msgid "Visit Pablo's Portfolio"
+msgstr "Visitar Portfolio de Pablo"
