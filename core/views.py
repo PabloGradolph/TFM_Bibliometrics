@@ -390,6 +390,24 @@ def publication_detail(request, publication_id):
     
     return render(request, 'core/publication_detail.html', context)
 
+
+# Mapeo entre clave y función de ordenación
+def get_metric_value(pub, key):
+    if key == 'International Collaboration':
+        return pub.international_collab if pub.international_collab is not None else -1
+    
+    metric_map = {
+        'Dimensions Citations': lambda p: p.metrics.filter(source='dimensions', metric_type='citations').order_by('-year').first(),
+        'WoS Citations': lambda p: p.metrics.filter(source='wos', metric_type='citations').order_by('-year').first(),
+        'Scopus Citations': lambda p: p.metrics.filter(source='scopus', metric_type='citations').order_by('-year').first(),
+        'FCR': lambda p: p.metrics.filter(source='dimensions', metric_type='fcr').order_by('-year').first(),
+        'RCR': lambda p: p.metrics.filter(source='dimensions', metric_type='rcr').order_by('-year').first(),
+    }
+    
+    metric = metric_map.get(key, lambda p: None)(pub)
+    return float(metric.impact_factor) if metric and metric.impact_factor is not None else -1
+
+
 def get_publications_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -400,6 +418,9 @@ def get_publications_data(request):
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
     per_page = 20
+
+    sort_by = request.GET.get('sort_by')
+    sort_order = request.GET.get('sort_order', 'desc')
 
     # Construir el query base
     query = Publication.objects.all()
@@ -421,14 +442,22 @@ def get_publications_data(request):
     if author:
         query = query.filter(authors__name=author)
 
-    # Obtener el total de publicaciones para la paginación
-    total_publications = query.count()
-    total_pages = (total_publications + per_page - 1) // per_page
+    # Obtener todas las publicaciones filtradas
+    publications = list(query)
+    
+    # Aplicar ordenación si se especifica
+    if sort_by:
+        publications.sort(key=lambda pub: get_metric_value(pub, sort_by), reverse=(sort_order == 'desc'))
+    else:
+        # Ordenación por defecto por año y fecha de publicación
+        publications.sort(key=lambda pub: (pub.year or 0, pub.publication_date or ''), reverse=True)
 
-    # Obtener las publicaciones paginadas
+    # Paginar manualmente
+    total_publications = len(publications)
+    total_pages = (total_publications + per_page - 1) // per_page
     start = (page - 1) * per_page
     end = start + per_page
-    publications = query.order_by('-year', '-publication_date')[start:end]
+    publications = publications[start:end]
 
     # Preparar los datos de las publicaciones con sus métricas
     publications_data = []

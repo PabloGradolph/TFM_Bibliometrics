@@ -580,7 +580,51 @@ export function initFiltersAndSearch() {
             .catch(error => console.error('Error updating visualizations:', error));
     }
 
+    // Estado de ordenación actual (mover fuera de la función para mantenerlo entre llamadas)
+    let currentSort = {
+        metric: null,
+        direction: 'desc'
+    };
+
     function updatePublicationsTable(page = 1) {
+        const tableBody = document.getElementById('metricsTable');
+        const pagination = document.getElementById('publicationsPagination');
+        const table = tableBody.closest('table');
+
+        // Mostrar indicador de carga y deshabilitar la tabla
+        if (table) {
+            // Crear overlay de carga si no existe
+            let loadingOverlay = table.querySelector('.loading-overlay');
+            if (!loadingOverlay) {
+                loadingOverlay = document.createElement('div');
+                loadingOverlay.className = 'loading-overlay';
+                loadingOverlay.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(255, 255, 255, 0.8);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                `;
+                loadingOverlay.innerHTML = `
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                `;
+                table.style.position = 'relative';
+                table.appendChild(loadingOverlay);
+            }
+            loadingOverlay.style.display = 'flex';
+            
+            // Deshabilitar la tabla
+            table.style.pointerEvents = 'none';
+            table.style.opacity = '0.7';
+        }
+
         const filters = {
             year_from: yearFrom.value,
             year_to: yearTo.value,
@@ -604,6 +648,12 @@ export function initFiltersAndSearch() {
             params.append('author', selectedAuthorName);
         }
 
+        // Añadir parámetros de ordenación si existen
+        if (currentSort.metric) {
+            params.append('sort_by', currentSort.metric);
+            params.append('sort_order', currentSort.direction);
+        }
+
         // Retornar la promesa de fetch
         return fetch(`/api/dashboard/publications/?${params.toString()}`)
             .then(response => {
@@ -613,8 +663,6 @@ export function initFiltersAndSearch() {
                 return response.json();
             })
             .then(data => {
-                const tableBody = document.getElementById('metricsTable');
-                const pagination = document.getElementById('publicationsPagination');
                 if (!tableBody || !pagination) {
                     return Promise.reject('Required elements not found');
                 }
@@ -639,14 +687,13 @@ export function initFiltersAndSearch() {
                         ${orderedMetrics.map(({ key, label }) => `
                             <th class="sortable" data-metric="${key}">
                                 ${label}
-                                <i class="fas fa-sort ms-1"></i>
+                                <i class="fas fa-sort${currentSort.metric === key ? `-${currentSort.direction === 'desc' ? 'down' : 'up'}` : ''} ms-1"></i>
                             </th>
                         `).join('')}
                     </tr>
                 `;
 
                 // Añadir el encabezado a la tabla
-                const table = tableBody.closest('table');
                 if (table) {
                     const existingHeader = table.querySelector('thead');
                     if (existingHeader) {
@@ -654,21 +701,6 @@ export function initFiltersAndSearch() {
                     }
                     table.insertBefore(tableHeader, tableBody);
                 }
-
-                // Función para ordenar las publicaciones
-                function sortPublications(metric, direction) {
-                    publications.sort((a, b) => {
-                        const valueA = a.metrics[metric]?.value ?? -Infinity;
-                        const valueB = b.metrics[metric]?.value ?? -Infinity;
-                        return direction === 'asc' ? valueA - valueB : valueB - valueA;
-                    });
-                }
-
-                // Estado de ordenación actual
-                let currentSort = {
-                    metric: null,
-                    direction: 'desc'
-                };
 
                 // Añadir eventos de clic a los encabezados ordenables
                 tableHeader.querySelectorAll('.sortable').forEach(header => {
@@ -692,9 +724,8 @@ export function initFiltersAndSearch() {
                         // Actualizar el icono
                         icon.className = `fas fa-sort-${currentSort.direction === 'desc' ? 'down' : 'up'} ms-1`;
 
-                        // Ordenar y actualizar la tabla
-                        sortPublications(metric, currentSort.direction);
-                        updateTableContent(publications);
+                        // Actualizar la tabla con la nueva ordenación
+                        updatePublicationsTable(1); // Volver a la primera página
                     });
                 });
 
@@ -774,10 +805,31 @@ export function initFiltersAndSearch() {
                     });
                 });
 
+                // Ocultar indicador de carga y habilitar la tabla
+                if (table) {
+                    const loadingOverlay = table.querySelector('.loading-overlay');
+                    if (loadingOverlay) {
+                        loadingOverlay.style.display = 'none';
+                    }
+                    table.style.pointerEvents = 'auto';
+                    table.style.opacity = '1';
+                }
+
                 return Promise.resolve();
             })
             .catch(error => {
                 console.error('Error updating publications table:', error);
+                
+                // Ocultar indicador de carga y habilitar la tabla en caso de error
+                if (table) {
+                    const loadingOverlay = table.querySelector('.loading-overlay');
+                    if (loadingOverlay) {
+                        loadingOverlay.style.display = 'none';
+                    }
+                    table.style.pointerEvents = 'auto';
+                    table.style.opacity = '1';
+                }
+                
                 return Promise.reject(error);
             });
     }
