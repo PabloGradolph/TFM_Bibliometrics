@@ -7,7 +7,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            df = pd.read_csv("analysis/best_IPs_agrupations/Lovaina/leiden_best_partition.csv")
+            df = pd.read_csv("analysis/best_IPs_agrupations/LovainaLeiden/leiden_best_partition.csv")
         except FileNotFoundError:
             self.stdout.write(self.style.ERROR("❌ Archivo de partición no encontrado."))
             return

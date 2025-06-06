@@ -57,6 +57,7 @@ def get_filter_data(request):
     if types:
         type_query = Q()
         for type_item in types:
+            # Para SQLite, necesitamos buscar el string dentro del JSON
             type_query |= Q(publication_type__icontains=type_item)
         query_with_all_filters = query_with_all_filters.filter(type_query)
 
@@ -87,6 +88,7 @@ def get_filter_data(request):
     if types:
         type_query = Q()
         for type_item in types:
+            # Para SQLite, necesitamos buscar el string dentro del JSON
             type_query |= Q(publication_type__icontains=type_item)
         institutions_query = institutions_query.filter(type_query)
 
@@ -97,25 +99,45 @@ def get_filter_data(request):
         .order_by('-count', 'name')
 
     # --- Obtener tipos de publicación con conteo ---
-    # Count based on base_query (filtered by year/author) + other filters (areas, institutions) but NOT types
-    types_query = base_query
+    # Contar tipos individuales de publicaciones que cumplen los filtros aplicados (excepto tipo)
+    publications_for_type_counting = base_query
     if areas:
-        types_query = types_query.filter(thematic_areas__name__in=areas)
-    # Filter by institutions if selected
+        publications_for_type_counting = publications_for_type_counting.filter(thematic_areas__name__in=areas)
     if institutions:
-        types_query = types_query.filter(institutions__name__in=institutions)
+        publications_for_type_counting = publications_for_type_counting.filter(institutions__name__in=institutions)
 
-    # Use aggregation to get counts for types
-    types_with_counts = types_query.values('publication_type')\
-        .annotate(count=Count('id', distinct=True))\
-        .filter(count__gt=0, publication_type__isnull=False)\
-        .order_by('-count', 'publication_type')
+    # Recopilar todos los tipos individuales y contarlos
+    type_counts = {}
+    for pub in publications_for_type_counting.only('publication_type'): # Usamos .only() para optimizar la consulta
+        if isinstance(pub.publication_type, list):
+            for pub_type in pub.publication_type:
+                if pub_type:
+                    # Normalizar un poco (ej. remover espacios extra, minúsculas)
+                    clean_type = pub_type.strip()
+                    if clean_type:
+                         type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
+        elif pub.publication_type: # Manejar caso donde no es lista pero tiene valor
+             clean_type = str(pub.publication_type).strip()
+             if clean_type:
+                  type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
+
+    # Convertir el diccionario de conteos a la lista de objetos esperada por el frontend
+    types_with_counts = [{'publication_type': name, 'count': count} for name, count in type_counts.items()]
+    # Ordenar por conteo (descendente) y luego por nombre (ascendente)
+    types_with_counts.sort(key=lambda x: (-x['count'], x['publication_type']))
+
+    # --- Filtrar tipos que empiezan con "comunicación" ---
+    # Esto se hace aquí después del conteo pero antes de devolver la respuesta
+    filtered_types_with_counts = [
+        item for item in types_with_counts
+        if not item['publication_type'].lower().startswith('comunicación')
+    ]
 
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),
         'institutions': list(institutions_with_counts),
-        'publication_types': list(types_with_counts)
+        'publication_types': filtered_types_with_counts
     })
 
 def get_filtered_data(request):
@@ -141,10 +163,15 @@ def get_filtered_data(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type in types:
-            type_query |= Q(publication_type__icontains=type)
-        query = query.filter(type_query)
+        filtered_ids = [
+            pub.id for pub in query
+            if pub.publication_type and any(
+                t.lower() in str(pub_type).lower()
+                for pub_type in pub.publication_type
+                for t in types
+            )
+        ]
+        query = Publication.objects.filter(id__in=filtered_ids)
     if author:
         query = query.filter(authors__name=author)
 
@@ -239,7 +266,7 @@ def get_filtered_data(request):
         timeline_data = {year: 0 for year in range(min_year, max_year + 1)}
         
         # Obtener los conteos reales
-        year_counts = query.values('year').annotate(count=Count('id')).order_by('year')
+        year_counts = query.values('year').annotate(count=Count('id', distinct=True)).order_by('year')
         
         # Actualizar el diccionario con los conteos reales
         for item in year_counts:
@@ -250,7 +277,7 @@ def get_filtered_data(request):
         timeline_info = None
 
     # Procesar áreas temáticas para el gráfico circular
-    areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id')).order_by('-count'))
+    areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
     
     # Procesar para mostrar top 10 + Otros
     if len(areas_data) > 14:
@@ -259,8 +286,8 @@ def get_filtered_data(request):
         other_count = sum(area['count'] for area in other_areas)
         areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
     
-    institutions_data = list(query.values('institutions__name').annotate(count=Count('id')).order_by('-count'))
-    types_data = list(query.values('publication_type').annotate(count=Count('id')).order_by('-count'))
+    institutions_data = list(query.values('institutions__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
+    types_data = list(query.values('publication_type').annotate(count=Count('id', distinct=True)).order_by('-count'))
 
     return JsonResponse({
         'timeline': timeline_data,
@@ -279,7 +306,7 @@ def get_author_suggestions(request):
     authors = Author.objects.filter(
         name__icontains=query
     ).values('name').annotate(
-        count=Count('publications')
+        count=Count('publications', distinct=True)
     ).order_by('-count', 'name')[:10]  # Limitar a 10 sugerencias
 
     return JsonResponse({

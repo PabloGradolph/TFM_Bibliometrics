@@ -50,6 +50,8 @@
 
 
     <body>
+<h2 style='text-align:center; font-family:Tahoma;'>Red de Coautorías por Comunidad</h2>
+
         <div class="card" style="width: 100%">
             
             
@@ -100,7 +102,7 @@
                   // adding nodes and edges to the graph
                   data = {nodes: nodes, edges: edges};
 
-                  var options = {"nodes": {"font": {"size": 16, "face": "Tahoma"}, "shape": "dot"}, "edges": {"color": {"inherit": true}, "smooth": false}, "interaction": {"hover": true, "tooltipDelay": 200}, "physics": {"barnesHut": {"gravitationalConstant": -8000, "springLength": 150, "springConstant": 0.04, "damping": 0.7}, "minVelocity": 0.75}};
+                  var options = {"nodes": {"font": {"size": 16, "face": "Tahoma"}, "shape": "dot"}, "edges": {"color": {"inherit": true}, "smooth": false}, "interaction": {"hover": true, "tooltipDelay": 200}, "physics": {"barnesHut": {"gravitationalConstant": -12000, "springLength": 250, "springConstant": 0.02, "damping": 0.6}, "minVelocity": 0.75, "stabilization": {"iterations": 250}}};
 
                   
 
