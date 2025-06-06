@@ -373,12 +373,19 @@ def publication_detail(request, publication_id):
     # Obtener la publicación por su ID, o mostrar 404 si no existe
     publication = get_object_or_404(Publication, id=publication_id)
 
+    # Obtener las métricas relacionadas con la publicación
+    metrics = publication.metrics.all()
+
+    zipped_links = list(zip(publication.extra_sources or [], publication.extra_links or []))
+
     # Puedes pasar la información que necesites a la plantilla
     context = {
         'publication': publication,
         'authors': publication.authors.all(),
         'institutions': publication.institutions.all(),
         'areas': publication.thematic_areas.all(),
+        'metrics': metrics, # Añadimos las métricas al contexto
+        'zipped_links': zipped_links,
     }
     
     return render(request, 'core/publication_detail.html', context)
