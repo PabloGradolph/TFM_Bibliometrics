@@ -196,7 +196,7 @@ export function initFiltersAndSearch() {
                     'total_citations': 'Total Citations',
                     'citations_wos': 'WoS Citations',
                     'citations_scopus': 'Scopus Citations',
-                    'h_index': 'H-index',
+                    'h_index': 'H-index (WoS/Scopus)',
                     'h_index_gb': 'H-index (Gesbib)',
                     'h_index_h5gb': 'H5-index (Gesbib)',
                     'international_index': 'International Collaboration Index'

@@ -60,7 +60,7 @@ def get_filter_data(request):
             type_query |= Q(publication_type__icontains=type_item)
         query_with_all_filters = query_with_all_filters.filter(type_query)
 
-    years = query_with_all_filters.values('year').annotate(count=Count('id')).order_by('year')
+    years = query_with_all_filters.values('year').annotate(count=Count('id', distinct=True)).order_by('year')
 
     # --- Obtener áreas temáticas con conteo ---
     # Count based on base_query (filtered by year/author) + other filters (institutions, types) but NOT areas
@@ -75,7 +75,7 @@ def get_filter_data(request):
 
     # Use aggregation to get counts for areas
     areas_with_counts = areas_query.values('thematic_areas__name')\
-        .annotate(name=F('thematic_areas__name'), count=Count('id'))\
+        .annotate(name=F('thematic_areas__name'), count=Count('id', distinct=True))\
         .filter(count__gt=0, thematic_areas__name__isnull=False)\
         .order_by('-count', 'name')
 
@@ -92,7 +92,7 @@ def get_filter_data(request):
 
     # Use aggregation to get counts for institutions
     institutions_with_counts = institutions_query.values('institutions__name')\
-        .annotate(name=F('institutions__name'), count=Count('id'))\
+        .annotate(name=F('institutions__name'), count=Count('id', distinct=True))\
         .filter(count__gt=0, institutions__name__isnull=False)\
         .order_by('-count', 'name')
 
@@ -107,7 +107,7 @@ def get_filter_data(request):
 
     # Use aggregation to get counts for types
     types_with_counts = types_query.values('publication_type')\
-        .annotate(count=Count('id'))\
+        .annotate(count=Count('id', distinct=True))\
         .filter(count__gt=0, publication_type__isnull=False)\
         .order_by('-count', 'publication_type')
 
