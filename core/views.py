@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
-from bibliodata.models import Publication, Institution, ThematicArea, Author
+from bibliodata.models import Publication, Institution, ThematicArea, Author, Collaboration
 from django.db.models import Count, Min, Max, Q, F
 from itertools import combinations
 import random
@@ -534,42 +534,42 @@ def get_collaboration_network(request):
     # Si hay un autor seleccionado, crear una red específica para él desde la base de datos
     if selected_author_name:
         try:
-            # Obtener el autor seleccionado
             selected_author = Author.objects.get(name__iexact=selected_author_name)
             selected_author_id = str(selected_author.gesbib_id)
 
-            # Obtener todas las publicaciones del autor
-            author_publications = Publication.objects.filter(authors=selected_author)
+            # Obtener colaboradores directamente desde la tabla Collaboration
+            collaborations = Collaboration.objects.filter(author=selected_author) | Collaboration.objects.filter(collaborator=selected_author)
 
-            # Crear un grafo para las colaboraciones
             G = nx.Graph()
-            
-            # Añadir el autor seleccionado al grafo
-            G.add_node(selected_author_id, 
-                      label=selected_author.name,
-                      department=selected_author.department,
-                      is_selected=True)
 
-            # Para cada publicación, añadir los coautores y sus conexiones
-            for pub in author_publications:
-                coauthors = pub.authors.exclude(gesbib_id=selected_author.gesbib_id)
-                for coauthor in coauthors:
-                    coauthor_id = str(coauthor.gesbib_id)
-                    
-                    # Añadir el coautor al grafo si no existe
-                    if not G.has_node(coauthor_id):
-                        G.add_node(coauthor_id,
-                                 label=coauthor.name,
-                                 department=coauthor.department,
-                                 is_selected=False)
-                    
-                    # Añadir o actualizar el peso de la arista
-                    if G.has_edge(selected_author_id, coauthor_id):
-                        G[selected_author_id][coauthor_id]['weight'] += 1
-                    else:
-                        G.add_edge(selected_author_id, coauthor_id, weight=1)
+            # Añadir el nodo principal (autor seleccionado)
+            G.add_node(
+                selected_author_id,
+                label=selected_author.name,
+                department=selected_author.department,
+                is_selected=True
+            )
 
-            # Preparar los datos para la respuesta
+            # Añadir los colaboradores y las aristas
+            for c in collaborations:
+                if c.author == selected_author:
+                    coauthor = c.collaborator
+                else:
+                    coauthor = c.author
+
+                coauthor_id = str(coauthor.gesbib_id)
+
+                if not G.has_node(coauthor_id):
+                    G.add_node(
+                        coauthor_id,
+                        label=coauthor.name,
+                        department=coauthor.department,
+                        is_selected=False
+                    )
+
+                G.add_edge(selected_author_id, coauthor_id, weight=c.publication_count)
+
+            # Convertir a JSON serializable
             nodes = []
             for node_id, node_data in G.nodes(data=True):
                 nodes.append({
@@ -592,9 +592,10 @@ def get_collaboration_network(request):
                 'edges': edges,
                 'is_author_view': True
             })
+
         except Author.DoesNotExist:
-            # Si el autor no existe, devolver la red completa
             pass
+
 
     # Si no hay autor seleccionado, usar la lógica original con los CSV
     nodes_data = []

@@ -211,6 +211,16 @@ class Author(models.Model):
         return self.name
 
 
+class Collaboration(models.Model):
+    author = models.ForeignKey('Author', on_delete=models.CASCADE, related_name='collaborations_initiated')
+    collaborator = models.ForeignKey('Author', on_delete=models.CASCADE, related_name='collaborations_received')
+    publication_count = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        unique_together = ('author', 'collaborator')
+
+
+
 class Institution(models.Model):
     """
     Represents a CSIC research center or institute.

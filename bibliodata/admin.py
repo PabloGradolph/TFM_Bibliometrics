@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Publication, Author, Institution, InstitutionMetric, ThematicArea, Keyword, ThematicCluster, ReportTemplate, PublicationMetric
+from .models import Publication, Author, Collaboration, Institution, InstitutionMetric, ThematicArea, Keyword, ThematicCluster, ReportTemplate, PublicationMetric
 
 @admin.register(Publication)
 class PublicationAdmin(admin.ModelAdmin):
@@ -44,6 +44,12 @@ class AuthorAdmin(admin.ModelAdmin):
     list_display = ("name", "orcid", "total_publications", "h_index")
     search_fields = ("name", "orcid", "researcher_id", "scopus_id")
     list_filter = ("h_index",)
+
+
+@admin.register(Collaboration)
+class CollaborationAdmin(admin.ModelAdmin):
+    list_display = ("author", "collaborator", "publication_count")
+    search_fields = ("author", "collaborator", "publication_count")
 
 
 @admin.register(Institution)
