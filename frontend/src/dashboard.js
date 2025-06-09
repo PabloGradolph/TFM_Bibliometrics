@@ -1768,31 +1768,31 @@ export function initFiltersAndSearch() {
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
-
-        // Actualizar título del card si hay autor seleccionado
+    
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
+        const currentLang = window.location.pathname.split('/')[1];
+    
         if (data.is_author_view) {
             const selectedAuthor = data.nodes.find(node => node.is_selected);
             if (selectedAuthor) {
-                const currentLang = window.location.pathname.split('/')[1];
-                cardTitle.textContent = currentLang === 'es' 
+                cardTitle.textContent = currentLang === 'es'
                     ? `Colaboraciones de ${selectedAuthor.label}`
                     : `Collaborations of ${selectedAuthor.label}`;
             }
-            // Ocultar el dropdown de vista de comunidades
-            const communityViewDropdown = document.querySelector('#communityViewDropdown').closest('.dropdown');
-            if (communityViewDropdown) {
-                communityViewDropdown.style.display = 'none';
-            }
+            document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'none';
         } else {
-            // Mostrar el dropdown de vista de comunidades
-            const communityViewDropdown = document.querySelector('#communityViewDropdown').closest('.dropdown');
-            if (communityViewDropdown) {
-                communityViewDropdown.style.display = 'block';
+            document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
+            if (currentCommunityView === 'keywords') {
+                cardTitle.textContent = currentLang === 'es'
+                    ? 'Red de coincidencia de palabras clave (entre IPs)'
+                    : 'Keyword Coincidence Network (between IPs)';
+            } else {
+                cardTitle.textContent = currentLang === 'es'
+                    ? 'Red de Coautorías Interactiva entre IPs'
+                    : 'Interactive Co-authorship network between IPs';
             }
         }
-
-        // Limpiar el contenedor y destruir el renderer anterior si existe
+    
         if (renderer) {
             renderer.kill();
             renderer = null;
@@ -1805,46 +1805,45 @@ export function initFiltersAndSearch() {
             "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
             "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
         ];
-        const colorByCommunity = c => colorPalette[c % colorPalette.length];
+    
+        const colorByCommunity = c => {
+            if (c === -1 || isNaN(c)) return '#A9A9A9'; // gris para outliers
+            return colorPalette[c % colorPalette.length];
+        };
     
         const departmentColorScale = d3.scaleOrdinal()
             .domain(['Departamento 1', 'Departamento 2', 'Departamento 3', 'Unknown'])
             .range(['#1f78b4', '#ff7f0e', '#2ca02c', '#999999']);
     
-        // === Posicionar nodos según vista ===
+        // Posicionamiento
         if (data.is_author_view) {
-            console.log('Posicionando nodos para vista de autor');
             const centerX = container.clientWidth / 2;
             const centerY = container.clientHeight / 2;
             const radius = 250;
-    
             const authorNode = data.nodes.find(n => n.is_selected);
             if (!authorNode) return;
-    
             authorNode.x = centerX;
             authorNode.y = centerY;
-    
             const coauthors = data.nodes.filter(n => !n.is_selected);
             const angleStep = (2 * Math.PI) / Math.max(coauthors.length, 1);
-    
             coauthors.forEach((node, i) => {
                 const angle = i * angleStep;
                 node.x = centerX + radius * Math.cos(angle);
                 node.y = centerY + radius * Math.sin(angle);
             });
         } else {
-            let groupByProp, groups;
+            let groupByProp;
             if (currentCommunityView === 'department') {
                 groupByProp = 'department';
-                groups = [...new Set(data.nodes.map(n => n.department))];
             } else if (currentCommunityView === 'modularity-5') {
                 groupByProp = 'leiden_community';
-                groups = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
+            } else if (currentCommunityView === 'modularity-7') {
+                groupByProp = 'community';  // aquí es lovaina_community en back
             } else {
                 groupByProp = 'community';
-                groups = [...new Set(data.nodes.map(n => parseInt(n.community)))];
             }
     
+            const groups = [...new Set(data.nodes.map(n => n[groupByProp]))].filter(g => g !== undefined);
             const unknownIndex = groups.indexOf(-1);
             if (unknownIndex > -1) {
                 groups.splice(unknownIndex, 1);
@@ -1853,9 +1852,7 @@ export function initFiltersAndSearch() {
     
             const nodesByGroup = {};
             groups.forEach(group => {
-                nodesByGroup[group] = groupByProp === 'department'
-                    ? data.nodes.filter(n => n[groupByProp] === group)
-                    : data.nodes.filter(n => parseInt(n[groupByProp]) === group);
+                nodesByGroup[group] = data.nodes.filter(n => n[groupByProp] === group);
             });
     
             const canvasCenterX = container.clientWidth / 2;
@@ -1876,12 +1873,6 @@ export function initFiltersAndSearch() {
                 });
             });
         }
-    
-        const degreeMap = {};
-        data.edges.forEach(edge => {
-            degreeMap[edge.source] = (degreeMap[edge.source] || 0) + 1;
-            degreeMap[edge.target] = (degreeMap[edge.target] || 0) + 1;
-        });
     
         data.nodes.forEach(node => {
             const comm = parseInt(node.community);
@@ -1938,6 +1929,142 @@ export function initFiltersAndSearch() {
             enableCamera: false
         });
     
+        // Leyenda
+        if (!data.is_author_view) {
+            const legend = document.createElement('div');
+            legend.id = 'networkLegend';
+            Object.assign(legend.style, {
+                position: 'absolute',
+                bottom: '10px',
+                left: '10px',
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                border: '1px solid #ccc',
+                borderRadius: '8px',
+                padding: '12px',
+                fontSize: '13px',
+                zIndex: 1000,
+                boxShadow: '0px 0px 6px rgba(0,0,0,0.1)'
+            });
+        
+            const title = document.createElement('div');
+            title.style.fontWeight = 'bold';
+            title.style.marginBottom = '6px';
+        
+            if (currentCommunityView === 'department') {
+                title.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
+            } else if (currentCommunityView === 'keywords') {
+                title.textContent = currentLang === 'es' ? 'Comunidades de Palabras Clave' : 'Keyword Communities';
+            } else if (currentCommunityView === 'modularity-5' || currentCommunityView === 'modularity-7') {
+                const k = currentCommunityView === 'modularity-7' ? 7 : 5;
+                title.textContent = currentLang === 'es'
+                    ? `Comunidades de Modularidad (${k})`
+                    : `Modularity Communities (${k})`;
+            }
+            legend.appendChild(title);
+        
+            const counts = document.createElement('div');
+            counts.style.marginBottom = '8px';
+            counts.textContent = `${data.nodes.length} nodos / ${data.edges.length} enlaces`;
+            legend.appendChild(counts);
+        
+            if (currentCommunityView === 'department') {
+                const departments = [...new Set(data.nodes.map(n => n.department))].filter(d => d !== 'Unknown');
+                departments.forEach(dept => {
+                    const item = document.createElement('div');
+                    item.style.display = 'flex';
+                    item.style.alignItems = 'center';
+                    item.style.marginBottom = '4px';
+        
+                    const colorBox = document.createElement('div');
+                    Object.assign(colorBox.style, {
+                        width: '14px',
+                        height: '14px',
+                        backgroundColor: departmentColorScale(dept),
+                        marginRight: '6px',
+                        borderRadius: '3px',
+                        border: '1px solid #333'
+                    });
+        
+                    const label = document.createElement('span');
+                    label.textContent = dept;
+        
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    legend.appendChild(item);
+                });
+        
+            } else {
+                // === Obtener comunidades ===
+                let communities = [];
+                if (currentCommunityView === 'keywords') {
+                    communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
+                } else if (currentCommunityView === 'modularity-5') {
+                    communities = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
+                } else if (currentCommunityView === 'modularity-7') {
+                    communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
+                }
+        
+                communities.sort((a, b) => a - b);
+        
+                communities.forEach((comm, i) => {
+                    const item = document.createElement('div');
+                    item.style.display = 'flex';
+                    item.style.alignItems = 'center';
+                    item.style.marginBottom = '4px';
+        
+                    const colorBox = document.createElement('div');
+                    Object.assign(colorBox.style, {
+                        width: '14px',
+                        height: '14px',
+                        backgroundColor: colorByCommunity(comm),
+                        marginRight: '6px',
+                        borderRadius: '3px'
+                    });
+        
+                    const label = document.createElement('span');
+                    if (comm === -1 || isNaN(comm)) {
+                        label.textContent = currentLang === 'es' ? 'Outlier' : 'Outlier';
+                    } else {
+                        const num = (currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
+                        const word = currentLang === 'es' ? 'Comunidad' : 'Community';
+                        label.textContent = `${word} ${num}`;
+                    }
+        
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    legend.appendChild(item);
+                });
+            }
+        
+            container.appendChild(legend);
+        }
+    
+        // Interactividad
+        const overlay = document.createElement('div');
+        overlay.innerText = 'Haz click para activar la red';
+        Object.assign(overlay.style, {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#333',
+            cursor: 'pointer',
+            zIndex: 1000,
+            borderRadius: getComputedStyle(container).borderRadius
+        });
+        container.appendChild(overlay);
+        overlay.addEventListener('click', () => {
+            overlay.remove();
+            activateInteractivity();
+        });
+    
         const tooltip = document.createElement('div');
         Object.assign(tooltip.style, {
             position: 'absolute',
@@ -1953,33 +2080,6 @@ export function initFiltersAndSearch() {
         document.body.appendChild(tooltip);
     
         const activateInteractivity = () => {
-            const infoMessage = d3.select('#collaborationNetwork')
-                .append('div')
-                .attr('class', 'alert alert-info')
-                .style('position', 'absolute')
-                .style('top', '10px')
-                .style('left', '10px')
-                .style('padding', '8px 12px')
-                .style('font-size', '12px')
-                .style('border-radius', '4px')
-                .style('background-color', '#e3f2fd')
-                .style('border', '1px solid #2196f3')
-                .style('color', '#0d47a1')
-                .style('z-index', '1000')
-                .style('display', 'flex')
-                .style('align-items', 'center')
-                .style('gap', '8px')
-                .style('max-width', '300px');
-    
-            infoMessage.html(`
-                <div style="flex-grow: 1;">
-                    <i class="fas fa-info-circle"></i>
-                    La red contiene ${graph.order} autores y ${graph.size} colaboraciones
-                </div>
-                <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
-            `);
-            infoMessage.select('.btn-close').on('click', () => infoMessage.remove());
-    
             renderer.setSettings({
                 enableEdgeHovering: true,
                 enableNodeHovering: true,
@@ -1990,14 +2090,12 @@ export function initFiltersAndSearch() {
                 const label = graph.getNodeAttribute(node, 'label');
                 const neighbors = graph.neighbors(node);
                 const lines = [];
-    
                 neighbors.forEach(neighbor => {
                     const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node);
                     const weight = graph.getEdgeAttribute(edge, 'size') || 1;
                     const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
                     lines.push(`• ${neighborLabel} (${weight})`);
                 });
-    
                 tooltip.innerText = `${label}\nColabora con:\n${lines.join('\n')}`;
                 tooltip.style.left = `${event.clientX + 10}px`;
                 tooltip.style.top = `${event.clientY + 10}px`;
@@ -2027,92 +2125,9 @@ export function initFiltersAndSearch() {
             });
         };
     
-        // === Overlay para activar la red
-        container.style.position = 'relative';
-        const overlay = document.createElement('div');
-        overlay.innerText = 'Haz click para activar la red';
-        Object.assign(overlay.style, {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(255,255,255,0.85)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: '#333',
-            cursor: 'pointer',
-            zIndex: 1000,
-            borderRadius: getComputedStyle(container).borderRadius
-        });
-        container.appendChild(overlay);
-        overlay.addEventListener('click', () => {
-            overlay.remove();
-            activateInteractivity();
-        });
-    
         renderer.getCamera().animatedReset({ duration: 500 });
-
-        // === Leyenda para la vista por departamento ===
-        // Solo mostrar leyenda para la vista por departamento y cuando no hay autor seleccionado
-        if (currentCommunityView === 'department' && !data.is_author_view) {
-            const legend = document.createElement('div');
-            legend.id = 'departmentLegend';
-            Object.assign(legend.style, {
-                position: 'absolute',
-                bottom: '10px',
-                left: '10px',
-                backgroundColor: 'rgba(255,255,255,0.9)',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                padding: '10px',
-                fontSize: '12px',
-                zIndex: 1000
-            });
-
-            // Obtener los departamentos únicos y ordenarlos (excluir Unknown si no se desea mostrar)
-            const departmentsToShow = [...new Set(data.nodes.map(n => n.department))].filter(d => d !== 'Unknown').sort();
-
-            // Añadir título a la leyenda
-            const legendTitle = document.createElement('div');
-            legendTitle.style.fontWeight = 'bold';
-            legendTitle.style.marginBottom = '5px';
-            const currentLang = window.location.pathname.split('/')[1];
-            legendTitle.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
-            legend.appendChild(legendTitle);
-
-            departmentsToShow.forEach(dept => {
-                const color = departmentColorScale(dept);
-                const legendItem = document.createElement('div');
-                Object.assign(legendItem.style, {
-                    display: 'flex',
-                    alignItems: 'center',
-                    marginBottom: '5px'
-                });
-
-                const colorSwatch = document.createElement('div');
-                Object.assign(colorSwatch.style, {
-                    width: '15px',
-                    height: '15px',
-                    backgroundColor: color,
-                    marginRight: '8px',
-                    border: '1px solid #000'
-                });
-
-                const deptName = document.createElement('span');
-                deptName.textContent = dept;
-
-                legendItem.appendChild(colorSwatch);
-                legendItem.appendChild(deptName);
-                legend.appendChild(legendItem);
-            });
-
-            container.appendChild(legend);
-        }
-    }
+    }        
+    
                
     document.getElementById('applyClustering').addEventListener('click', () => {
         const configMode = document.querySelector('input[name="configMode"]:checked').value; // 'global' o 'manual'

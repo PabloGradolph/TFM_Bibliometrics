@@ -524,9 +524,7 @@ def get_publications_data(request):
     })
 
 def get_collaboration_network(request):
-    """Obtiene la red de colaboración de autores."""
     try:
-        # Obtener parámetros
         community_view = request.GET.get('communityView', 'department')
         clustering_model = request.GET.get('clusteringModel')
         n_clusters = request.GET.get('nClusters')
@@ -534,34 +532,21 @@ def get_collaboration_network(request):
         global_mode = request.GET.get('globalMode') == 'true'
         selected_author_name = request.GET.get('author')
 
-        # Si hay un autor seleccionado, crear una red específica para él
         if selected_author_name:
             try:
                 selected_author = Author.objects.get(name__iexact=selected_author_name)
                 selected_author_id = str(selected_author.gesbib_id)
-
-                # Obtener colaboradores directamente desde la tabla Collaboration
                 collaborations = Collaboration.objects.filter(author=selected_author) | Collaboration.objects.filter(collaborator=selected_author)
-
                 G = nx.Graph()
-
-                # Añadir el nodo principal (autor seleccionado)
                 G.add_node(
                     selected_author_id,
                     label=selected_author.name,
                     department=selected_author.department,
                     is_selected=True
                 )
-
-                # Añadir los colaboradores y las aristas
                 for c in collaborations:
-                    if c.author == selected_author:
-                        coauthor = c.collaborator
-                    else:
-                        coauthor = c.author
-
+                    coauthor = c.collaborator if c.author == selected_author else c.author
                     coauthor_id = str(coauthor.gesbib_id)
-
                     if not G.has_node(coauthor_id):
                         G.add_node(
                             coauthor_id,
@@ -569,136 +554,81 @@ def get_collaboration_network(request):
                             department=coauthor.department,
                             is_selected=False
                         )
-
                     G.add_edge(selected_author_id, coauthor_id, weight=c.publication_count)
 
-                # Convertir a JSON serializable
-                nodes = []
-                for node_id, node_data in G.nodes(data=True):
-                    nodes.append({
-                        'id': node_id,
-                        'label': node_data['label'],
-                        'department': node_data['department'],
-                        'is_selected': node_data['is_selected']
-                    })
+                nodes = [{
+                    'id': nid,
+                    'label': d['label'],
+                    'department': d['department'],
+                    'is_selected': d['is_selected']
+                } for nid, d in G.nodes(data=True)]
 
-                edges = []
-                for source, target, data in G.edges(data=True):
-                    edges.append({
-                        'source': source,
-                        'target': target,
-                        'weight': data.get('weight', 1)
-                    })
+                edges = [{
+                    'source': s, 'target': t, 'weight': d.get('weight', 1)
+                } for s, t, d in G.edges(data=True)]
 
-                return JsonResponse({
-                    'nodes': nodes,
-                    'edges': edges,
-                    'is_author_view': True
-                })
-
+                return JsonResponse({'nodes': nodes, 'edges': edges, 'is_author_view': True})
             except Author.DoesNotExist:
                 pass
 
-        # Si no hay autor seleccionado, usar la lógica original con los CSV
+        # Red general
         nodes_path = "analysis/data/networks/lab_nodes.csv"
         edges_path = "analysis/data/networks/lab_edges.csv"
         nodes_data = []
         valid_ids = set()
         id_to_name = {}
-        id_to_community = {}
 
-        # === Leer nodos y cargar info de la DB ===
         G = nx.Graph()
         with open(nodes_path, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
+            for row in csv.DictReader(f):
                 name = row["Id"].strip()
                 try:
                     author = Author.objects.get(name__iexact=name)
                     author_id = str(author.gesbib_id)
-                    # Obtener el departamento y la comunidad de modularidad
                     department = getattr(author, 'department', 'Unknown')
                     lovaina_community = getattr(author, 'lovaina_community', -1)
                     leiden_community = getattr(author, 'leiden_community', -1)
                 except Author.DoesNotExist:
                     continue
-
                 valid_ids.add(author_id)
                 id_to_name[author_id] = name
-                id_to_community[author_id] = lovaina_community
-
                 G.add_node(author_id, department=department, lovaina_community=lovaina_community, leiden_community=leiden_community)
 
-        # === Leer aristas y construir grafo ===
         with open(edges_path, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
+            for row in csv.DictReader(f):
                 try:
                     source = str(Author.objects.get(name__iexact=row["Source"]).gesbib_id)
                     target = str(Author.objects.get(name__iexact=row["Target"]).gesbib_id)
                 except Author.DoesNotExist:
                     continue
-
                 if source in valid_ids and target in valid_ids:
                     weight = int(row["Weight"])
                     G.add_edge(source, target, weight=weight)
 
-        # === Preparar nodos según la vista seleccionada ===
         if community_view == 'keywords':
-            # Vista por keywords: usar clustering
             for node in G.nodes():
                 author = Author.objects.get(gesbib_id=node)
                 if global_mode:
-                    # Usar la mejor configuración global
-                    clustering = author.clusterings.filter(
-                        model_name='kmeans',
-                        k=7  # Asumiendo que 7 es la mejor configuración global
-                    ).first()
+                    clustering = author.clusterings.filter(model_name='kmeans', k=7).first()
                 elif clustering_model:
-                    # Usar el modelo y configuración seleccionados
                     if auto_mode:
-                        # En modo automático, usar la mejor configuración para ese modelo
-                        clustering = author.clusterings.filter(
-                            model_name=clustering_model
-                        ).order_by('-silhouette').first()
+                        clustering = author.clusterings.filter(model_name=clustering_model).order_by('-silhouette').first()
                     else:
-                        # En modo manual, usar la configuración específica
-                        clustering = author.clusterings.filter(
-                            model_name=clustering_model,
-                            k=n_clusters
-                        ).first()
-                
-                if clustering:
-                    community = clustering.cluster
-                else:
-                    community = -1
-
-                # Calcular posición del nodo basada en su comunidad
-                if community != -1:
-                    # Distribuir nodos en círculos por comunidad
-                    community_nodes = [n for n in nodes_data if n.get('community') == community]
-                    angle = (len(community_nodes) * 2 * 3.14159) / len(G.nodes())
-                    radius = 300  # Radio base para cada comunidad
-                    x = 500 + radius * math.cos(angle)  # Centro en x=500
-                    y = 500 + radius * math.sin(angle)  # Centro en y=500
-                else:
-                    # Nodos sin comunidad van al centro
-                    x = 500
-                    y = 500
+                        clustering = author.clusterings.filter(model_name=clustering_model, k=n_clusters).first()
+                community = clustering.cluster if clustering else -1
 
                 nodes_data.append({
                     "id": node,
                     "label": id_to_name.get(node, node),
-                    "x": x,
-                    "y": y,
+                    "x": random.random() * 1000,
+                    "y": random.random() * 1000,
                     "is_selected": False,
                     "community": community,
                     "department": G.nodes[node].get('department', 'Unknown'),
-                    "leiden_community": G.nodes[node].get('leiden_community', -1)
+                    "leiden_community": G.nodes[node].get('leiden_community', -1),
+                    "lovaina_community": G.nodes[node].get('lovaina_community', -1)
                 })
-
         else:
-            # Vista por departamento o modularidad
             for node in G.nodes():
                 nodes_data.append({
                     "id": node,
@@ -708,25 +638,20 @@ def get_collaboration_network(request):
                     "is_selected": False,
                     "community": G.nodes[node].get('lovaina_community', -1),
                     "department": G.nodes[node].get('department', 'Unknown'),
-                    "leiden_community": G.nodes[node].get('leiden_community', -1)
+                    "leiden_community": G.nodes[node].get('leiden_community', -1),
+                    "lovaina_community": G.nodes[node].get('lovaina_community', -1)
                 })
 
-        # === Preparar aristas ===
         edges_data = []
         if community_view == 'keywords':
-            # Para vista por keywords, crear aristas basadas en keywords compartidas
             for i, author1_id in enumerate(G.nodes()):
                 author1 = Author.objects.get(gesbib_id=author1_id)
                 for author2_id in list(G.nodes())[i+1:]:
                     author2 = Author.objects.get(gesbib_id=author2_id)
-                    
-                    # Obtener keywords de cada autor
                     keywords1 = set(author1.keywords.keys() if author1.keywords else [])
                     keywords2 = set(author2.keywords.keys() if author2.keywords else [])
-                    
-                    # Calcular keywords compartidas
                     shared_keywords = keywords1.intersection(keywords2)
-                    if shared_keywords:
+                    if len(shared_keywords) >= 2:
                         edges_data.append({
                             'source': author1_id,
                             'target': author2_id,
@@ -734,12 +659,11 @@ def get_collaboration_network(request):
                             'title': f"Keywords compartidas: {', '.join(shared_keywords)}"
                         })
         else:
-            # Para otras vistas, usar las colaboraciones existentes
-            for u, v, data in G.edges(data=True):
+            for u, v, d in G.edges(data=True):
                 edges_data.append({
                     "source": u,
                     "target": v,
-                    "weight": data.get("weight", 1)
+                    "weight": d.get("weight", 1)
                 })
 
         return JsonResponse({
@@ -747,9 +671,9 @@ def get_collaboration_network(request):
             "edges": edges_data,
             "is_author_view": False
         })
-
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 def get_author_metrics(request):
     author_name = request.GET.get('author_id')  # Ahora recibimos el nombre
