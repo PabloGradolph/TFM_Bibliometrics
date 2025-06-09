@@ -198,64 +198,6 @@ export function initFiltersAndSearch() {
         });
     }
 
-    if (applyClusteringBtn) {
-        applyClusteringBtn.addEventListener('click', function() {
-            const isGlobalMode = globalBestMode && globalBestMode.checked;
-            let selectedModel, nClustersValue, isAutoMode;
-
-            if (isGlobalMode) {
-                selectedModel = 'global';
-                nClustersValue = 'global';
-                isAutoMode = true;
-            } else if (clusteringModel) {
-                selectedModel = clusteringModel.value;
-                isAutoMode = modelAutoMode && modelAutoMode.checked;
-                
-                if (isAutoMode) {
-                    nClustersValue = 'auto';
-                } else if (selectedModel === 'dbscan' && dbscanClusters) {
-                    nClustersValue = dbscanClusters.value;
-                } else if (selectedModel === 'hdbscan' && hdbscanClusters) {
-                    nClustersValue = hdbscanClusters.value;
-                } else if (nClusters) {
-                    nClustersValue = nClusters.value;
-                }
-            }
-
-            // Actualizar la vista de comunidad
-            const communityViewBtn = document.getElementById('communityViewDropdown');
-            if (communityViewBtn) {
-                const texts = currentLang === 'es' ? spanishTexts : englishTexts;
-                let modeText;
-                if (isGlobalMode) {
-                    modeText = texts.globalBestConfig;
-                } else if (isAutoMode) {
-                    modeText = texts.bestConfig;
-                } else {
-                    modeText = `${nClustersValue} ${texts.clusters}`;
-                }
-                communityViewBtn.textContent = `By Keywords (${selectedModel}, ${modeText})`;
-            }
-
-            // Actualizar la red
-            updateCollaborationNetwork({
-                nodes: window.currentNetworkData.nodes,
-                edges: window.currentNetworkData.edges,
-                communityView: 'keywords',
-                clusteringModel: selectedModel,
-                nClusters: nClustersValue,
-                autoMode: isAutoMode,
-                globalMode: isGlobalMode
-            });
-
-            // Cerrar el modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('clusteringModal'));
-            if (modal) {
-                modal.hide();
-            }
-        });
-    }
-
     // Actualizar textos cuando se abre el modal
     const clusteringModal = document.getElementById('clusteringModal');
     if (clusteringModal) {
@@ -1871,6 +1813,7 @@ export function initFiltersAndSearch() {
     
         // === Posicionar nodos según vista ===
         if (data.is_author_view) {
+            console.log('Posicionando nodos para vista de autor');
             const centerX = container.clientWidth / 2;
             const centerY = container.clientHeight / 2;
             const radius = 250;
@@ -2171,7 +2114,59 @@ export function initFiltersAndSearch() {
         }
     }
                
+    document.getElementById('applyClustering').addEventListener('click', () => {
+        const configMode = document.querySelector('input[name="configMode"]:checked').value; // 'global' o 'manual'
+        const model = document.getElementById('clusteringModel').value;
+        const modelConfigMode = document.querySelector('input[name="modelConfigMode"]:checked').value; // 'auto' o 'manual'
+    
+        let nClusters = document.getElementById('nClusters').value;
+        if (model === 'dbscan') {
+            nClusters = document.getElementById('dbscanClusters').value;
+        } else if (model === 'hdbscan') {
+            nClusters = document.getElementById('hdbscanClusters').value;
+        }
+    
+        // === ESTABLECER LA VISTA EN KEYWORDS ===
+        currentCommunityView = 'keywords';
+    
+        const params = new URLSearchParams({
+            communityView: 'keywords',
+            clusteringModel: model,
+            nClusters: nClusters,
+            autoMode: modelConfigMode === 'auto',
+            globalMode: configMode === 'global'
+        });
+    
+        // === HACER LA PETICIÓN AL BACKEND ===
+        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error desde backend:', data.error);
+                    alert(`Ocurrió un error al generar la red: ${data.error}`);
+                    return;
+                }
+            
+                if (!data.nodes || !data.edges) {
+                    console.error('Respuesta incompleta del backend:', data);
+                    alert('La respuesta del servidor no contiene datos de red válidos.');
+                    return;
+                }
+            
+                // Guardar los datos actuales de la red
+                window.currentNetworkData = data;
+                
+                updateCollaborationNetwork(data);
+                document.activeElement.blur();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('clusteringModal'));
+                modal.hide();
+            })
+            .catch(error => {
+                console.error('Error en la petición fetch:', error);
+            });
+    });
 
+    
     function updateFilters() {
         const params = new URLSearchParams();
         
