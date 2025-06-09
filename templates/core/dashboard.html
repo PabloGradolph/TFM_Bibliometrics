@@ -224,6 +224,99 @@
         </div>
     </div>
 
+    <!-- Modal para selección de clustering -->
+    <div class="modal fade" id="clusteringModal" tabindex="-1" aria-labelledby="clusteringModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="clusteringModalLabel">{% trans "Select Clustering Model" %}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="configMode" id="globalBestMode" value="global">
+                            <label class="form-check-label" for="globalBestMode">
+                                {% trans "Global Best Configuration" %}
+                            </label>
+                            <div class="form-text">
+                                {% trans "Uses the best clustering configuration found across all models and parameters." %}
+                            </div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="configMode" id="manualMode" value="manual" checked>
+                            <label class="form-check-label" for="manualMode">
+                                {% trans "Manual Configuration" %}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="manualConfigContainer">
+                        <div class="mb-4">
+                            <label for="clusteringModel" class="form-label">{% trans "Clustering Model" %}</label>
+                            <select class="form-select" id="clusteringModel">
+                                <option value="kmeans">K-means</option>
+                                <option value="agglomerative">{% trans "Agglomerative Clustering" %}</option>
+                                <option value="spectral">{% trans "Spectral Clustering" %}</option>
+                                <option value="gmm">{% trans "Gaussian Mixture Model (GMM)" %}</option>
+                                <option value="dbscan">DBSCAN</option>
+                                <option value="hdbscan">HDBSCAN</option>
+                            </select>
+                            <div class="form-text mt-2" id="modelDescription">
+                                {% trans "K-means: Divides data into k clusters by minimizing the within-cluster variance." %}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">{% trans "Configuration Mode" %}</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelConfigMode" id="modelManualMode" value="manual" checked>
+                                <label class="form-check-label" for="modelManualMode">
+                                    {% trans "Manual Configuration" %}
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelConfigMode" id="modelAutoMode" value="auto">
+                                <label class="form-check-label" for="modelAutoMode">
+                                    {% trans "Best Configuration" %}
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="nClustersContainer">
+                            <label for="nClusters" class="form-label">{% trans "Number of Clusters" %}</label>
+                            <div id="rangeContainer">
+                                <input type="range" class="form-range" id="nClusters" min="2" max="12" value="7">
+                                <div class="d-flex justify-content-between">
+                                    <span>2</span>
+                                    <span id="nClustersValue">7</span>
+                                    <span>12</span>
+                                </div>
+                            </div>
+                            <div id="dbscanOptions" class="d-none">
+                                <select class="form-select" id="dbscanClusters">
+                                    <option value="3">3 {% trans "clusters" %}</option>
+                                    <option value="4">4 {% trans "clusters" %}</option>
+                                    <option value="5">5 {% trans "clusters" %}</option>
+                                    <option value="8">8 {% trans "clusters" %}</option>
+                                </select>
+                            </div>
+                            <div id="hdbscanOptions" class="d-none">
+                                <select class="form-select" id="hdbscanClusters">
+                                    <option value="2">2 {% trans "clusters" %}</option>
+                                    <option value="3">3 {% trans "clusters" %}</option>
+                                    <option value="4">4 {% trans "clusters" %}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                    <button type="button" class="btn btn-primary" id="applyClustering">{% trans "Apply" %}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Metrics Table -->
     <div class="col-12 h-100" id="pubsCol">
         <div class="card dashboard-card">

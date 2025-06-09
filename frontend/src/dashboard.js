@@ -2,11 +2,11 @@
 import * as d3 from 'd3';
 import Graph from 'graphology';
 import Sigma from 'sigma';
-import forceAtlas2 from 'graphology-layout-forceatlas2';
 import EdgeCurveProgram from "@sigma/edge-curve";
 
 
 export function initFiltersAndSearch() {
+
     // Referencias a los elementos del DOM
     const yearFrom = document.getElementById('yearFrom');
     const yearTo = document.getElementById('yearTo');
@@ -22,6 +22,281 @@ export function initFiltersAndSearch() {
     const searchSuggestions = document.getElementById('searchSuggestions');
     const selectedAuthor = document.getElementById('selectedAuthor');
     const authorLimitMessage = document.getElementById('authorLimitMessage');
+
+    // Referencias a elementos del modal de clustering
+    const clusteringModel = document.getElementById('clusteringModel');
+    const nClusters = document.getElementById('nClusters');
+    const nClustersValue = document.getElementById('nClustersValue');
+    const nClustersContainer = document.getElementById('nClustersContainer');
+    const modelDescription = document.getElementById('modelDescription');
+    const applyClusteringBtn = document.getElementById('applyClustering');
+    const rangeContainer = document.getElementById('rangeContainer');
+    const dbscanOptions = document.getElementById('dbscanOptions');
+    const hdbscanOptions = document.getElementById('hdbscanOptions');
+    const dbscanClusters = document.getElementById('dbscanClusters');
+    const hdbscanClusters = document.getElementById('hdbscanClusters');
+    const manualMode = document.getElementById('manualMode');
+    const globalBestMode = document.getElementById('globalBestMode');
+    const modelManualMode = document.getElementById('modelManualMode');
+    const modelAutoMode = document.getElementById('modelAutoMode');
+    const manualConfigContainer = document.getElementById('manualConfigContainer');
+
+    // Descripciones de los modelos en español
+    const spanishModelDescriptions = {
+        'kmeans': 'Agrupa los datos en un número fijo de categorías (clusters) tratando de minimizar la distancia entre los puntos de cada grupo y su centroide, es decir, su "centro". Este método busca particiones compactas y bien separadas, y es especialmente útil cuando los grupos tienen forma redonda o esférica. Es rápido y eficiente, aunque sensible a la elección inicial del número de grupos (k) y a los valores extremos.',
+        'agglomerative': 'Construye agrupaciones de forma jerárquica: comienza considerando cada autor como un grupo separado y va fusionando los más similares en pasos sucesivos. El resultado es una estructura en forma de árbol (dendrograma), que permite explorar diferentes niveles de agrupación según la profundidad del corte. Es útil cuando no se conoce el número exacto de grupos y se desea analizar la relación progresiva entre autores.',
+        'spectral': 'Transforma la relación entre autores en una red (o grafo) de similitudes y la descompone matemáticamente para encontrar estructuras ocultas. Posteriormente, agrupa los autores en ese nuevo espacio. Es muy útil cuando las agrupaciones no tienen una forma clara o son no convexas, como anillos o cadenas, y aprovecha la conectividad global de los datos.',
+        'gmm': 'Parte de la idea de que los datos provienen de una combinación de distribuciones estadísticas llamadas gaussianas (curvas en forma de campana). En lugar de asignar cada punto a un solo grupo, estima la probabilidad de que pertenezca a cada uno. Esto permite detectar agrupaciones solapadas o de forma más compleja que las que detecta KMeans, siendo ideal cuando se sospecha que los datos tienen estructuras suaves o ambiguas.',
+        'dbscan': 'Encuentra grupos basándose en la densidad de autores: considera que un cluster es una región donde hay muchos autores cercanos entre sí. Los autores aislados o poco conectados son considerados como ruido. No necesita que se indique cuántos grupos buscar, y puede detectar agrupaciones de formas variadas. Es especialmente robusto frente a valores atípicos.',
+        'hdbscan': 'Es una versión mejorada y jerárquica de DBSCAN. Construye un mapa de densidades y extrae agrupaciones estables y significativas, incluso si estas tienen tamaños o densidades diferentes. También identifica automáticamente qué autores no pertenecen a ningún grupo claro. Es ideal para representar comunidades complejas o con estructuras poco homogéneas.'
+    };
+
+    // Descripciones de los modelos en inglés
+    const englishModelDescriptions = {
+        'kmeans': 'It groups the data into a fixed number of categories (clusters) trying to minimize the distance between the points of each group and its centroid, that is, its "center". This method looks for compact and well-separated partitions, and is especially useful when the clusters are round or spherical in shape. It is fast and efficient, although sensitive to the initial choice of the number of groups (k) and to extreme values.',
+        'agglomerative': 'It builds groupings in a hierarchical way: it starts by considering each author as a separate group and merges the most similar ones in successive steps. The result is a tree-like structure (dendrogram), which allows exploring different levels of grouping according to the depth of the cut. It is useful when the exact number of groups is not known and it is desired to analyze the progressive relationship between authors.',
+        'spectral': 'It transforms the relationship between authors into a network (or graph) of similarities and decomposes it mathematically to find hidden structures. It then clusters the authors in this new space. It is very useful when the groupings do not have a clear shape or are non-convex, such as rings or chains, and takes advantage of the global connectivity of the data.',
+        'gmm': 'It starts from the idea that the data come from a combination of statistical distributions called Gaussian (bell-shaped curves). Instead of assigning each point to a single cluster, it estimates the probability that it belongs to each cluster. This allows it to detect overlapping or more complex-shaped clusters than KMeans detects, making it ideal when data are suspected of having soft or ambiguous structures.',
+        'dbscan': 'It finds groups based on the density of authors: it considers a cluster as a region where there are many authors close to each other. Isolated or loosely connected authors are considered as noise. It does not need to be told how many clusters to look for, and can detect clusters of various shapes. It is especially robust to outliers.',
+        'hdbscan': 'It is an enhanced, hierarchical version of DBSCAN. It builds a density map and extracts stable and meaningful clusters, even if they have different sizes or densities. It also automatically identifies which authors do not belong to any clear group. It is ideal for representing complex or inhomogeneously structured communities.'
+    };
+
+    // Textos en español
+    const spanishTexts = {
+        'clusters': 'clusters',
+        'bestConfig': 'Mejor Configuración',
+        'globalBestConfig': 'Mejor Configuración Global',
+        'manualConfig': 'Configuración Manual',
+        'numberOfClusters': 'Número de Clusters',
+        'clusteringModel': 'Modelo de Clustering',
+        'configurationMode': 'Modo de Configuración',
+        'apply': 'Aplicar',
+        'cancel': 'Cancelar',
+        'globalBestDescription': 'Usa la mejor configuración de clustering encontrada entre todos los modelos y parámetros.'
+    };
+
+    // Textos en inglés
+    const englishTexts = {
+        'clusters': 'clusters',
+        'bestConfig': 'Best Configuration',
+        'globalBestConfig': 'Global Best Configuration',
+        'manualConfig': 'Manual Configuration',
+        'numberOfClusters': 'Number of Clusters',
+        'clusteringModel': 'Clustering Model',
+        'configurationMode': 'Configuration Mode',
+        'apply': 'Apply',
+        'cancel': 'Cancel',
+        'globalBestDescription': 'Uses the best clustering configuration found across all models and parameters.'
+    };
+
+    // Función para actualizar textos según el idioma
+    function updateModalTexts() {
+        const texts = currentLang === 'es' ? spanishTexts : englishTexts;
+        const modelDescriptions = currentLang === 'es' ? spanishModelDescriptions : englishModelDescriptions;
+        
+        // Actualizar etiquetas
+        const elements = {
+            clusteringModelLabel: document.querySelector('label[for="clusteringModel"]'),
+            nClustersLabel: document.querySelector('label[for="nClusters"]'),
+            manualModeLabel: document.querySelector('label[for="manualMode"]'),
+            globalBestModeLabel: document.querySelector('label[for="globalBestMode"]'),
+            modelManualModeLabel: document.querySelector('label[for="modelManualMode"]'),
+            modelAutoModeLabel: document.querySelector('label[for="modelAutoMode"]'),
+            globalBestDescription: document.querySelector('#globalBestMode + .form-text'),
+            applyButton: document.getElementById('applyClustering'),
+            cancelButton: document.querySelector('.btn-secondary')
+        };
+
+        // Actualizar etiquetas solo si existen
+        if (elements.clusteringModelLabel) elements.clusteringModelLabel.textContent = texts.clusteringModel;
+        if (elements.nClustersLabel) elements.nClustersLabel.textContent = texts.numberOfClusters;
+        if (elements.manualModeLabel) elements.manualModeLabel.textContent = texts.manualConfig;
+        if (elements.globalBestModeLabel) elements.globalBestModeLabel.textContent = texts.globalBestConfig;
+        if (elements.modelManualModeLabel) elements.modelManualModeLabel.textContent = texts.manualConfig;
+        if (elements.modelAutoModeLabel) elements.modelAutoModeLabel.textContent = texts.bestConfig;
+        if (elements.globalBestDescription) elements.globalBestDescription.textContent = texts.globalBestDescription;
+        
+        // Actualizar botones
+        if (elements.applyButton) elements.applyButton.textContent = texts.apply;
+        if (elements.cancelButton) elements.cancelButton.textContent = texts.cancel;
+
+        // Actualizar opciones de clusters
+        if (dbscanClusters) {
+            Array.from(dbscanClusters.options).forEach(option => {
+                option.text = `${option.value} ${texts.clusters}`;
+            });
+        }
+        if (hdbscanClusters) {
+            Array.from(hdbscanClusters.options).forEach(option => {
+                option.text = `${option.value} ${texts.clusters}`;
+            });
+        }
+
+        // Actualizar descripción del modelo actual
+        if (clusteringModel && modelDescription) {
+            modelDescription.textContent = modelDescriptions[clusteringModel.value] || '';
+        }
+    }
+
+    // Event listeners para el modal de clustering
+    if (clusteringModel && modelDescription) {
+        clusteringModel.addEventListener('change', function() {
+            const selectedModel = this.value;
+            const modelDescriptions = currentLang === 'es' ? spanishModelDescriptions : englishModelDescriptions;
+            modelDescription.textContent = modelDescriptions[selectedModel] || '';
+            
+            // Mostrar/ocultar opciones específicas según el modelo
+            if (selectedModel === 'dbscan') {
+                rangeContainer.classList.add('d-none');
+                dbscanOptions.classList.remove('d-none');
+                hdbscanOptions.classList.add('d-none');
+            } else if (selectedModel === 'hdbscan') {
+                rangeContainer.classList.add('d-none');
+                dbscanOptions.classList.add('d-none');
+                hdbscanOptions.classList.remove('d-none');
+            } else {
+                rangeContainer.classList.remove('d-none');
+                dbscanOptions.classList.add('d-none');
+                hdbscanOptions.classList.add('d-none');
+            }
+        });
+    }
+
+    // Event listener para el modo de configuración global
+    if (manualMode && globalBestMode && manualConfigContainer) {
+        manualMode.addEventListener('change', function() {
+            if (this.checked) {
+                manualConfigContainer.classList.remove('d-none');
+            }
+        });
+
+        globalBestMode.addEventListener('change', function() {
+            if (this.checked) {
+                manualConfigContainer.classList.add('d-none');
+            }
+        });
+    }
+
+    // Event listener para el modo de configuración del modelo
+    if (modelManualMode && modelAutoMode && nClustersContainer) {
+        modelManualMode.addEventListener('change', function() {
+            if (this.checked) {
+                nClustersContainer.classList.remove('d-none');
+            }
+        });
+
+        modelAutoMode.addEventListener('change', function() {
+            if (this.checked) {
+                nClustersContainer.classList.add('d-none');
+            }
+        });
+    }
+
+    if (nClusters && nClustersValue) {
+        nClusters.addEventListener('input', function() {
+            nClustersValue.textContent = this.value;
+        });
+    }
+
+    if (applyClusteringBtn) {
+        applyClusteringBtn.addEventListener('click', function() {
+            const isGlobalMode = globalBestMode && globalBestMode.checked;
+            let selectedModel, nClustersValue, isAutoMode;
+
+            if (isGlobalMode) {
+                selectedModel = 'global';
+                nClustersValue = 'global';
+                isAutoMode = true;
+            } else if (clusteringModel) {
+                selectedModel = clusteringModel.value;
+                isAutoMode = modelAutoMode && modelAutoMode.checked;
+                
+                if (isAutoMode) {
+                    nClustersValue = 'auto';
+                } else if (selectedModel === 'dbscan' && dbscanClusters) {
+                    nClustersValue = dbscanClusters.value;
+                } else if (selectedModel === 'hdbscan' && hdbscanClusters) {
+                    nClustersValue = hdbscanClusters.value;
+                } else if (nClusters) {
+                    nClustersValue = nClusters.value;
+                }
+            }
+
+            // Actualizar la vista de comunidad
+            const communityViewBtn = document.getElementById('communityViewDropdown');
+            if (communityViewBtn) {
+                const texts = currentLang === 'es' ? spanishTexts : englishTexts;
+                let modeText;
+                if (isGlobalMode) {
+                    modeText = texts.globalBestConfig;
+                } else if (isAutoMode) {
+                    modeText = texts.bestConfig;
+                } else {
+                    modeText = `${nClustersValue} ${texts.clusters}`;
+                }
+                communityViewBtn.textContent = `By Keywords (${selectedModel}, ${modeText})`;
+            }
+
+            // Actualizar la red
+            updateCollaborationNetwork({
+                nodes: window.currentNetworkData.nodes,
+                edges: window.currentNetworkData.edges,
+                communityView: 'keywords',
+                clusteringModel: selectedModel,
+                nClusters: nClustersValue,
+                autoMode: isAutoMode,
+                globalMode: isGlobalMode
+            });
+
+            // Cerrar el modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('clusteringModal'));
+            if (modal) {
+                modal.hide();
+            }
+        });
+    }
+
+    // Actualizar textos cuando se abre el modal
+    const clusteringModal = document.getElementById('clusteringModal');
+    if (clusteringModal) {
+        clusteringModal.addEventListener('show.bs.modal', function() {
+            updateModalTexts();
+        });
+    }
+
+    // Modificar el event listener existente para el dropdown de vista de comunidad
+    document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            const selectedView = this.dataset.communityView;
+
+            if (selectedView === 'keywords') {
+                // Mostrar el modal de clustering
+                const modal = new bootstrap.Modal(document.getElementById('clusteringModal'));
+                modal.show();
+                return;
+            }
+
+            // Si ya es la vista actual, no hacer nada
+            if (currentCommunityView === selectedView) {
+                document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
+                    link.classList.remove('active');
+                });
+                this.classList.add('active');
+                return;
+            }
+
+            currentCommunityView = selectedView;
+
+            document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
+                link.classList.remove('active');
+            });
+            this.classList.add('active');
+
+            updateVisualizations();
+        });
+    });
 
     // Almacenar las selecciones
     let selectedAreasList = new Set();

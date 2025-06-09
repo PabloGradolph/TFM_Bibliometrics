@@ -326,3 +326,12 @@ msgstr "Actualmente continúa su desarrollo en el IPBLN-CSIC a través de una be
 
 msgid "Visit Pablo's Portfolio"
 msgstr "Visitar Portfolio de Pablo"
+
+msgid "Select Clustering Model"
+msgstr "Selección del Modelo de Clustering"
+
+msgid "Configuration Mode"
+msgstr "Modo de configuración"
+
+msgid "Uses the best clustering configuration found across all models and parameters."
+msgstr "Usa la mejor configuración de clustering encontrada entre todos los modelos y parámetros."
