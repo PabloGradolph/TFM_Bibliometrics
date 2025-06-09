@@ -218,7 +218,40 @@ class Collaboration(models.Model):
 
     class Meta:
         unique_together = ('author', 'collaborator')
+        
 
+class AuthorClustering(models.Model):
+    CLUSTERING_MODELS = [
+        ('kmeans', 'KMeans'),
+        ('dbscan', 'DBSCAN'),
+        ('hdbscan', 'HDBSCAN'),
+        ('agglomerative', 'Agglomerative'),
+        ('hierarchical', 'Hierarchical'),
+        ('spectral', 'Spectral'),
+        ('gmm', 'Gaussian Mixture Model'),
+    ]
+
+    author = models.ForeignKey("Author", on_delete=models.CASCADE, related_name="clusterings")
+    model_name = models.CharField("Clustering model", max_length=50, choices=CLUSTERING_MODELS)
+    cluster = models.IntegerField("Assigned cluster")
+    k = models.IntegerField("Number of clusters", blank=True, null=True)
+    pca_dims = models.IntegerField("PCA dimensions", blank=True, null=True)
+
+    silhouette = models.FloatField("Silhouette score", blank=True, null=True)
+    calinski_harabasz = models.FloatField("Calinski-Harabasz score", blank=True, null=True)
+    davies_bouldin = models.FloatField("Davies-Bouldin score", blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Author clustering"
+        verbose_name_plural = "Author clusterings"
+        indexes = [
+            models.Index(fields=["model_name", "k", "pca_dims"]),
+        ]
+
+    def __str__(self):
+        return f"{self.author.name} | {self.model_name} | k={self.k} | cluster={self.cluster}"
 
 
 class Institution(models.Model):
@@ -302,25 +335,6 @@ class ThematicArea(models.Model):
 
     def __str__(self):
         return self.name
-
-
-
-class Keyword(models.Model):
-    """
-    Represents a keyword extracted through NLP techniques.
-
-    Fields:
-        - word: The keyword itself.
-        - publications: Publications where the keyword was detected.
-
-    Usage:
-        - Useful for generating word clouds and thematic exploration.
-    """
-    word = models.CharField("Keyword", max_length=100, unique=True)
-    publications = models.ManyToManyField("Publication", related_name="keywords")
-
-    def __str__(self):
-        return self.word
     
 
 class ThematicCluster(models.Model):

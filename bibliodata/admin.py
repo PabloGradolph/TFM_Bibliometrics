@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Publication, Author, Collaboration, Institution, InstitutionMetric, ThematicArea, Keyword, ThematicCluster, ReportTemplate, PublicationMetric
+from .models import Publication, Author, Collaboration, Institution, InstitutionMetric, ThematicArea, ThematicCluster, ReportTemplate, PublicationMetric
 
 @admin.register(Publication)
 class PublicationAdmin(admin.ModelAdmin):
@@ -93,21 +93,6 @@ class ThematicAreaAdmin(admin.ModelAdmin):
     """
     list_display = ("name",)
     search_fields = ("name",)
-
-
-@admin.register(Keyword)
-class KeywordAdmin(admin.ModelAdmin):
-    """
-    Admin configuration for extracted keywords.
-
-    Features:
-        - Displays the keyword text.
-        - Enables search by word.
-        - Allows editing the many-to-many relation with publications using horizontal filter.
-    """
-    list_display = ("word",)
-    search_fields = ("word",)
-    filter_horizontal = ("publications",)
 
 
 @admin.register(ThematicCluster)
