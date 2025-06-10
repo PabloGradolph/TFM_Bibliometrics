@@ -9,6 +9,7 @@ import random
 from django.http import JsonResponse
 from bibliodata.models import Author  # Para mapear nombres
 import math
+from django.db.models import Max as DBMax, Min as DBMin
 
 # Create your views here.
 
@@ -609,7 +610,39 @@ def get_collaboration_network(request):
             for node in G.nodes():
                 author = Author.objects.get(gesbib_id=node)
                 if global_mode:
-                    clustering = author.clusterings.filter(model_name='kmeans', k=7).first()
+                    # Obtener todos los modelos disponibles
+                    all_models = author.clusterings.all()
+                    
+                    if all_models.exists():
+                        # Obtener los valores máximos y mínimos para normalización
+                        max_silhouette = all_models.aggregate(DBMax('silhouette'))['silhouette__max']
+                        min_silhouette = all_models.aggregate(DBMin('silhouette'))['silhouette__min']
+                        max_calinski = all_models.aggregate(DBMax('calinski_harabasz'))['calinski_harabasz__max']
+                        min_calinski = all_models.aggregate(DBMin('calinski_harabasz'))['calinski_harabasz__min']
+                        max_davies = all_models.aggregate(DBMax('davies_bouldin'))['davies_bouldin__max']
+                        min_davies = all_models.aggregate(DBMin('davies_bouldin'))['davies_bouldin__min']
+                        
+                        # Calcular el score combinado para cada modelo
+                        best_score = float('-inf')
+                        best_clustering = None
+                        
+                        for model in all_models:
+                            if model.silhouette is not None and model.calinski_harabasz is not None and model.davies_bouldin is not None:
+                                # Normalizar las métricas
+                                norm_silhouette = (model.silhouette - min_silhouette) / (max_silhouette - min_silhouette) if max_silhouette != min_silhouette else 0
+                                norm_calinski = (model.calinski_harabasz - min_calinski) / (max_calinski - min_calinski) if max_calinski != min_calinski else 0
+                                norm_davies = (model.davies_bouldin - min_davies) / (max_davies - min_davies) if max_davies != min_davies else 0
+                                
+                                # Calcular score combinado
+                                combined_score = 0.8 * norm_silhouette + 0.1 * norm_calinski + 0.1 * norm_davies
+                                
+                                if combined_score > best_score:
+                                    best_score = combined_score
+                                    best_clustering = model
+                        
+                        clustering = best_clustering
+                    else:
+                        clustering = None
                 elif clustering_model:
                     if auto_mode:
                         clustering = author.clusterings.filter(model_name=clustering_model).order_by('-silhouette').first()
@@ -651,7 +684,7 @@ def get_collaboration_network(request):
                     keywords1 = set(author1.keywords.keys() if author1.keywords else [])
                     keywords2 = set(author2.keywords.keys() if author2.keywords else [])
                     shared_keywords = keywords1.intersection(keywords2)
-                    if len(shared_keywords) >= 2:
+                    if len(shared_keywords) >= 1:
                         edges_data.append({
                             'source': author1_id,
                             'target': author2_id,
@@ -666,10 +699,16 @@ def get_collaboration_network(request):
                     "weight": d.get("weight", 1)
                 })
 
+        extra_info = {}
+        if community_view == 'keywords' and clustering:
+            extra_info['model'] = clustering.model_name
+            extra_info['n_clusters'] = clustering.k
+
         return JsonResponse({
             "nodes": nodes_data,
             "edges": edges_data,
-            "is_author_view": False
+            "is_author_view": False,
+            **extra_info
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

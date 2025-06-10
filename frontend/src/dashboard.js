@@ -235,7 +235,8 @@ export function initFiltersAndSearch() {
                 link.classList.remove('active');
             });
             this.classList.add('active');
-
+            
+            updateCommunityDropdownText();
             updateVisualizations();
         });
     });
@@ -1732,6 +1733,9 @@ export function initFiltersAndSearch() {
     }
 
     let currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
+    let currentClusteringModel = null;
+    let currentNClusters = null;
+
 
     // Event listeners para las opciones del menú desplegable de vista de comunidad
     document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
@@ -1761,6 +1765,7 @@ export function initFiltersAndSearch() {
             // Actualizar la red con la nueva vista
             // La función updateVisualizations ya llama a get_collaboration_network
             // y le pasa los parámetros, solo necesitamos que incluya el view_type
+            updateCommunityDropdownText();
             updateVisualizations(); // Esto recarga los datos con el nuevo view_type y llama a updateCollaborationNetwork
         });
     });
@@ -1782,6 +1787,10 @@ export function initFiltersAndSearch() {
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'none';
         } else {
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
+            updateCommunityDropdownText(
+                data.model || null,
+                data.n_clusters || null
+            );
             if (currentCommunityView === 'keywords') {
                 cardTitle.textContent = currentLang === 'es'
                     ? 'Red de coincidencia de palabras clave (entre IPs)'
@@ -2143,6 +2152,9 @@ export function initFiltersAndSearch() {
     
         // === ESTABLECER LA VISTA EN KEYWORDS ===
         currentCommunityView = 'keywords';
+        currentClusteringModel = model;
+        currentNClusters = nClusters;
+
     
         const params = new URLSearchParams({
             communityView: 'keywords',
@@ -2171,6 +2183,7 @@ export function initFiltersAndSearch() {
                 // Guardar los datos actuales de la red
                 window.currentNetworkData = data;
                 
+                updateCommunityDropdownText(model, nClusters);
                 updateCollaborationNetwork(data);
                 document.activeElement.blur();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('clusteringModal'));
@@ -2180,7 +2193,40 @@ export function initFiltersAndSearch() {
                 console.error('Error en la petición fetch:', error);
             });
     });
-
+    
+    function updateCommunityDropdownText(model = null, nClusters = null) {
+        const dropdownButton = document.getElementById('communityViewDropdown');
+        if (!dropdownButton) return;
+    
+        const currentLang = window.location.pathname.split('/')[1];
+    
+        let text = '';
+        if (currentCommunityView === 'department') {
+            text = currentLang === 'es' ? 'Por departamento' : 'By Department';
+        } else if (currentCommunityView === 'modularity-7') {
+            text = currentLang === 'es' ? 'Mejor modularidad (7 comunidades)' : 'Best Modularity (7 communities)';
+        } else if (currentCommunityView === 'modularity-5') {
+            text = currentLang === 'es' ? 'Mejor modularidad (5 comunidades)' : 'Best Modularity (5 communities)';
+        } else if (currentCommunityView === 'keywords') {
+            // Usa los valores pasados, y si no hay, los que guardamos antes
+            const usedModel = model || currentClusteringModel;
+            const usedClusters = nClusters || currentNClusters;
+    
+            if (usedModel && usedClusters) {
+                text = currentLang === 'es'
+                    ? `Por palabras clave (${usedModel}, ${usedClusters} clústeres)`
+                    : `By keywords (${usedModel}, ${usedClusters} clusters)`;
+            } else {
+                text = currentLang === 'es' ? 'Por palabras clave' : 'By keywords';
+            }
+        } else {
+            text = currentLang === 'es' ? 'Vista de Comunidades' : 'Community View';
+        }
+    
+        dropdownButton.textContent = text;
+    }
+    
+    
     
     function updateFilters() {
         const params = new URLSearchParams();
