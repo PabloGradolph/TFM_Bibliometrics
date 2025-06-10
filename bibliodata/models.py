@@ -229,6 +229,7 @@ class AuthorClustering(models.Model):
         ('hierarchical', 'Hierarchical'),
         ('spectral', 'Spectral'),
         ('gmm', 'Gaussian Mixture Model'),
+        ('lovaina', 'Lovaina'),
     ]
 
     author = models.ForeignKey("Author", on_delete=models.CASCADE, related_name="clusterings")

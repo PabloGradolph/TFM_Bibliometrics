@@ -261,6 +261,7 @@
                                 <option value="gmm">{% trans "Gaussian Mixture Model (GMM)" %}</option>
                                 <option value="dbscan">DBSCAN</option>
                                 <option value="hdbscan">HDBSCAN</option>
+                                <option value="lovaina">{% trans "Lovaina" %}</option>
                             </select>
                             <div class="form-text mt-2" id="modelDescription">
                                 {% trans "K-means: Divides data into k clusters by minimizing the within-cluster variance." %}
@@ -303,6 +304,11 @@
                                 <select class="form-select" id="hdbscanClusters">
                                     <option value="2">2 {% trans "clusters" %}</option>
                                     <option value="3">3 {% trans "clusters" %}</option>
+                                    <option value="4">4 {% trans "clusters" %}</option>
+                                </select>
+                            </div>
+                            <div id="lovainaOptions" class="d-none">
+                                <select class="form-select" id="lovainaClusters">
                                     <option value="4">4 {% trans "clusters" %}</option>
                                 </select>
                             </div>

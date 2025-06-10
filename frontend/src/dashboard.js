@@ -40,15 +40,17 @@ export function initFiltersAndSearch() {
     const modelManualMode = document.getElementById('modelManualMode');
     const modelAutoMode = document.getElementById('modelAutoMode');
     const manualConfigContainer = document.getElementById('manualConfigContainer');
+    const lovainaOptions = document.getElementById('lovainaOptions');
 
     // Descripciones de los modelos en español
     const spanishModelDescriptions = {
         'kmeans': 'Agrupa los datos en un número fijo de categorías (clusters) tratando de minimizar la distancia entre los puntos de cada grupo y su centroide, es decir, su "centro". Este método busca particiones compactas y bien separadas, y es especialmente útil cuando los grupos tienen forma redonda o esférica. Es rápido y eficiente, aunque sensible a la elección inicial del número de grupos (k) y a los valores extremos.',
         'agglomerative': 'Construye agrupaciones de forma jerárquica: comienza considerando cada autor como un grupo separado y va fusionando los más similares en pasos sucesivos. El resultado es una estructura en forma de árbol (dendrograma), que permite explorar diferentes niveles de agrupación según la profundidad del corte. Es útil cuando no se conoce el número exacto de grupos y se desea analizar la relación progresiva entre autores.',
         'spectral': 'Transforma la relación entre autores en una red (o grafo) de similitudes y la descompone matemáticamente para encontrar estructuras ocultas. Posteriormente, agrupa los autores en ese nuevo espacio. Es muy útil cuando las agrupaciones no tienen una forma clara o son no convexas, como anillos o cadenas, y aprovecha la conectividad global de los datos.',
-        'gmm': 'Parte de la idea de que los datos provienen de una combinación de distribuciones estadísticas llamadas gaussianas (curvas en forma de campana). En lugar de asignar cada punto a un solo grupo, estima la probabilidad de que pertenezca a cada uno. Esto permite detectar agrupaciones solapadas o de forma más compleja que las que detecta KMeans, siendo ideal cuando se sospecha que los datos tienen estructuras suaves o ambiguas.',
-        'dbscan': 'Encuentra grupos basándose en la densidad de autores: considera que un cluster es una región donde hay muchos autores cercanos entre sí. Los autores aislados o poco conectados son considerados como ruido. No necesita que se indique cuántos grupos buscar, y puede detectar agrupaciones de formas variadas. Es especialmente robusto frente a valores atípicos.',
-        'hdbscan': 'Es una versión mejorada y jerárquica de DBSCAN. Construye un mapa de densidades y extrae agrupaciones estables y significativas, incluso si estas tienen tamaños o densidades diferentes. También identifica automáticamente qué autores no pertenecen a ningún grupo claro. Es ideal para representar comunidades complejas o con estructuras poco homogéneas.'
+        'gmm': 'Parte de la idea de que los datos provienen de una combinación de distribuciones estadísticas llamadas Gaussianas (curvas en forma de campana). En lugar de asignar cada punto a un único cluster, estima la probabilidad de que pertenezca a cada uno. Esto le permite detectar clusters superpuestos o de formas más complejas que los que detecta KMeans, siendo ideal cuando se sospecha que los datos tienen estructuras suaves o ambiguas.',
+        'dbscan': 'Identifica grupos basándose en la densidad de los puntos: busca regiones donde los puntos están muy juntos y los separa de las regiones más dispersas. Es especialmente útil cuando los clusters tienen formas arbitrarias y no se conoce el número de grupos a priori. Puede identificar puntos de ruido (outliers) y no requiere especificar el número de clusters.',
+        'hdbscan': 'Es una versión jerárquica de DBSCAN que puede encontrar clusters de diferentes densidades. En lugar de usar un único umbral de densidad, construye una jerarquía de clusters y luego selecciona los más significativos. Es robusto a los parámetros y puede encontrar clusters de formas arbitrarias.',
+        'lovaina': 'Algoritmo de detección de comunidades que optimiza la modularidad de la red. Funciona de manera iterativa, moviendo nodos entre comunidades para maximizar la modularidad. Es especialmente efectivo para detectar comunidades en redes grandes y puede encontrar comunidades de diferentes tamaños.'
     };
 
     // Descripciones de los modelos en inglés
@@ -57,8 +59,9 @@ export function initFiltersAndSearch() {
         'agglomerative': 'It builds groupings in a hierarchical way: it starts by considering each author as a separate group and merges the most similar ones in successive steps. The result is a tree-like structure (dendrogram), which allows exploring different levels of grouping according to the depth of the cut. It is useful when the exact number of groups is not known and it is desired to analyze the progressive relationship between authors.',
         'spectral': 'It transforms the relationship between authors into a network (or graph) of similarities and decomposes it mathematically to find hidden structures. It then clusters the authors in this new space. It is very useful when the groupings do not have a clear shape or are non-convex, such as rings or chains, and takes advantage of the global connectivity of the data.',
         'gmm': 'It starts from the idea that the data come from a combination of statistical distributions called Gaussian (bell-shaped curves). Instead of assigning each point to a single cluster, it estimates the probability that it belongs to each cluster. This allows it to detect overlapping or more complex-shaped clusters than KMeans detects, making it ideal when data are suspected of having soft or ambiguous structures.',
-        'dbscan': 'It finds groups based on the density of authors: it considers a cluster as a region where there are many authors close to each other. Isolated or loosely connected authors are considered as noise. It does not need to be told how many clusters to look for, and can detect clusters of various shapes. It is especially robust to outliers.',
-        'hdbscan': 'It is an enhanced, hierarchical version of DBSCAN. It builds a density map and extracts stable and meaningful clusters, even if they have different sizes or densities. It also automatically identifies which authors do not belong to any clear group. It is ideal for representing complex or inhomogeneously structured communities.'
+        'dbscan': 'Identifies groups based on the density of points: it looks for regions where points are very close together and separates them from more scattered regions. It is especially useful when clusters have arbitrary shapes and the number of groups is not known a priori. It can identify noise points (outliers) and does not require specifying the number of clusters.',
+        'hdbscan': 'It is a hierarchical version of DBSCAN that can find clusters of different densities. Instead of using a single density threshold, it builds a hierarchy of clusters and then selects the most significant ones. It is robust to parameters and can find clusters of arbitrary shapes.',
+        'lovaina': 'A community detection algorithm that optimizes network modularity. It works iteratively, moving nodes between communities to maximize modularity. It is especially effective for detecting communities in large networks and can find communities of different sizes.'
     };
 
     // Textos en español
@@ -150,14 +153,22 @@ export function initFiltersAndSearch() {
                 rangeContainer.classList.add('d-none');
                 dbscanOptions.classList.remove('d-none');
                 hdbscanOptions.classList.add('d-none');
+                lovainaOptions.classList.add('d-none');
             } else if (selectedModel === 'hdbscan') {
                 rangeContainer.classList.add('d-none');
                 dbscanOptions.classList.add('d-none');
                 hdbscanOptions.classList.remove('d-none');
+                lovainaOptions.classList.add('d-none');
+            } else if (selectedModel === 'lovaina') {
+                rangeContainer.classList.add('d-none');
+                dbscanOptions.classList.add('d-none');
+                hdbscanOptions.classList.add('d-none');
+                lovainaOptions.classList.remove('d-none');
             } else {
                 rangeContainer.classList.remove('d-none');
                 dbscanOptions.classList.add('d-none');
                 hdbscanOptions.classList.add('d-none');
+                lovainaOptions.classList.add('d-none');
             }
         });
     }
@@ -2148,13 +2159,14 @@ export function initFiltersAndSearch() {
             nClusters = document.getElementById('dbscanClusters').value;
         } else if (model === 'hdbscan') {
             nClusters = document.getElementById('hdbscanClusters').value;
+        } else if (model === 'lovaina') {
+            nClusters = document.getElementById('lovainaClusters').value;
         }
     
         // === ESTABLECER LA VISTA EN KEYWORDS ===
         currentCommunityView = 'keywords';
         currentClusteringModel = model;
         currentNClusters = nClusters;
-
     
         const params = new URLSearchParams({
             communityView: 'keywords',
