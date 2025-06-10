@@ -1746,6 +1746,7 @@ export function initFiltersAndSearch() {
     let currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
     let currentClusteringModel = null;
     let currentNClusters = null;
+    let isFullNetwork = false;
 
 
     // Event listeners para las opciones del menú desplegable de vista de comunidad
@@ -1950,7 +1951,7 @@ export function initFiltersAndSearch() {
         });
     
         // Leyenda
-        if (!data.is_author_view) {
+        if (!data.is_author_view && !(isFullNetwork && currentCommunityView === 'modularity-7')) {
             const legend = document.createElement('div');
             legend.id = 'networkLegend';
             Object.assign(legend.style, {
@@ -1980,15 +1981,11 @@ export function initFiltersAndSearch() {
                     ? `Comunidades de Modularidad (${k})`
                     : `Modularity Communities (${k})`;
             }
+        
             legend.appendChild(title);
         
-            const counts = document.createElement('div');
-            counts.style.marginBottom = '8px';
-            counts.textContent = `${data.nodes.length} nodos / ${data.edges.length} enlaces`;
-            legend.appendChild(counts);
-        
             if (currentCommunityView === 'department') {
-                const departments = [...new Set(data.nodes.map(n => n.department))].filter(d => d !== 'Unknown');
+                const departments = [...new Set(data.nodes.map(n => n.department))];
                 departments.forEach(dept => {
                     const item = document.createElement('div');
                     item.style.display = 'flex';
@@ -2001,8 +1998,7 @@ export function initFiltersAndSearch() {
                         height: '14px',
                         backgroundColor: departmentColorScale(dept),
                         marginRight: '6px',
-                        borderRadius: '3px',
-                        border: '1px solid #333'
+                        borderRadius: '3px'
                     });
         
                     const label = document.createElement('span');
@@ -2012,7 +2008,6 @@ export function initFiltersAndSearch() {
                     item.appendChild(label);
                     legend.appendChild(item);
                 });
-        
             } else {
                 // === Obtener comunidades ===
                 let communities = [];
@@ -2061,7 +2056,7 @@ export function initFiltersAndSearch() {
     
         // Interactividad
         const overlay = document.createElement('div');
-        overlay.innerText = 'Haz click para activar la red';
+        overlay.innerText = currentLang === 'es' ? 'Haz click para activar la red' : 'Click to activate the network';
         Object.assign(overlay.style, {
             position: 'absolute',
             top: 0,
@@ -2116,7 +2111,7 @@ export function initFiltersAndSearch() {
                     const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
                     lines.push(`• ${neighborLabel} (${weight})`);
                 });
-                tooltip.innerText = `${label}\nColabora con:\n${lines.join('\n')}`;
+                tooltip.innerText = `${label}\n${currentLang === 'es' ? 'Colabora con:' : 'Collaborates with:'}\n${lines.join('\n')}`;
                 tooltip.style.left = `${event.clientX + 10}px`;
                 tooltip.style.top = `${event.clientY + 10}px`;
                 tooltip.style.display = 'block';
@@ -2327,4 +2322,220 @@ export function initFiltersAndSearch() {
         // Actualizar visualizaciones
         updateVisualizations();
     }
+
+    // Añadir el manejador del botón de red completa
+    document.getElementById('toggleFullNetworkBtn').addEventListener('click', function() {
+        const button = this;
+        const container = document.getElementById('collaborationNetwork');
+        const currentLang = window.location.pathname.split('/')[1];
+        
+        // Deshabilitar el botón y mostrar spinner
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' + 
+            (currentLang === 'es' ? 'Cargando...' : 'Loading...');
+        
+        // Mostrar overlay de carga
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: inherit;
+        `;
+        loadingOverlay.innerHTML = `
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">${currentLang === 'es' ? 'Cargando...' : 'Loading...'}</span>
+            </div>
+        `;
+        container.appendChild(loadingOverlay);
+        
+        // Cambiar el estado de la red
+        isFullNetwork = !isFullNetwork;
+        
+        // Actualizar la red con el nuevo modo
+        const params = new URLSearchParams({
+            communityView: currentCommunityView,
+            fullNetwork: isFullNetwork
+        });
+        
+        if (currentClusteringModel) {
+            params.append('clusteringModel', currentClusteringModel);
+            params.append('nClusters', currentNClusters);
+            params.append('autoMode', 'true');
+            params.append('globalMode', 'true');
+        }
+
+        // Actualizar las opciones del menú desplegable
+        const dropdownItems = document.querySelectorAll('.network-community-view');
+        dropdownItems.forEach(item => {
+            const viewType = item.getAttribute('data-community-view');
+            if (isFullNetwork) {
+                // En red completa, solo habilitar department y modularity-7
+                if (viewType === 'department' || viewType === 'modularity-7') {
+                    item.classList.remove('disabled');
+                    item.style.pointerEvents = 'auto';
+                    item.style.opacity = '1';
+                } else {
+                    item.classList.add('disabled');
+                    item.style.pointerEvents = 'none';
+                    item.style.opacity = '0.5';
+                }
+                
+                // Si la vista actual no está permitida, cambiar a modularity-7
+                if (currentCommunityView !== 'department' && currentCommunityView !== 'modularity-7') {
+                    currentCommunityView = 'modularity-7';
+                    params.set('communityView', 'modularity-7');
+                    // Actualizar el botón activo
+                    dropdownItems.forEach(i => i.classList.remove('active'));
+                    document.querySelector(`[data-community-view="modularity-7"]`).classList.add('active');
+                }
+            } else {
+                // En red de IPs, habilitar todas las opciones
+                item.classList.remove('disabled');
+                item.style.pointerEvents = 'auto';
+                item.style.opacity = '1';
+            }
+        });
+
+        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error desde backend:', data.error);
+                    alert(`Ocurrió un error al generar la red: ${data.error}`);
+                    // Revertir el estado si hay error
+                    isFullNetwork = !isFullNetwork;
+                    return;
+                }
+                
+                if (!data.nodes || !data.edges) {
+                    console.error('Respuesta incompleta del backend:', data);
+                    alert('La respuesta del servidor no contiene datos de red válidos.');
+                    // Revertir el estado si hay error
+                    isFullNetwork = !isFullNetwork;
+                    return;
+                }
+                
+                // Guardar los datos actuales de la red
+                window.currentNetworkData = data;
+                
+                // Actualizar el título de la tarjeta
+                const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
+                cardTitle.textContent = currentLang === 'es'
+                    ? (isFullNetwork ? 'Red de Coautorías Completa' : 'Red de Coautorías entre IPs')
+                    : (isFullNetwork ? 'Complete Co-authorship Network' : 'Co-authorship Network between IPs');
+                
+                // Solo actualizar la red cuando tengamos los nuevos datos
+                updateCollaborationNetwork(data);
+
+                // Actualizar visibilidad del botón
+                if (!isFullNetwork && (currentCommunityView === 'modularity-5' || currentCommunityView === 'keywords')) {
+                    button.style.display = 'none';
+                } else {
+                    button.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error en la petición fetch:', error);
+                alert(currentLang === 'es' 
+                    ? 'Error al cargar la red. Por favor, inténtalo de nuevo.'
+                    : 'Error loading the network. Please try again.');
+                // Revertir el estado si hay error
+                isFullNetwork = !isFullNetwork;
+            })
+            .finally(() => {
+                // Restaurar el botón
+                button.disabled = false;
+                button.textContent = currentLang === 'es'
+                    ? (isFullNetwork ? 'Mostrar Red de IPs' : 'Mostrar Red Completa')
+                    : (isFullNetwork ? 'Show IPs Network' : 'Show Full Network');
+                
+                // Eliminar el overlay de carga
+                loadingOverlay.remove();
+            });
+    });
+
+    // También necesitamos actualizar el manejador de cambio de vista
+    document.querySelectorAll('.network-community-view').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (this.classList.contains('disabled')) return;
+            
+            const view = this.getAttribute('data-community-view');
+            currentCommunityView = view;
+            
+            // Actualizar clases activas
+            document.querySelectorAll('.network-community-view').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+
+            // Ocultar el botón de red completa para ciertas vistas en modo IPs
+            const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
+            if (!isFullNetwork && (view === 'modularity-5' || view === 'keywords')) {
+                toggleFullNetworkBtn.style.display = 'none';
+            } else {
+                toggleFullNetworkBtn.style.display = 'block';
+            }
+            
+            // Mostrar overlay de carga
+            const container = document.getElementById('collaborationNetwork');
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(255, 255, 255, 0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+                border-radius: inherit;
+            `;
+            loadingOverlay.innerHTML = `
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">${window.location.pathname.split('/')[1] === 'es' ? 'Cargando...' : 'Loading...'}</span>
+                </div>
+            `;
+            container.appendChild(loadingOverlay);
+            
+            // Actualizar la red
+            const params = new URLSearchParams({
+                communityView: view,
+                fullNetwork: isFullNetwork
+            });
+            
+            if (currentClusteringModel) {
+                params.append('clusteringModel', currentClusteringModel);
+                params.append('nClusters', currentNClusters);
+                params.append('autoMode', 'true');
+                params.append('globalMode', 'true');
+            }
+
+            fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error desde backend:', data.error);
+                        return;
+                    }
+                    // Solo actualizar la red cuando tengamos los nuevos datos
+                    updateCollaborationNetwork(data);
+                })
+                .catch(error => {
+                    console.error('Error en la petición fetch:', error);
+                })
+                .finally(() => {
+                    // Eliminar el overlay de carga
+                    loadingOverlay.remove();
+                });
+        });
+    });
 }

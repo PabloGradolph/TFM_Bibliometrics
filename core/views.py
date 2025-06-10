@@ -532,6 +532,7 @@ def get_collaboration_network(request):
         auto_mode = request.GET.get('autoMode') == 'true'
         global_mode = request.GET.get('globalMode') == 'true'
         selected_author_name = request.GET.get('author')
+        full_network = request.GET.get('fullNetwork') == 'true'
 
         if selected_author_name:
             try:
@@ -573,38 +574,75 @@ def get_collaboration_network(request):
                 pass
 
         # Red general
-        nodes_path = "analysis/data/networks/lab_nodes.csv"
-        edges_path = "analysis/data/networks/lab_edges.csv"
+        G = nx.Graph()
         nodes_data = []
         valid_ids = set()
         id_to_name = {}
 
-        G = nx.Graph()
-        with open(nodes_path, encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                name = row["Id"].strip()
-                try:
-                    author = Author.objects.get(name__iexact=name)
-                    author_id = str(author.gesbib_id)
-                    department = getattr(author, 'department', 'Unknown')
-                    lovaina_community = getattr(author, 'lovaina_community', -1)
-                    leiden_community = getattr(author, 'leiden_community', -1)
-                except Author.DoesNotExist:
-                    continue
-                valid_ids.add(author_id)
-                id_to_name[author_id] = name
-                G.add_node(author_id, department=department, lovaina_community=lovaina_community, leiden_community=leiden_community)
+        if full_network:
+            # Obtener todas las colaboraciones de la base de datos
+            collaborations = Collaboration.objects.all()
+            
+            # Crear nodos y aristas
+            for collab in collaborations:
+                author_id = str(collab.author.gesbib_id)
+                collaborator_id = str(collab.collaborator.gesbib_id)
+                
+                # Añadir nodos si no existen
+                if not G.has_node(author_id):
+                    G.add_node(
+                        author_id,
+                        label=collab.author.name,
+                        department=getattr(collab.author, 'department_global', 'Unknown'),
+                        lovaina_community=getattr(collab.author, 'lovaina_community_global', -1),
+                        leiden_community=getattr(collab.author, 'leiden_community_global', -1)
+                    )
+                    valid_ids.add(author_id)
+                    id_to_name[author_id] = collab.author.name
+                
+                if not G.has_node(collaborator_id):
+                    G.add_node(
+                        collaborator_id,
+                        label=collab.collaborator.name,
+                        department=getattr(collab.collaborator, 'department_global', 'Unknown'),
+                        lovaina_community=getattr(collab.collaborator, 'lovaina_community_global', -1),
+                        leiden_community=getattr(collab.collaborator, 'leiden_community_global', -1)
+                    )
+                    valid_ids.add(collaborator_id)
+                    id_to_name[collaborator_id] = collab.collaborator.name
+                
+                # Añadir arista
+                G.add_edge(author_id, collaborator_id, weight=collab.publication_count)
+        else:
+            # Lógica original para la red de IPs
+            nodes_path = "analysis/data/networks/lab_nodes.csv"
+            edges_path = "analysis/data/networks/lab_edges.csv"
 
-        with open(edges_path, encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                try:
-                    source = str(Author.objects.get(name__iexact=row["Source"]).gesbib_id)
-                    target = str(Author.objects.get(name__iexact=row["Target"]).gesbib_id)
-                except Author.DoesNotExist:
-                    continue
-                if source in valid_ids and target in valid_ids:
-                    weight = int(row["Weight"])
-                    G.add_edge(source, target, weight=weight)
+            with open(nodes_path, encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    name = row["Id"].strip()
+                    try:
+                        author = Author.objects.get(name__iexact=name)
+                        author_id = str(author.gesbib_id)
+                        department = getattr(author, 'department', 'Unknown')
+                        lovaina_community = getattr(author, 'lovaina_community', -1)
+                        leiden_community = getattr(author, 'leiden_community', -1)
+                    except Author.DoesNotExist:
+                        continue
+                    valid_ids.add(author_id)
+                    id_to_name[author_id] = name
+                    G.add_node(author_id, department=department, lovaina_community=lovaina_community, leiden_community=leiden_community)
+
+            with open(edges_path, encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    try:
+                        source = str(Author.objects.get(name__iexact=row["Source"]).gesbib_id)
+                        target = str(Author.objects.get(name__iexact=row["Target"]).gesbib_id)
+                    except Author.DoesNotExist:
+                        continue
+                    if source in valid_ids and target in valid_ids:
+                        weight = int(row["Weight"])
+                        G.add_edge(source, target, weight=weight)
 
         if community_view == 'keywords':
             for node in G.nodes():

@@ -335,3 +335,6 @@ msgstr "Modo de configuración"
 
 msgid "Uses the best clustering configuration found across all models and parameters."
 msgstr "Usa la mejor configuración de clustering encontrada entre todos los modelos y parámetros."
+
+msgid "Show Full Network"
+msgstr "Ver Red Completa"

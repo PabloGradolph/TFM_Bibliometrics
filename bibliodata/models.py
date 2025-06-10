@@ -206,6 +206,9 @@ class Author(models.Model):
     department = models.CharField("Department", max_length=200, blank=True, null=True)
     lovaina_community = models.IntegerField("Lovaina Community", blank=True, null=True)
     leiden_community = models.IntegerField("Leiden Community", blank=True, null=True)
+    department_global = models.CharField("Department for global network", max_length=200, blank=True, null=True)
+    lovaina_community_global = models.IntegerField("Lovaina Community for global network", blank=True, null=True)
+    leiden_community_global = models.IntegerField("Leiden Community for global network", blank=True, null=True)
 
     def __str__(self):
         return self.name
