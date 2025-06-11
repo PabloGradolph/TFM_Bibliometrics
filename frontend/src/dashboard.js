@@ -1803,14 +1803,78 @@ export function initFiltersAndSearch() {
                 data.model || null,
                 data.n_clusters || null
             );
+
+            // Añadir mensaje informativo para red completa
+            if (isFullNetwork) {
+                // Eliminar mensaje anterior si existe
+                const existingMessage = document.getElementById('networkInfoMessage');
+                if (existingMessage) {
+                    existingMessage.remove();
+                }
+
+                let messageText = '';
+                if (currentCommunityView === 'department') {
+                    messageText = currentLang === 'es'
+                        ? 'Los investigadores han sido clasificados en departamentos utilizando un Node2VecTransformer y un MLPClassifier. Esta clasificación no es 100% precisa.'
+                        : 'Researchers have been classified into departments using a Node2VecTransformer and MLPClassifier. This classification is not 100% accurate.';
+                } else if (currentCommunityView === 'modularity-7') {
+                    messageText = currentLang === 'es'
+                        ? 'Se ha utilizado el algoritmo de detección de comunidades Lovaina sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades.'
+                        : 'The Louvain community detection algorithm has been used on the complete co-authorship network to group researchers into different communities.';
+                }
+
+                if (messageText) {
+                    const cardBody = container.closest('.card-body');
+                    const messageDiv = document.createElement('div');
+                    messageDiv.id = 'networkInfoMessage';
+                    messageDiv.style.cssText = `
+                        background-color: #f8f9fa;
+                        border-left: 4px solid #0d6efd;
+                        padding: 10px 15px;
+                        margin: 10px 0;
+                        border-radius: 4px;
+                        font-size: 0.9rem;
+                        color: #666;
+                        position: relative;
+                    `;
+
+                    const closeButton = document.createElement('button');
+                    closeButton.className = 'btn-close';
+                    closeButton.style.cssText = `
+                        position: absolute;
+                        right: 10px;
+                        top: 10px;
+                        padding: 0.25rem;
+                    `;
+                    closeButton.onclick = function() {
+                        messageDiv.remove();
+                    };
+
+                    const messageContent = document.createElement('div');
+                    messageContent.textContent = messageText;
+
+                    messageDiv.appendChild(closeButton);
+                    messageDiv.appendChild(messageContent);
+
+                    // Insertar el mensaje después del título
+                    cardBody.insertBefore(messageDiv, container);
+                }
+            } else {
+                // Eliminar mensaje si no estamos en red completa
+                const existingMessage = document.getElementById('networkInfoMessage');
+                if (existingMessage) {
+                    existingMessage.remove();
+                }
+            }
+
             if (currentCommunityView === 'keywords') {
                 cardTitle.textContent = currentLang === 'es'
                     ? 'Red de coincidencia de palabras clave (entre IPs)'
                     : 'Keyword Coincidence Network (between IPs)';
             } else {
                 cardTitle.textContent = currentLang === 'es'
-                    ? 'Red de Coautorías Interactiva entre IPs'
-                    : 'Interactive Co-authorship network between IPs';
+                    ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
+                    : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
             }
         }
     
@@ -2211,7 +2275,9 @@ export function initFiltersAndSearch() {
         if (currentCommunityView === 'department') {
             text = currentLang === 'es' ? 'Por departamento' : 'By Department';
         } else if (currentCommunityView === 'modularity-7') {
-            text = currentLang === 'es' ? 'Mejor modularidad (7 comunidades)' : 'Best Modularity (7 communities)';
+            text = currentLang === 'es' 
+                ? (isFullNetwork ? 'Mejor modularidad (28 comunidades)' : 'Mejor modularidad (7 comunidades)')
+                : (isFullNetwork ? 'Best Modularity (28 communities)' : 'Best Modularity (7 communities)');
         } else if (currentCommunityView === 'modularity-5') {
             text = currentLang === 'es' ? 'Mejor modularidad (5 comunidades)' : 'Best Modularity (5 communities)';
         } else if (currentCommunityView === 'keywords') {
@@ -2359,6 +2425,17 @@ export function initFiltersAndSearch() {
         // Cambiar el estado de la red
         isFullNetwork = !isFullNetwork;
         
+        // Actualizar el texto del botón
+        button.textContent = currentLang === 'es' 
+            ? (isFullNetwork ? 'Mostrar Red de IPs' : 'Mostrar Red Completa')
+            : (isFullNetwork ? 'Show IPs Network' : 'Show Full Network');
+
+        // Actualizar el título del card
+        const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
+        cardTitle.textContent = currentLang === 'es'
+            ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
+            : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
+        
         // Actualizar la red con el nuevo modo
         const params = new URLSearchParams({
             communityView: currentCommunityView,
@@ -2375,33 +2452,10 @@ export function initFiltersAndSearch() {
         // Actualizar las opciones del menú desplegable
         const dropdownItems = document.querySelectorAll('.network-community-view');
         dropdownItems.forEach(item => {
-            const viewType = item.getAttribute('data-community-view');
-            if (isFullNetwork) {
-                // En red completa, solo habilitar department y modularity-7
-                if (viewType === 'department' || viewType === 'modularity-7') {
-                    item.classList.remove('disabled');
-                    item.style.pointerEvents = 'auto';
-                    item.style.opacity = '1';
-                } else {
-                    item.classList.add('disabled');
-                    item.style.pointerEvents = 'none';
-                    item.style.opacity = '0.5';
-                }
-                
-                // Si la vista actual no está permitida, cambiar a modularity-7
-                if (currentCommunityView !== 'department' && currentCommunityView !== 'modularity-7') {
-                    currentCommunityView = 'modularity-7';
-                    params.set('communityView', 'modularity-7');
-                    // Actualizar el botón activo
-                    dropdownItems.forEach(i => i.classList.remove('active'));
-                    document.querySelector(`[data-community-view="modularity-7"]`).classList.add('active');
-                }
-            } else {
-                // En red de IPs, habilitar todas las opciones
-                item.classList.remove('disabled');
-                item.style.pointerEvents = 'auto';
-                item.style.opacity = '1';
-            }
+            // Habilitar todas las opciones
+            item.classList.remove('disabled');
+            item.style.pointerEvents = 'auto';
+            item.style.opacity = '1';
         });
 
         fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
@@ -2426,12 +2480,6 @@ export function initFiltersAndSearch() {
                 // Guardar los datos actuales de la red
                 window.currentNetworkData = data;
                 
-                // Actualizar el título de la tarjeta
-                const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
-                cardTitle.textContent = currentLang === 'es'
-                    ? (isFullNetwork ? 'Red de Coautorías Completa' : 'Red de Coautorías entre IPs')
-                    : (isFullNetwork ? 'Complete Co-authorship Network' : 'Co-authorship Network between IPs');
-                
                 // Solo actualizar la red cuando tengamos los nuevos datos
                 updateCollaborationNetwork(data);
 
@@ -2444,21 +2492,12 @@ export function initFiltersAndSearch() {
             })
             .catch(error => {
                 console.error('Error en la petición fetch:', error);
-                alert(currentLang === 'es' 
-                    ? 'Error al cargar la red. Por favor, inténtalo de nuevo.'
-                    : 'Error loading the network. Please try again.');
-                // Revertir el estado si hay error
-                isFullNetwork = !isFullNetwork;
             })
             .finally(() => {
-                // Restaurar el botón
-                button.disabled = false;
-                button.textContent = currentLang === 'es'
-                    ? (isFullNetwork ? 'Mostrar Red de IPs' : 'Mostrar Red Completa')
-                    : (isFullNetwork ? 'Show IPs Network' : 'Show Full Network');
-                
                 // Eliminar el overlay de carga
                 loadingOverlay.remove();
+                // Habilitar el botón
+                button.disabled = false;
             });
     });
 
@@ -2474,6 +2513,14 @@ export function initFiltersAndSearch() {
             // Actualizar clases activas
             document.querySelectorAll('.network-community-view').forEach(i => i.classList.remove('active'));
             this.classList.add('active');
+
+            // Si estamos cambiando entre department y modularity-7, forzar red de IPs
+            if ((view === 'department' || view === 'modularity-7') && isFullNetwork) {
+                isFullNetwork = false;
+                const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
+                const currentLang = window.location.pathname.split('/')[1];
+                toggleFullNetworkBtn.textContent = currentLang === 'es' ? 'Mostrar Red Completa' : 'Show Full Network';
+            }
 
             // Ocultar el botón de red completa para ciertas vistas en modo IPs
             const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
