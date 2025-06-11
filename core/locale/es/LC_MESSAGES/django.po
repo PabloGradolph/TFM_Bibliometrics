@@ -285,11 +285,11 @@ msgstr "Vista de Comunidades"
 msgid "By Department"
 msgstr "Por departamento"
 
-msgid "Best Modularity (7 communities)"
-msgstr "Mejor Modularidad (7 comunidades)"
+msgid "Leiden"
+msgstr "Leiden"
 
-msgid "Best Modularity (5 communities)"
-msgstr "Mejor Modularidad (5 comunidades)"
+msgid "Louvain"
+msgstr "Louvain"
 
 msgid "By Keywords"
 msgstr "Por Palabras Clave"

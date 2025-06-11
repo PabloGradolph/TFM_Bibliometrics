@@ -1788,6 +1788,7 @@ export function initFiltersAndSearch() {
     
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
         const currentLang = window.location.pathname.split('/')[1];
+        const toggleButton = document.getElementById('toggleFullNetworkBtn');
     
         if (data.is_author_view) {
             const selectedAuthor = data.nodes.find(node => node.is_selected);
@@ -1797,12 +1798,20 @@ export function initFiltersAndSearch() {
                     : `Collaborations of ${selectedAuthor.label}`;
             }
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'none';
+            toggleButton.style.display = 'none';
         } else {
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
             updateCommunityDropdownText(
                 data.model || null,
                 data.n_clusters || null
             );
+
+            // Ocultar el botón de toggle en todas las vistas de la red completa
+            if (currentCommunityView === 'keywords') {
+                toggleButton.style.display = 'none';
+            } else {
+                toggleButton.style.display = 'block';
+            }
 
             // Añadir mensaje informativo para red completa
             if (isFullNetwork) {
@@ -1815,12 +1824,16 @@ export function initFiltersAndSearch() {
                 let messageText = '';
                 if (currentCommunityView === 'department') {
                     messageText = currentLang === 'es'
-                        ? 'Los investigadores han sido clasificados en departamentos utilizando un Node2VecTransformer y un MLPClassifier. Esta clasificación no es 100% precisa.'
-                        : 'Researchers have been classified into departments using a Node2VecTransformer and MLPClassifier. This classification is not 100% accurate.';
+                        ? 'Los investigadores han sido clasificados en departamentos utilizando un Node2VecTransformer y un MLPClassifier. Esta clasificación no es 100% precisa. No aparecen investigadores sin colaboraciones.'
+                        : 'Researchers have been classified into departments using a Node2VecTransformer and MLPClassifier. This classification is not 100% accurate. There are no researchers without collaborations.';
                 } else if (currentCommunityView === 'modularity-7') {
                     messageText = currentLang === 'es'
-                        ? 'Se ha utilizado el algoritmo de detección de comunidades Lovaina sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades.'
-                        : 'The Louvain community detection algorithm has been used on the complete co-authorship network to group researchers into different communities.';
+                        ? 'Se ha utilizado el algoritmo de detección de comunidades Lovaina sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
+                        : 'The Louvain community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
+                }  else if (currentCommunityView === 'modularity-5') {
+                    messageText = currentLang === 'es'
+                        ? 'Se ha utilizado el algoritmo de detección de comunidades Leiden sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
+                        : 'The Leiden community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
                 }
 
                 if (messageText) {
@@ -2015,7 +2028,7 @@ export function initFiltersAndSearch() {
         });
     
         // Leyenda
-        if (!data.is_author_view && !(isFullNetwork && currentCommunityView === 'modularity-7')) {
+        if (!data.is_author_view && !(isFullNetwork && currentCommunityView === 'modularity-7') && !(isFullNetwork && currentCommunityView === 'modularity-5')) {
             const legend = document.createElement('div');
             legend.id = 'networkLegend';
             Object.assign(legend.style, {
@@ -2042,11 +2055,16 @@ export function initFiltersAndSearch() {
             } else if (currentCommunityView === 'modularity-5' || currentCommunityView === 'modularity-7') {
                 const k = currentCommunityView === 'modularity-7' ? 7 : 5;
                 title.textContent = currentLang === 'es'
-                    ? `Comunidades de Modularidad (${k})`
-                    : `Modularity Communities (${k})`;
+                    ? `Comunidades (${k})`
+                    : `Communities (${k})`;
             }
         
             legend.appendChild(title);
+
+            const counts = document.createElement('div');
+            counts.style.marginBottom = '8px';
+            counts.textContent = `${data.nodes.length} nodos / ${data.edges.length} enlaces`;
+            legend.appendChild(counts);
         
             if (currentCommunityView === 'department') {
                 const departments = [...new Set(data.nodes.map(n => n.department))];
@@ -2267,35 +2285,31 @@ export function initFiltersAndSearch() {
     
     function updateCommunityDropdownText(model = null, nClusters = null) {
         const dropdownButton = document.getElementById('communityViewDropdown');
-        if (!dropdownButton) return;
-    
         const currentLang = window.location.pathname.split('/')[1];
-    
         let text = '';
+
         if (currentCommunityView === 'department') {
-            text = currentLang === 'es' ? 'Por departamento' : 'By Department';
+            text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
         } else if (currentCommunityView === 'modularity-7') {
             text = currentLang === 'es' 
-                ? (isFullNetwork ? 'Mejor modularidad (28 comunidades)' : 'Mejor modularidad (7 comunidades)')
-                : (isFullNetwork ? 'Best Modularity (28 communities)' : 'Best Modularity (7 communities)');
+                ? (isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)')
+                : (isFullNetwork ? 'Louvain' : 'Louvain (7 communities)');
         } else if (currentCommunityView === 'modularity-5') {
-            text = currentLang === 'es' ? 'Mejor modularidad (5 comunidades)' : 'Best Modularity (5 communities)';
+            text = currentLang === 'es' 
+                ? (isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)')
+                : (isFullNetwork ? 'Leiden' : 'Leiden (5 communities)');
         } else if (currentCommunityView === 'keywords') {
-            // Usa los valores pasados, y si no hay, los que guardamos antes
-            const usedModel = model || currentClusteringModel;
-            const usedClusters = nClusters || currentNClusters;
-    
-            if (usedModel && usedClusters) {
+            const modelName = model || currentClusteringModel;
+            const nClustersValue = nClusters || currentNClusters;
+            if (modelName && nClustersValue) {
                 text = currentLang === 'es'
-                    ? `Por palabras clave (${usedModel}, ${usedClusters} clústeres)`
-                    : `By keywords (${usedModel}, ${usedClusters} clusters)`;
+                    ? `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`
+                    : `By keywords (${modelName}, ${nClustersValue} clusters)`;
             } else {
                 text = currentLang === 'es' ? 'Por palabras clave' : 'By keywords';
             }
-        } else {
-            text = currentLang === 'es' ? 'Vista de Comunidades' : 'Community View';
         }
-    
+
         dropdownButton.textContent = text;
     }
     
@@ -2514,8 +2528,8 @@ export function initFiltersAndSearch() {
             document.querySelectorAll('.network-community-view').forEach(i => i.classList.remove('active'));
             this.classList.add('active');
 
-            // Si estamos cambiando entre department y modularity-7, forzar red de IPs
-            if ((view === 'department' || view === 'modularity-7') && isFullNetwork) {
+            // Si estamos cambiando entre department, modularity-7 o modularity-5, forzar red de IPs
+            if ((view === 'department' || view === 'modularity-7' || view === 'modularity-5') && isFullNetwork) {
                 isFullNetwork = false;
                 const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
                 const currentLang = window.location.pathname.split('/')[1];
@@ -2524,7 +2538,7 @@ export function initFiltersAndSearch() {
 
             // Ocultar el botón de red completa para ciertas vistas en modo IPs
             const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
-            if (!isFullNetwork && (view === 'modularity-5' || view === 'keywords')) {
+            if (!isFullNetwork && (view === 'keywords')) {
                 toggleFullNetworkBtn.style.display = 'none';
             } else {
                 toggleFullNetworkBtn.style.display = 'block';
