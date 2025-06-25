@@ -157,6 +157,7 @@ def get_filtered_data(request):
     types = request.GET.getlist('types')
     view_type = request.GET.get('view_type', 'yearly')
     author = request.GET.get('author')
+    include_predicted_areas = request.GET.get('include_predicted_areas') == 'true'
 
     # Construir el query base
     query = Publication.objects.all()
@@ -285,14 +286,40 @@ def get_filtered_data(request):
         timeline_info = None
 
     # Procesar áreas temáticas para el gráfico circular
-    areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
-    
-    # Procesar para mostrar top 10 + Otros
-    if len(areas_data) > 14:
-        top_15_areas = areas_data[:14]
-        other_areas = areas_data[14:]
-        other_count = sum(area['count'] for area in other_areas)
-        areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
+    if not include_predicted_areas:
+        areas_data = list(query.values('thematic_areas__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
+        # Procesar para mostrar top 13 + Otros
+        if len(areas_data) > 14:
+            top_15_areas = areas_data[:14]
+            other_areas = areas_data[14:]
+            other_count = sum(area['count'] for area in other_areas)
+            areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
+    else:
+        # Sumar normales y predichas
+        area_counts = {}
+        for pub in query:
+            # Áreas normales
+            for area in pub.thematic_areas.values_list('name', flat=True):
+                if area:
+                    area_counts[area] = area_counts.get(area, 0) + 1
+            # Áreas predichas
+            for area in pub.predicted_thematic_areas.values_list('name', flat=True):
+                if area:
+                    area_counts[area] = area_counts.get(area, 0) + 1
+        # Convertir a lista de dicts como espera el frontend
+        areas_data = [
+            {'thematic_areas__name': name, 'count': count}
+            for name, count in area_counts.items()
+        ]
+        # Ordenar por count descendente
+        areas_data.sort(key=lambda x: -x['count'])
+
+        # Procesar para mostrar top 13 + Otros
+        if len(areas_data) > 13:
+            top_15_areas = areas_data[:13]
+            other_areas = areas_data[13:]
+            other_count = sum(area['count'] for area in other_areas)
+            areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
     
     institutions_data = list(query.values('institutions__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
     types_data = list(query.values('publication_type').annotate(count=Count('id', distinct=True)).order_by('-count'))

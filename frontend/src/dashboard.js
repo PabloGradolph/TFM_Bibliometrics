@@ -699,6 +699,7 @@ export function initFiltersAndSearch() {
         } else {
             updateAreasBarChart(data);
         }
+        hideAreasLoading();
     }
 
     // Lógica de botones de áreas temáticas igual que yearly/monthly
@@ -760,6 +761,7 @@ export function initFiltersAndSearch() {
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
         params.append('view_type', filters.view_type);
+        if (includePredictedAreas) params.append('include_predicted_areas', 'true');
         
         // Añadir el autor seleccionado si existe
         if (selectedAuthorName) {
@@ -1360,17 +1362,6 @@ export function initFiltersAndSearch() {
         // Filtrar valores nulos
         data = data.filter(d => d.thematic_areas__name !== null);
 
-        // Agrupar las áreas menos representativas en 'Otras'
-        const N = 14;
-        if (data.length > N) {
-            const sorted = data.slice().sort((a, b) => b.count - a.count);
-            const topN = sorted.slice(0, N);
-            const rest = sorted.slice(N);
-            const otrasCount = rest.reduce((sum, d) => sum + d.count, 0);
-            // Poner "Otras" al principio del array
-            data = [{thematic_areas__name: 'Otras', count: otrasCount}, ...topN];
-        }
-
         // Limpiar el contenedor
         d3.select('#areasChart').html('');
 
@@ -1501,6 +1492,7 @@ export function initFiltersAndSearch() {
                 d3.selectAll('.info-box').style('display', 'none');
             }
         });
+        hideAreasLoading();
     }
 
     function updateAreasBarChart(data) {
@@ -1546,11 +1538,6 @@ export function initFiltersAndSearch() {
     
         svg.append('g')
             .attr('transform', `translate(0,${height})`)
-            // .call(d3.axisBottom(x))
-            // .selectAll('text')
-            // .attr('transform', 'rotate(-45)')
-            // .style('text-anchor', 'end')
-            // .style('font-size', '11px');
             // Quitamos las etiquetas del eje X
             .call(d3.axisBottom(x).tickFormat(''));
     
@@ -2598,5 +2585,68 @@ export function initFiltersAndSearch() {
                     loadingOverlay.remove();
                 });
         });
+    });
+
+    let includePredictedAreas = false;
+
+    // Textos para el botón (es/en)
+    const predictedAreasBtnTexts = {
+        es: {
+            include: 'Incluir áreas temáticas predichas por IA',
+            exclude: 'Excluir áreas temáticas predichas por IA'
+        },
+        en: {
+            include: 'Include AI-predicted areas',
+            exclude: 'Exclude AI-predicted areas'
+        }
+    };
+
+    function updatePredictedAreasBtnText() {
+        const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
+        const btn = document.getElementById('togglePredictedAreasBtn');
+        if (!btn) return;
+        btn.textContent = includePredictedAreas ? predictedAreasBtnTexts[lang].exclude : predictedAreasBtnTexts[lang].include;
+    }
+
+    function showAreasLoading() {
+        let overlay = document.getElementById('areasChartLoading');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'areasChartLoading';
+            overlay.style.position = 'absolute';
+            overlay.style.top = 0;
+            overlay.style.left = 0;
+            overlay.style.width = '100%';
+            overlay.style.height = '100%';
+            overlay.style.background = 'rgba(255,255,255,0.7)';
+            overlay.style.display = 'flex';
+            overlay.style.justifyContent = 'center';
+            overlay.style.alignItems = 'center';
+            overlay.style.zIndex = 10;
+            overlay.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>';
+            const parent = document.getElementById('areasChart').parentElement;
+            parent.style.position = 'relative';
+            parent.appendChild(overlay);
+        } else {
+            overlay.style.display = 'flex';
+        }
+    }
+
+    function hideAreasLoading() {
+        const overlay = document.getElementById('areasChartLoading');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    window.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById('togglePredictedAreasBtn');
+        if (btn) {
+            btn.addEventListener('click', function() {
+                showAreasLoading();
+                includePredictedAreas = !includePredictedAreas;
+                updatePredictedAreasBtnText();
+                updateVisualizations();
+            });
+            updatePredictedAreasBtnText();
+        }
     });
 }

@@ -184,7 +184,10 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Areas Distribution" %}</h5>
-                    <div class="btn-group" id="areasChartButtons">
+                    <div class="btn-group align-items-center" id="areasChartButtons">
+                        <button class="btn btn-outline-secondary btn-xs me-2" id="togglePredictedAreasBtn" type="button" style="font-size: 0.8rem; padding: 0.15rem 0.5rem; height: 28px;">
+                            {% trans "Include AI-predicted areas" %}
+                        </button>
                         <button class="btn btn-outline-primary btn-sm" data-areas-view="pie">{% trans "Pie" %}</button>
                         <button class="btn btn-outline-primary btn-sm" data-areas-view="bar">{% trans "Bar" %}</button>
                     </div>

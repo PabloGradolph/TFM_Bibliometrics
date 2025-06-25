@@ -41,12 +41,12 @@ class Publication(models.Model):
     areas_all = models.JSONField("All thematic areas", blank=True, null=True)
 
     thematic_areas = models.ManyToManyField("ThematicArea", related_name="publications")
+    predicted_thematic_areas = models.ManyToManyField("ThematicArea", related_name="predicted_publications", blank=True)
     jcr_materias = models.JSONField("JCR materias", blank=True, null=True)
 
     other_authors = models.JSONField("Non-IPBLN authors (raw names)", blank=True, null=True)
     affiliations = models.JSONField("Full affiliation strings", blank=True, null=True)
     institutions = models.ManyToManyField("Institution", related_name="publications", blank=True)
-
 
     def __str__(self):
         return f"{self.title[:80]}..."
