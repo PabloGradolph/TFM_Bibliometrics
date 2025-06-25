@@ -1378,6 +1378,7 @@ export function initFiltersAndSearch() {
             .attr('height', height + margin.top + margin.bottom)
             .style('display', 'block')
             .style('margin', '0 auto')
+            .style('min-width', '550px')
             .append('g')
             .attr('transform', `translate(${radius + margin.left},${height/2 + margin.top})`);
 

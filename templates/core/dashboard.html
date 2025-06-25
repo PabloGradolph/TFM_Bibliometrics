@@ -34,6 +34,22 @@
     .publication-row:hover {
         background-color: #f8f9fa;
     }
+    .areasChart-responsive {
+        overflow-y: hidden !important;
+        overflow-x: visible;
+    }
+    @media (max-width: 991.98px) {
+        .areasChart-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #areasChart {
+            min-width: 600px;
+        }
+    }
+    #areasChart {
+        min-width: 1100px;
+    }
 </style>
 
 <div class="row justify-content-center">
@@ -192,7 +208,9 @@
                         <button class="btn btn-outline-primary btn-sm" data-areas-view="bar">{% trans "Bar" %}</button>
                     </div>
                 </div>
-                <div id="areasChart" style="height: 300px;"></div>
+                <div class="areasChart-responsive">
+                    <div id="areasChart" style="height: 300px; min-width: 400px;"></div>
+                </div>
             </div>
         </div>
     </div>
