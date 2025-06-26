@@ -1,15 +1,19 @@
 from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from bibliodata.models import Publication, Author, Collaboration
 from django.db.models import Count, Min, Max, Q, F
+from django.http import JsonResponse
+from bibliodata.models import Author  # Para mapear nombres
+from django.db.models import Max as DBMax, Min as DBMin
+from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _
 import random
 import networkx as nx
 import csv
 import random
-from django.http import JsonResponse
-from bibliodata.models import Author  # Para mapear nombres
-import math
-from django.db.models import Max as DBMax, Min as DBMin
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
 
 # Create your views here.
 
@@ -807,3 +811,113 @@ def get_author_metrics(request):
         })
     except Author.DoesNotExist:
         return JsonResponse({'error': 'Author not found'}, status=404)
+
+
+def export_report(request):
+    from io import BytesIO
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.lib.enums import TA_CENTER
+    from datetime import datetime
+    from reportlab.lib.fonts import addMapping
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfbase import pdfmetrics
+
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    author = request.GET.get('author')
+    format_ = request.GET.get('format', 'pdf')
+
+    if format_ != 'pdf':
+        return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
+
+    # Valores por defecto personalizados
+    default_year_from = '1965'
+    default_year_to = '2025'
+    default_areas = _('Todas las áreas')
+    default_institutions = _('Todas las instituciones')
+    default_types = _('Todos los tipos')
+
+    # Preparar buffer y documento
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Título dinámico
+    if author:
+        title = f"{_('Informe bibliométrico de')} {author}"
+    else:
+        title = _('Bibliometría IPBLN: Informe generado con filtros personalizados')
+
+    # Fecha de generación
+    fecha = datetime.now().strftime('%d/%m/%Y %H:%M')
+    subtitle = f"{_('Fecha de generación')}: {fecha}"
+
+    # Añadir título y subtítulo
+    title_style = styles['Title']
+    title_style.alignment = TA_CENTER
+    subtitle_style = styles['Heading3']
+    subtitle_style.alignment = TA_CENTER
+    elements.append(Paragraph(title, title_style))
+    elements.append(Spacer(1, 0.3*cm))
+    elements.append(Paragraph(subtitle, subtitle_style))
+    elements.append(Spacer(1, 0.7*cm))
+
+    # Sección de filtros
+    normal = styles['Normal']
+
+    def safe_value(val, default):
+        if isinstance(val, list):
+            return Paragraph(', '.join(val) if val else default, normal)
+        return Paragraph(str(val) if val else default, normal)
+
+    def label(text):
+        return Paragraph(f"<b>{text}</b>", normal)
+
+    filters_data = [
+        [label(_('Año desde')), safe_value(year_from, default_year_from)],
+        [label(_('Año hasta')), safe_value(year_to, default_year_to)],
+        [label(_('Áreas temáticas')), safe_value(areas, default_areas)],
+        [label(_('Instituciones')), safe_value(institutions, default_institutions)],
+        [label(_('Tipos de publicación')), safe_value(types, default_types)],
+    ]
+    if author:
+        filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
+
+    table = Table(filters_data, colWidths=[5*cm, 10*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 1*cm))
+
+    # Pie de página o sección informativa
+    info = _('Este informe ha sido generado automáticamente por la plataforma de Bibliometría IPBLN.')
+    info_style = styles['Normal']
+    info_style.textColor = colors.grey
+    info_style.alignment = TA_CENTER
+    elements.append(Spacer(1, 2*cm))
+    elements.append(Paragraph(info, info_style))
+
+    doc.build(elements)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="informe.pdf"'
+    return response

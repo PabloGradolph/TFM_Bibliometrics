@@ -13,4 +13,5 @@ urlpatterns = [
     path('api/search/authors/', views.get_author_suggestions, name='get_author_suggestions'),
     path('api/author/metrics/', views.get_author_metrics, name='get_author_metrics'),
     path('publication/<int:publication_id>/', views.publication_detail, name='publication_detail'),
+    path('api/export/report/', views.export_report, name='export_report'),
 ] 

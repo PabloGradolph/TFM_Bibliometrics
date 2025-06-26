@@ -259,6 +259,12 @@ export function initFiltersAndSearch() {
     let selectedTypesList = new Set();
     let selectedAuthorName = null;
 
+    // Exponer en window para export_report.js
+    window.selectedAreasList = selectedAreasList;
+    window.selectedInstitutionsList = selectedInstitutionsList;
+    window.selectedTypesList = selectedTypesList;
+    window.selectedAuthorName = selectedAuthorName;
+
     // Variables para el autocompletado
     let searchTimeout = null;
 
@@ -320,6 +326,7 @@ export function initFiltersAndSearch() {
     // Event listener para el autor seleccionado
     function selectAuthor(authorName) {
         selectedAuthorName = authorName;
+        window.selectedAuthorName = authorName;
         standardSearch.value = '';
         standardSearch.disabled = true;
         searchSuggestions.style.display = 'none';
@@ -339,6 +346,7 @@ export function initFiltersAndSearch() {
         // Añadir evento para eliminar el autor
         selectedAuthor.querySelector('.btn-close').addEventListener('click', () => {
             selectedAuthorName = null;
+            window.selectedAuthorName = null;
             selectedAuthor.innerHTML = '';
             standardSearch.disabled = false;
             authorLimitMessage.style.display = 'none';
@@ -657,24 +665,28 @@ export function initFiltersAndSearch() {
     function createBadge(value, container, set) {
         const badge = document.createElement('span');
         badge.className = 'badge bg-primary me-2 mb-2';
-        
         // Limitar el texto a 40 caracteres
         const displayText = value.length > 40 ? value.substring(0, 40) + '...' : value;
-        
         badge.innerHTML = `
             ${displayText}
             <button type="button" class="btn-close btn-close-white ms-1" 
                     style="font-size: 0.5rem; vertical-align: middle;"
                     aria-label="Remove"></button>
         `;
-        
         badge.querySelector('.btn-close').addEventListener('click', () => {
             set.delete(value);
             badge.remove();
+            // Actualizar window para exportación
+            if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
+            if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
+            if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
             updateVisualizations();
         });
-        
         container.appendChild(badge);
+        // Actualizar window para exportación
+        if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
+        if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
+        if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
     }
 
     // Función para limpiar todos los filtros
@@ -1657,6 +1669,7 @@ export function initFiltersAndSearch() {
         const selectedArea = areaFilter.value;
         if (selectedArea && !selectedAreasList.has(selectedArea)) {
             selectedAreasList.add(selectedArea);
+            window.selectedAreasList = selectedAreasList;
             createBadge(selectedArea, selectedAreas, selectedAreasList);
             updateFilters();
         }
@@ -1666,6 +1679,7 @@ export function initFiltersAndSearch() {
         const selectedInstitution = institutionFilter.value;
         if (selectedInstitution && !selectedInstitutionsList.has(selectedInstitution)) {
             selectedInstitutionsList.add(selectedInstitution);
+            window.selectedInstitutionsList = selectedInstitutionsList;
             createBadge(selectedInstitution, selectedInstitutions, selectedInstitutionsList);
             updateFilters();
         }
@@ -1675,6 +1689,7 @@ export function initFiltersAndSearch() {
         const selectedType = typeFilter.value;
         if (selectedType && !selectedTypesList.has(selectedType)) {
             selectedTypesList.add(selectedType);
+            window.selectedTypesList = selectedTypesList;
             createBadge(selectedType, selectedTypes, selectedTypesList);
             updateFilters();
         }
