@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "bootstrap": "^5.3.7",
     "d3": "^7.9.0",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",

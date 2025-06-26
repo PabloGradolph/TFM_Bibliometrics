@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
+import { setupExportReportButton } from './export_report';
 
 
 export function initFiltersAndSearch() {
@@ -2649,5 +2650,6 @@ export function initFiltersAndSearch() {
             });
             updatePredictedAreasBtnText();
         }
+        setupExportReportButton();
     });
 }
