@@ -5,7 +5,7 @@ from django.db.models import Count, Min, Max, Q, F
 from django.http import JsonResponse
 from bibliodata.models import Author  # Para mapear nombres
 from django.db.models import Max as DBMax, Min as DBMin
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _
 import random
@@ -14,6 +14,8 @@ import csv
 import random
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
+import base64
+from reportlab.platypus import Image
 
 # Create your views here.
 
@@ -813,27 +815,44 @@ def get_author_metrics(request):
         return JsonResponse({'error': 'Author not found'}, status=404)
 
 
+@require_http_methods(["GET", "POST"])
+@csrf_exempt
 def export_report(request):
+    import base64
     from io import BytesIO
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image
     from reportlab.lib.enums import TA_CENTER
     from datetime import datetime
     from reportlab.lib.fonts import addMapping
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfbase import pdfmetrics
+    from reportlab.lib.utils import ImageReader
 
-    year_from = request.GET.get('year_from')
-    year_to = request.GET.get('year_to')
-    areas = request.GET.getlist('areas')
-    institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
-    author = request.GET.get('author')
-    format_ = request.GET.get('format', 'pdf')
+    # Permitir POST para recibir imágenes
+    if request.method == 'POST':
+        data = request.POST
+        files = request.FILES
+    else:
+        data = request.GET
+        files = request.FILES
+
+    # DEBUG: log para ver si llegan las imágenes
+    import logging
+    logger = logging.getLogger("django")
+
+    year_from = data.get('year_from')
+    year_to = data.get('year_to')
+    areas = data.getlist('areas') if hasattr(data, 'getlist') else []
+    institutions = data.getlist('institutions') if hasattr(data, 'getlist') else []
+    types = data.getlist('types') if hasattr(data, 'getlist') else []
+    author = data.get('author')
+    format_ = data.get('format', 'pdf')
+    areas_view = data.get('areas_view')
 
     if format_ != 'pdf':
         return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
@@ -845,9 +864,10 @@ def export_report(request):
     default_institutions = _('Todas las instituciones')
     default_types = _('Todos los tipos')
 
-    # Preparar buffer y documento
     buffer = BytesIO()
+    doc_title = 'Bibliometría IPBLN: Informe'
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    doc.title = doc_title
     elements = []
     styles = getSampleStyleSheet()
 
@@ -873,15 +893,12 @@ def export_report(request):
 
     # Sección de filtros
     normal = styles['Normal']
-
     def safe_value(val, default):
         if isinstance(val, list):
             return Paragraph(', '.join(val) if val else default, normal)
         return Paragraph(str(val) if val else default, normal)
-
     def label(text):
         return Paragraph(f"<b>{text}</b>", normal)
-
     filters_data = [
         [label(_('Año desde')), safe_value(year_from, default_year_from)],
         [label(_('Año hasta')), safe_value(year_to, default_year_to)],
@@ -891,7 +908,6 @@ def export_report(request):
     ]
     if author:
         filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
-
     table = Table(filters_data, colWidths=[5*cm, 10*cm])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
@@ -906,6 +922,39 @@ def export_report(request):
     elements.append(table)
     elements.append(Spacer(1, 1*cm))
 
+    # Añadir imágenes según la lógica pedida
+    timeline_img = data.get('timeline_img')
+    pie_img = data.get('pie_img')
+    bar_img = data.get('bar_img')
+
+    def add_image_section(title, img_b64):
+        if img_b64:
+            elements.append(Paragraph(f'<b>{title}</b>', styles['Heading4']))
+            elements.append(Spacer(1, 0.2*cm))
+            # Quitar el prefijo data:image/png;base64,
+            if img_b64.startswith('data:image'):
+                img_b64 = img_b64.split(',')[1]
+            img_bytes = base64.b64decode(img_b64)
+            img_io = BytesIO(img_bytes)
+            img = Image(img_io, width=18*cm, height=9*cm)
+            elements.append(img)
+            elements.append(Spacer(1, 0.7*cm))
+
+    # Lógica: si bar_img existe, solo timeline y bar. Si no, timeline y pie.
+    if timeline_img:
+        add_image_section(_('Línea temporal de publicaciones'), timeline_img)
+    else:
+        logger.warning('No hay imagen para línea temporal')
+
+    if bar_img:
+        add_image_section(_('Distribución de áreas (gráfico de barras)'), bar_img)
+    elif pie_img:
+        add_image_section(_('Distribución de áreas (gráfico circular)'), pie_img)
+    else:
+        logger.warning('No hay imagen para gráfico de barras ni circular')
+        elements.append(Paragraph('<b>No se han podido exportar los gráficos.</b>', styles['Heading4']))
+        elements.append(Spacer(1, 0.7*cm))
+
     # Pie de página o sección informativa
     info = _('Este informe ha sido generado automáticamente por la plataforma de Bibliometría IPBLN.')
     info_style = styles['Normal']
@@ -914,10 +963,12 @@ def export_report(request):
     elements.append(Spacer(1, 2*cm))
     elements.append(Paragraph(info, info_style))
 
-    doc.build(elements)
+    def set_metadata(canvas, doc):
+        canvas.setTitle(doc_title)
+    doc.build(elements, onFirstPage=set_metadata, onLaterPages=set_metadata)
     pdf = buffer.getvalue()
     buffer.close()
 
     response = HttpResponse(pdf, content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="informe.pdf"'
+    response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Informe.pdf"'
     return response

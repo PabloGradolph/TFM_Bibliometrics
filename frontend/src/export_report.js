@@ -109,6 +109,26 @@ export function setupExportReportButton() {
         document.body.appendChild(loadingOverlay);
     }
 
+    // Función para convertir SVG a PNG base64 con escala
+    function svgToPngBase64(svgElement, width, height, callback, scale = 3) {
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(svgBlob);
+        const img = new window.Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = (width || img.width) * scale;
+            canvas.height = (height || img.height) * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(scale, 0, 0, scale, 0, 0);
+            ctx.drawImage(img, 0, 0);
+            const pngBase64 = canvas.toDataURL('image/png');
+            callback(pngBase64);
+            URL.revokeObjectURL(url);
+        };
+        img.src = url;
+    }
+
     // Evento para el botón de continuar
     modal.addEventListener('click', function(e) {
         if (e.target && e.target.id === 'confirmExportReport') {
@@ -124,9 +144,8 @@ export function setupExportReportButton() {
             // Recoger filtros actuales del dashboard
             const yearFrom = document.getElementById('yearFrom')?.value;
             const yearTo = document.getElementById('yearTo')?.value;
-            // Áreas seleccionadas (badges)
             let areas = [];
-            if (window.selectedAreasList) {
+            if (window.selectedAreasList && window.selectedAreasList.size > 0) {
                 areas = Array.from(window.selectedAreasList);
             } else {
                 const areaFilter = document.getElementById('areaFilter');
@@ -135,7 +154,7 @@ export function setupExportReportButton() {
                 }
             }
             let institutions = [];
-            if (window.selectedInstitutionsList) {
+            if (window.selectedInstitutionsList && window.selectedInstitutionsList.size > 0) {
                 institutions = Array.from(window.selectedInstitutionsList);
             } else {
                 const institutionFilter = document.getElementById('institutionFilter');
@@ -144,7 +163,7 @@ export function setupExportReportButton() {
                 }
             }
             let types = [];
-            if (window.selectedTypesList) {
+            if (window.selectedTypesList && window.selectedTypesList.size > 0) {
                 types = Array.from(window.selectedTypesList);
             } else {
                 const typeFilter = document.getElementById('typeFilter');
@@ -152,45 +171,131 @@ export function setupExportReportButton() {
                     types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
             }
-            // Autor seleccionado
             let author = null;
             if (window.selectedAuthorName) {
                 author = window.selectedAuthorName;
             }
 
-            const params = new URLSearchParams();
-            if (yearFrom) params.append('year_from', yearFrom);
-            if (yearTo) params.append('year_to', yearTo);
-            areas.forEach(area => params.append('areas', area));
-            institutions.forEach(inst => params.append('institutions', inst));
-            types.forEach(type => params.append('types', type));
-            if (author) params.append('author', author);
-            params.append('format', 'pdf');
+            // Recoger los SVG de los gráficos
+            const timelineSVG = document.querySelector('#timelineChart svg');
+            const pieSVG = document.querySelector('#areasChart svg');
+            // Para el bar chart, si está activo, es el mismo div que pie pero con otro SVG
+            let barSVG = null;
+            if (pieSVG && pieSVG.parentElement) {
+                // Si hay más de un SVG en #areasChart, el segundo es el bar
+                const svgs = document.querySelectorAll('#areasChart svg');
+                if (svgs.length > 1) {
+                    barSVG = svgs[1];
+                } else if (document.querySelector('[data-areas-view="bar"]')?.classList.contains('active')) {
+                    barSVG = pieSVG;
+                }
+            }
 
-            fetch(`/api/export/report/?${params.toString()}`, {
-                method: 'GET',
-            })
-            .then(response => {
-                if (!response.ok) throw new Error('Error al generar el informe');
-                return response.blob();
-            })
-            .then(blob => {
-                // Descargar el PDF
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `informe.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-            })
-            .catch(err => {
-                alert(lang === 'es' ? 'Error al generar el informe' : 'Error generating report');
-            })
-            .finally(() => {
-                loadingOverlay.style.display = 'none';
+            // Si solo hay un SVG, lo usamos para ambos (pie/bar) según el botón activo
+            if (!barSVG) {
+                if (document.querySelector('[data-areas-view="bar"]')?.classList.contains('active')) {
+                    barSVG = pieSVG;
+                }
+            }
+
+            // LOG para depuración
+            console.log('SVGs encontrados:', {
+                timelineSVG: !!timelineSVG,
+                pieSVG: !!pieSVG,
+                barSVG: !!barSVG
             });
+
+            // Detectar la vista activa de áreas
+            let areas_view = 'pie';
+            if (document.querySelector('[data-areas-view="bar"]')?.classList.contains('active')) {
+                areas_view = 'bar';
+            }
+
+            // Detectar el idioma de la URL para la API
+            const apiExportUrl = `/${lang}/api/export/report/`;
+
+            // Convertir SVGs a PNG base64 (async)
+            let imagesReady = 0;
+            const images = { timeline: null, pie: null, bar: null };
+            const checkAndSend = () => {
+                if (imagesReady === 3) {
+                    // LOG para depuración
+                    console.log('Imágenes base64 generadas:', images);
+                    // Enviar al backend
+                    const formData = new FormData();
+                    if (yearFrom) formData.append('year_from', yearFrom);
+                    if (yearTo) formData.append('year_to', yearTo);
+                    areas.forEach(area => formData.append('areas', area));
+                    institutions.forEach(inst => formData.append('institutions', inst));
+                    types.forEach(type => formData.append('types', type));
+                    if (author) formData.append('author', author);
+                    formData.append('format', 'pdf');
+                    formData.append('areas_view', areas_view);
+                    if (images.timeline) formData.append('timeline_img', images.timeline);
+                    if (images.pie) formData.append('pie_img', images.pie);
+                    if (images.bar) formData.append('bar_img', images.bar);
+
+                    fetch(apiExportUrl, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Error al generar el informe');
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        // Descargar el PDF
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Bibliometria_IPBLN_Informe.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(url);
+                    })
+                    .catch(err => {
+                        alert(lang === 'es' ? 'Error al generar el informe' : 'Error generating report');
+                    })
+                    .finally(() => {
+                        loadingOverlay.style.display = 'none';
+                    });
+                }
+            };
+
+            // Timeline
+            if (timelineSVG) {
+                svgToPngBase64(timelineSVG, timelineSVG.clientWidth, timelineSVG.clientHeight, (b64) => {
+                    images.timeline = b64;
+                    imagesReady++;
+                    checkAndSend();
+                }, 3);
+            } else {
+                imagesReady++;
+                checkAndSend();
+            }
+            // Pie
+            if (pieSVG) {
+                svgToPngBase64(pieSVG, pieSVG.clientWidth, pieSVG.clientHeight, (b64) => {
+                    images.pie = b64;
+                    imagesReady++;
+                    checkAndSend();
+                }, 3);
+            } else {
+                imagesReady++;
+                checkAndSend();
+            }
+            // Bar
+            if (barSVG) {
+                svgToPngBase64(barSVG, barSVG.clientWidth, barSVG.clientHeight, (b64) => {
+                    images.bar = b64;
+                    imagesReady++;
+                    checkAndSend();
+                }, 3);
+            } else {
+                imagesReady++;
+                checkAndSend();
+            }
         }
     });
 } 
