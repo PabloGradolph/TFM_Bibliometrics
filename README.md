@@ -1,4 +1,4 @@
-# 📊 Bibliometrics CSIC – TFM
+# 📊 Bibliometría IPBLN – TFM
 
 **Desarrollo de una herramienta web interactiva para el análisis de producción científica a partir de datos GESBIB del CSIC**.
 
