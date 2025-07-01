@@ -12,6 +12,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# API Token and base URL
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +36,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'accounts',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,7 +47,6 @@ INSTALLED_APPS = [
     'corsheaders',     # Para manejar CORS
     'core',
     'data',
-    'visualization',
     'analysis',
     'bibliodata',
 ]
@@ -168,3 +172,14 @@ REST_FRAMEWORK = {
 
 # Configuración de CORS
 CORS_ALLOW_ALL_ORIGINS = True  # En desarrollo, en producción deberías especificar los orígenes permitidos
+
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
+password = os.getenv("MY_PASSWORD")
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'pablo.gradolph@gmail.com'
+EMAIL_HOST_PASSWORD = password
+DEFAULT_FROM_EMAIL = 'noreply@ipbln.local'

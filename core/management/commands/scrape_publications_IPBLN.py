@@ -76,35 +76,6 @@ def extract_id_from_url(url, tipo):
     return match.group(1) if match else None
 
 
-def count_existing_rows():
-    """
-    Counts total saved rows across all parts of the output.
-
-    Returns:
-        int: Number of records already saved.
-    """
-    total = 0
-    for i in range(1, 7):
-        path = f"data/data/json/gesbib_items_part{i}.jsonl"
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                total += sum(1 for _ in f)
-    return total
-
-
-def get_output_file():
-    """
-    Determines the output file path based on current data volume.
-
-    Returns:
-        str: File path to append new data.
-    """
-    total = count_existing_rows()
-    part = (total // 100000) + 1
-    part = min(part, 6)
-    return f"data/data/json/gesbib_items_part{part}.jsonl"
-
-
 class Command(BaseCommand):
     help = 'Extrae información de impacto de publicaciones desde GesBIB'
 
@@ -126,9 +97,8 @@ class Command(BaseCommand):
             url = 'https://apps.csic.es/gesbib/adv/items.html'
             driver.get(url)
 
-            total_rows = count_existing_rows()
-            page = total_rows // 100 + 1
-            self.stdout.write(f"Continuando desde la página {page} (aprox {total_rows} publicaciones guardadas).")
+            page = 11
+            self.stdout.write(f"Continuando desde la página {page}.")
 
             # Login
             driver.find_element(By.ID, "username").send_keys(options['user'])
@@ -137,6 +107,13 @@ class Command(BaseCommand):
 
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "mainForm")))
             self.stdout.write("✅ Login exitoso.")
+
+            # Select 100 results per page
+            select = Select(WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "mainForm:dataTable_rppDD"))
+            ))
+            select.select_by_value("100")
+            time.sleep(5)
 
             # Código para sacar sólo publicaciones del IPBLN
             page = 1
@@ -156,13 +133,6 @@ class Command(BaseCommand):
             apply_button.click()
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "mainForm:dataTable")))
             self.stdout.write("✅ Filtro aplicado correctamente (IPBLN).")
-            time.sleep(5)
-
-            # Select 100 results per page
-            select = Select(WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "mainForm:dataTable_rppDD"))
-            ))
-            select.select_by_value("100")
             time.sleep(5)
 
             while True:
@@ -222,7 +192,7 @@ class Command(BaseCommand):
                     row_info["ids_gb"] = ids_gb
                     page_data.append(row_info)
 
-                output_file = "data/data/IPBLN/csv/publications_only_IPBLN.jsonl"
+                output_file = "data/data/IPBLN/json/items_only_IPBLN.jsonl"
                 with open(output_file, 'a', encoding='utf-8') as f:
                     for row in page_data:
                         f.write(json.dumps(row, ensure_ascii=False) + '\n')

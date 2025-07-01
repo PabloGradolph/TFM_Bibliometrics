@@ -14,8 +14,8 @@ import csv
 import os
 
 # Input and output file paths
-INPUT_FILE = "data/data/json/gesbib_institutions.jsonl"
-OUTPUT_FILE = "data/data/csv/gesbib_institutions.csv"
+INPUT_FILE = "data/data/IPBLN/json/gesbib_institutions.jsonl"
+OUTPUT_FILE = "data/data/IPBLN/csv/gesbib_institutions.csv"
 
 # Fields to extract
 FIELDS_TO_EXTRACT = [

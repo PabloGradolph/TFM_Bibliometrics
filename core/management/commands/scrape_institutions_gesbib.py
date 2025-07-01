@@ -126,7 +126,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Iniciando el scraping de instituciones de GesBIB...')
 
-        output_path = 'data/data/json/gesbib_institutions.jsonl'
+        output_path = 'data/data/IPBLN/json/gesbib_institutions.jsonl'
 
         chrome_options = Options()
         # chrome_options.add_argument('--headless')

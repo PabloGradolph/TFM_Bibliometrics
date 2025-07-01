@@ -17,7 +17,7 @@ import csv
 # Input and output file paths
 JSONL_INPUT_PATH = "data/data/IPBLN/json/authors_IPBLN.jsonl"
 CSV_OUTPUT_PATH = "data/data/IPBLN/csv/authors_IPBLN_not_cleaned.csv"
-CLEANED_CSV_OUTPUT_PATH = "data/data/csv/authors_IPBLN.csv"
+CLEANED_CSV_OUTPUT_PATH = "data/data/IPBLN/csv/authors_IPBLN.csv"
 
 # Fields to extract from each author record
 FIELDS_TO_EXTRACT = [

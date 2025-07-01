@@ -16,12 +16,14 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 import base64
 from reportlab.platypus import Image
+from django.contrib.auth.decorators import login_required
 
 # Create your views here.
 
 def home(request):
     return render(request, 'core/home.html')
 
+@login_required(login_url='/accounts/login/')
 def dashboard(request):
     return render(request, 'core/dashboard.html')
 

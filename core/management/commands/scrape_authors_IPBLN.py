@@ -70,12 +70,12 @@ class Command(BaseCommand):
         output_path = 'data/data/IPBLN/json/authors_IPBLN.jsonl'
 
         # Determine current page from existing lines
-        if os.path.exists(output_path):
-            with open(output_path, 'r', encoding='utf-8') as f:
-                line_count = sum(1 for _ in f)
-            current_page = line_count // 500 + 1
-        else:
-            current_page = 1
+        # if os.path.exists(output_path):
+        #     with open(output_path, 'r', encoding='utf-8') as f:
+        #         line_count = sum(1 for _ in f)
+        #     current_page = line_count // 500 + 1
+        # else:
+        current_page = 1
 
         self.stdout.write(self.style.SUCCESS(f"📄 Retomando desde página {current_page}"))
 

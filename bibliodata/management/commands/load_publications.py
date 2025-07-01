@@ -21,7 +21,6 @@ def parse_number(val):
         return None
 
 
-
 class Command(BaseCommand):
     help = "Carga publicaciones desde items.csv, impacto.csv y JSON enriquecido"
 
@@ -42,9 +41,14 @@ class Command(BaseCommand):
         created, updated = 0, 0
 
         for pub_id, item in items.items():
-            j = json_data.get(pub_id, {}).get("solrInput", {})
+            j = json_data.get(pub_id, {}).get("sd", {})
             print(f"Procesando publicación {pub_id}...")
-            jv = lambda k: j.get(k, {}).get("value") if isinstance(j.get(k), dict) else None
+            def jv(k):
+                val = j.get(k)
+                if isinstance(val, dict) and "value" in val:
+                    return val["value"]
+                else:
+                    return val  # puede ser lista, string, número, etc.
             imp = impact.get(pub_id, {})
 
             # === Datos básicos ===
@@ -104,7 +108,7 @@ class Command(BaseCommand):
             obj.authors.set(autores_obj)
 
             otros_autores_nombres = []
-            lista_autores_json = j.get("autores", {}).get("value", [])
+            lista_autores_json = j.get("autores", [])
             for autor_str in lista_autores_json:
                 partes = autor_str.split("|", 1)
                 if len(partes) == 2:

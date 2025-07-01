@@ -8,7 +8,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         year = 2025
         source = "GESBIB"
-        csv_path = 'data/data/csv/gesbib_institutions.csv'
+        csv_path = 'data/data/IPBLN/csv/gesbib_institutions.csv'
 
         with open(csv_path, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)

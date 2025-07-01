@@ -15,8 +15,7 @@ import csv
 import pandas as pd
 
 # Output TSV path
-# OUTPUT_FILE = 'data/data/json/publications_only_IPBLN.csv'
-OUTPUT_FILE = 'data/data/csv/gesbib_items.csv'
+OUTPUT_FILE = 'data/data/IPBLN/csv/items_only_IPBLN.csv'
 
 # Fieldnames for output TSV
 FIELDNAMES = [
@@ -141,8 +140,7 @@ def main():
     """
     Main execution function.
     """
-    input_files = [f"data/data/json/gesbib_items_part{i}.jsonl" for i in range(1, 7)]
-    # input_file = 'data/data/csv/IPBLN/publications_only_IPBLN.jsonl'
+    input_files = ["data/data/IPBLN/json/items_only_IPBLN.jsonl"]
     data = []
     for input_file in input_files:
         data.extend(parse_publication_jsonl(input_file, OUTPUT_FILE))

@@ -58,34 +58,6 @@ def extract_id_from_url(url):
     return match.group(1) if match else None
 
 
-def count_existing_rows():
-    """
-    Counts the total number of lines across all impacto_part*.jsonl files.
-
-    Returns:
-        int: Total number of saved records.
-    """
-    total = 0
-    for i in range(1, 7):
-        path = f"data/data/json/impacto_part{i}.jsonl"
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                total += sum(1 for _ in f)
-    return total
-
-
-def get_output_file():
-    """
-    Determines the output file based on current number of rows.
-
-    Returns:
-        str: Path to the correct output .jsonl file.
-    """
-    total = count_existing_rows()
-    part = (total // 100000) + 1
-    part = min(part, 6)  # limit to 6 parts
-    return f"data/data/json/impacto_part{part}.jsonl"
-
 
 class Command(BaseCommand):
     help = 'Extrae información de impacto de publicaciones desde GesBIB'
@@ -108,9 +80,8 @@ class Command(BaseCommand):
             url = 'https://apps.csic.es/gesbib/adv/impactoItems.html'
             driver.get(url)
 
-            total_rows = count_existing_rows()
-            page = total_rows // 100 + 1
-            self.stdout.write(f"Continuando desde la página {page} (aprox {total_rows} publicaciones guardadas).")
+            page = 1
+            self.stdout.write(f"Continuando desde la página {page}.")
 
             # Login
             driver.find_element(By.ID, "username").send_keys(options['user'])
@@ -120,8 +91,15 @@ class Command(BaseCommand):
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "mainForm")))
             self.stdout.write("✅ Login exitoso.")
 
+            # Seleccionar 100 resultados por página
+            select = Select(WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "mainForm:dataTable_rppDD"))
+            ))
+            select.select_by_value("100")
+            time.sleep(6)
+            
             # Activate all checkboxes
-            for i in range(881, 887):
+            for i in range(909, 915):
                 checkbox = driver.find_element(By.ID, f"mainForm:j_idt{i}")
                 checkbox.click()
                 time.sleep(1.5)
@@ -154,13 +132,6 @@ class Command(BaseCommand):
             )
             self.stdout.write("✅ Filtro aplicado correctamente (IPBLN).")
             time.sleep(5)
-
-            # Seleccionar 100 resultados por página
-            # select = Select(WebDriverWait(driver, 10).until(
-            #     EC.presence_of_element_located((By.ID, "mainForm:dataTable_rppDD"))
-            # ))
-            # select.select_by_value("100")
-            # time.sleep(6)
 
             while True:
                 WebDriverWait(driver, 15).until(
@@ -209,7 +180,7 @@ class Command(BaseCommand):
 
                     data.append(row_info)
 
-                output_file = "data/data/IPBLN/csv/impact_only_IPBLN.jsonl"
+                output_file = "data/data/IPBLN/json/impact_only_IPBLN.jsonl"
                 with open(output_file, 'a', encoding='utf-8') as f:
                     for row in data:
                         f.write(json.dumps(row, ensure_ascii=False) + '\n')

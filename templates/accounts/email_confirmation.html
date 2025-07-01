@@ -1,0 +1,8 @@
+{% load i18n %}
+{% blocktrans with user_email=user.email confirm_url=confirm_url %}
+Hello {{ user_email }},<br><br>
+Thank you for registering on the platform.<br>
+Please click the following link to confirm your email and activate your account:<br><br>
+<a href="{{ confirm_url }}">Confirm my account</a><br><br>
+If you did not register, you can ignore this message.
+{% endblocktrans %} 

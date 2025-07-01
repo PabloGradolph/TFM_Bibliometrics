@@ -172,8 +172,8 @@ def main():
     # raw_output = "data/data/IPBLN/csv/impact_only_IPBLN.csv"
     # clean_output = raw_output.replace(".csv", "_clean.csv")
 
-    input_files = [f"data/data/json/impact_part{i}.jsonl" for i in range(1, 7)]
-    raw_output = "data/data/csv/gesbib_impact.csv"
+    input_files = ["data/data/IPBLN/json/impact_only_IPBLN.jsonl"]
+    raw_output = "data/data/IPBLN/csv/impact_only_IPBLN.csv"
     clean_output = raw_output.replace(".csv", "_clean.csv")
 
     data = []
