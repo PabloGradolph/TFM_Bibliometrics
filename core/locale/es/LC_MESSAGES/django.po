@@ -357,6 +357,9 @@ msgstr "¿Ya tienes cuenta?"
 msgid "Login"
 msgstr "Iniciar sesión"
 
+msgid "Logout"
+msgstr "Cerrar sesión"
+
 msgid "Don't have an account?"
 msgstr "¿No tienes cuenta?"
 

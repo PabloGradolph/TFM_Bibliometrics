@@ -21,8 +21,14 @@ def register(request):
         email = request.POST.get('email')
         password = request.POST.get('password')
         password2 = request.POST.get('password2')
+        # Validación de dominio de email
+        allowed_domains = ("@csic.es", "@ipb.csic.es")
+        allowed_emails = ["pablo.gradolph@gmail.com", "pablo.gradolph2@gmail.com"]
         if not email or not password or not password2:
             messages.error(request, _('Email y contraseña requeridos.'))
+            return render(request, 'accounts/register.html')
+        if not (email.endswith(allowed_domains) or email in allowed_emails):
+            messages.error(request, _('Solo se permiten emails @csic.es, @ipb.csic.es o los correos autorizados.'))
             return render(request, 'accounts/register.html')
         if password != password2:
             messages.error(request, _('Las contraseñas no coinciden.'))
