@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Publication, Author, Collaboration, Institution, InstitutionMetric, ThematicArea, ThematicCluster, ReportTemplate, PublicationMetric
+from .models import Publication, Author, Collaboration, Institution, InstitutionMetric, ThematicArea, PublicationMetric
 
 @admin.register(Publication)
 class PublicationAdmin(admin.ModelAdmin):
@@ -93,33 +93,3 @@ class ThematicAreaAdmin(admin.ModelAdmin):
     """
     list_display = ("name",)
     search_fields = ("name",)
-
-
-@admin.register(ThematicCluster)
-class ThematicClusterAdmin(admin.ModelAdmin):
-    """
-    Admin configuration for publication clusters.
-
-    Features:
-        - Displays name and description of each cluster.
-        - Enables search by cluster name and description.
-        - Allows editing the many-to-many relation with publications using horizontal filter.
-    """
-    list_display = ("name", "description")
-    search_fields = ("name", "description")
-    filter_horizontal = ("publications",)
-
-
-@admin.register(ReportTemplate)
-class ReportTemplateAdmin(admin.ModelAdmin):
-    """
-    Admin configuration for the ReportTemplate model.
-
-    Features:
-        - list_display: Shows key fields in the list view (name, entity type, output format, rendering engine, active status).
-        - search_fields: Allows text-based search on name and description.
-        - list_filter: Adds sidebar filters to narrow down templates by type, engine or availability.
-    """
-    list_display = ("name", "entity_type", "file_type", "engine", "is_active")
-    search_fields = ("name", "description")
-    list_filter = ("entity_type", "file_type", "engine", "is_active")
