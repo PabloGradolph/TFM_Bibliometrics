@@ -12,11 +12,16 @@ import random
 import networkx as nx
 import csv
 import random
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
 import base64
 from reportlab.platypus import Image
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.colors import blue
+import unicodedata
+from django.urls import reverse
 
 # Create your views here.
 
@@ -30,6 +35,7 @@ def dashboard(request):
 def about(request):
     return render(request, 'core/about.html')
 
+@login_required(login_url='/accounts/login/')
 def get_filter_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -156,6 +162,7 @@ def get_filter_data(request):
         'publication_types': filtered_types_with_counts
     })
 
+@login_required(login_url='/accounts/login/')
 def get_filtered_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -340,6 +347,7 @@ def get_filtered_data(request):
         'types': types_data
     })
 
+@login_required(login_url='/accounts/login/')
 def get_author_suggestions(request):
     query = request.GET.get('q', '').strip()
     if not query:
@@ -356,6 +364,7 @@ def get_author_suggestions(request):
         'suggestions': list(authors)
     })
 
+@login_required(login_url='/accounts/login/')
 def search_publications(request):
     query = request.GET.get('q', '').strip()
     author = request.GET.get('author', '').strip()
@@ -402,6 +411,7 @@ def search_publications(request):
 
     return JsonResponse({'results': results})
 
+@login_required(login_url='/accounts/login/')
 def publication_detail(request, publication_id):
     # Obtener la publicación por su ID, o mostrar 404 si no existe
     publication = get_object_or_404(Publication, id=publication_id)
@@ -425,6 +435,7 @@ def publication_detail(request, publication_id):
 
 
 # Mapeo entre clave y función de ordenación
+@login_required(login_url='/accounts/login/')
 def get_metric_value(pub, key):
     if key == 'International Collaboration':
         return pub.international_collab if pub.international_collab is not None else -1
@@ -441,6 +452,7 @@ def get_metric_value(pub, key):
     return float(metric.impact_factor) if metric and metric.impact_factor is not None else -1
 
 
+@login_required(login_url='/accounts/login/')
 def get_publications_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -559,6 +571,7 @@ def get_publications_data(request):
         }
     })
 
+@login_required(login_url='/accounts/login/')
 def get_collaboration_network(request):
     try:
         community_view = request.GET.get('communityView', 'department')
@@ -680,6 +693,7 @@ def get_collaboration_network(request):
                         G.add_edge(source, target, weight=weight)
 
         if community_view == 'keywords':
+            clustering = None  # <-- Inicializar para evitar errores si no se asigna en los if/else
             for node in G.nodes():
                 author = Author.objects.get(gesbib_id=node)
                 if global_mode:
@@ -787,6 +801,7 @@ def get_collaboration_network(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required(login_url='/accounts/login/')
 def get_author_metrics(request):
     author_name = request.GET.get('author_id')  # Ahora recibimos el nombre
     if not author_name:
@@ -819,10 +834,10 @@ def get_author_metrics(request):
 
 @require_http_methods(["GET", "POST"])
 @csrf_exempt
+@login_required(login_url='/accounts/login/')
 def export_report(request):
     import base64
     from io import BytesIO
-    from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.lib import colors
@@ -854,7 +869,6 @@ def export_report(request):
     types = data.getlist('types') if hasattr(data, 'getlist') else []
     author = data.get('author')
     format_ = data.get('format', 'pdf')
-    areas_view = data.get('areas_view')
 
     if format_ != 'pdf':
         return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
@@ -924,6 +938,15 @@ def export_report(request):
     elements.append(table)
     elements.append(Spacer(1, 1*cm))
 
+    base_url = request.build_absolute_uri(settings.MEDIA_URL + 'networks_html/')
+    link_style = ParagraphStyle(
+        'LinkStyle',
+        parent=styles['Normal'],
+        textColor=blue,
+        underline=True,
+        fontSize=12,
+    )
+
     # Añadir imágenes según la lógica pedida
     timeline_img = data.get('timeline_img')
     pie_img = data.get('pie_img')
@@ -943,6 +966,7 @@ def export_report(request):
             elements.append(Spacer(1, 0.7*cm))
 
     # Lógica: si bar_img existe, solo timeline y bar. Si no, timeline y pie.
+    elements.append(PageBreak())
     if timeline_img:
         add_image_section(_('Línea temporal de publicaciones'), timeline_img)
     else:
@@ -957,17 +981,123 @@ def export_report(request):
         elements.append(Paragraph('<b>No se han podido exportar los gráficos.</b>', styles['Heading4']))
         elements.append(Spacer(1, 0.7*cm))
 
-    # Pie de página o sección informativa
-    info = _('Este informe ha sido generado automáticamente por la plataforma de Bibliometría IPBLN.')
-    info_style = styles['Normal']
-    info_style.textColor = colors.grey
-    info_style.alignment = TA_CENTER
-    elements.append(Spacer(1, 2*cm))
-    elements.append(Paragraph(info, info_style))
+    # --- Añadir enlaces a redes interactivas ---
+    elements.append(Spacer(1, 0.7*cm))
+    elements.append(Paragraph('<b>Visualizar redes de colaboración entre IPs:</b>', styles['Heading4']))
+    # Enlaces fijos
+    elements.append(Paragraph(f'<a href="{base_url}departments_comunidades.html">Departamentos</a>', link_style))
+    elements.append(Paragraph(f'<a href="{base_url}lovaina_comunidades.html">Lovaina (7 comunidades)</a>', link_style))
+    elements.append(Paragraph(f'<a href="{base_url}leiden_comunidades.html"> Leiden (6 comunidades)</a>', link_style))
+    # Palabras clave (si existe)
+    network_html = data.get('network_html')
+    if network_html:
+        elements.append(Paragraph(f'<a href="{base_url}{network_html}">Red de Coautorías por Palabras Clave</a>', link_style))
+        
+    # --- Apartado de autor seleccionado (ahora lo primero) ---
+    if author:
+        from bibliodata.models import Author
+        elements.append(Spacer(1, 0.5*cm))
+        elements.append(Paragraph(f'<b>Métricas del autor seleccionado</b>', styles['Heading3']))
+        try:
+            author_obj = Author.objects.get(name=author)
+            metrics = [
+                (_('ORCID'), author_obj.orcid_link or '-'),
+                (_('Total publicaciones'), author_obj.total_publications or '-'),
+                (_('Total citas'), author_obj.total_citations or '-'),
+                (_('Citas WoS'), author_obj.citations_wos or '-'),
+                (_('Citas Scopus'), author_obj.citations_scopus or '-'),
+                (_('Índice h (WoS/Scopus)'), author_obj.h_index or '-'),
+                (_('Índice h GESBIB'), author_obj.h_index_gb or '-'),
+                (_('Índice h5 GESBIB'), author_obj.h_index_h5gb or '-'),
+                (_('Índice internacionalización'), author_obj.international_index or '-')
+            ]
+            table = Table(metrics, colWidths=[7*cm, 8*cm])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
+            ]))
+            elements.append(table)
+        except Author.DoesNotExist:
+            elements.append(Paragraph('<b>No se han encontrado métricas para el autor seleccionado.</b>', styles['Normal']))
+        elements.append(Spacer(1, 0.7*cm))
+        
+        # Enlace a la red de colaboración del autor
+        def slugify(value):
+            value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+            value = value.replace(' ', '_').replace('/', '_').replace(',', '').replace('.', '')
+            return value
+        author_slug = slugify(author)
+        author_html = f'collab_{author_slug}.html'
+        elements.append(Paragraph(f'<a href="{base_url}{author_html}">Red de colaboración de {author}</a>', link_style))
+        elements.append(Spacer(1, 1*cm))
+
+    # --- Sección de publicaciones filtradas ---
+    elements.append(PageBreak())
+    elements.append(Paragraph('<b>Listado de publicaciones filtradas</b>', styles['Heading2']))
+    # Construir el queryset con los mismos filtros
+    pubs_query = Publication.objects.all()
+    if year_from:
+        pubs_query = pubs_query.filter(year__gte=year_from)
+    if year_to:
+        pubs_query = pubs_query.filter(year__lte=year_to)
+    if areas:
+        pubs_query = pubs_query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        pubs_query = pubs_query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for t in types:
+            type_query |= Q(publication_type__icontains=t)
+        pubs_query = pubs_query.filter(type_query)
+    if author:
+        pubs_query = pubs_query.filter(authors__name=author)
+    pubs = pubs_query.distinct().order_by('-year', '-publication_date')
+    num_pubs = pubs.count()
+    # Mostrar el número de publicaciones
+    elements.append(Paragraph(f'Se muestran {num_pubs} publicaciones que cumplen los filtros seleccionados.', styles['Normal']))
+    elements.append(Spacer(1, 0.2*cm))
+    # Construir la tabla
+    data = [[Paragraph('<b>Título</b>', styles['Normal']), Paragraph('<b>Año</b>', styles['Normal'])]]
+    for pub in pubs:
+        pub_url = request.build_absolute_uri(f"/publication/{pub.id}")
+        title_link = f'<a href="{pub_url}">{pub.title}</a>'
+        data.append([Paragraph(title_link, link_style), str(pub.year) if pub.year else '-'])
+    if len(data) == 1:
+        elements.append(Paragraph('No hay publicaciones que coincidan con los filtros seleccionados.', styles['Normal']))
+    else:
+        table = Table(data, colWidths=[13*cm, 2.5*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
+        ]))
+        elements.append(table)
+
+    # Pie de página en todas las páginas
+    def add_footer(canvas, doc):
+        footer_text = _('Este informe ha sido generado automáticamente por la plataforma de Bibliometría IPBLN.')
+        canvas.saveState()
+        canvas.setFont('Helvetica', 9)
+        canvas.setFillColor(colors.grey)
+        width, height = A4
+        canvas.drawCentredString(width / 2, 1.2 * cm, footer_text)
+        canvas.restoreState()
 
     def set_metadata(canvas, doc):
         canvas.setTitle(doc_title)
-    doc.build(elements, onFirstPage=set_metadata, onLaterPages=set_metadata)
+        add_footer(canvas, doc)
+    doc.build(elements, onFirstPage=set_metadata, onLaterPages=add_footer)
     pdf = buffer.getvalue()
     buffer.close()
 

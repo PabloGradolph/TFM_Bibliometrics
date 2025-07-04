@@ -5,13 +5,14 @@ import networkx as nx
 from pyvis.network import Network
 import os
 import time
+import unicodedata
 
 
 class Command(BaseCommand):
     help = "Genera un archivo HTML con la red de colaboración para cada autor."
 
     def handle(self, *args, **options):
-        output_dir = "data/data/networks_html"
+        output_dir = "media/networks_html"
         os.makedirs(output_dir, exist_ok=True)
 
         authors = Author.objects.all()
@@ -88,7 +89,14 @@ class Command(BaseCommand):
                     color="#3b8bff"
                 )
 
-            file_safe_name = author.name.replace(" ", "_").replace(",", "").replace(".", "")
+            def slugify_filename(name):
+                # Quitar acentos/tildes y dejar solo ASCII
+                name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+                # Quitar espacios, comas, puntos, barras, etc.
+                name = name.replace(" ", "_").replace(",", "").replace(".", "").replace("/", "_")
+                return name
+
+            file_safe_name = slugify_filename(author.name)
             file_path = os.path.join(output_dir, f"collab_{file_safe_name}.html")
             net.write_html(file_path)
 

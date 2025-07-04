@@ -1,0 +1,129 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 700px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+<h2 style='text-align:center; font-family:Tahoma;'>Red de Coautorías por Departamento</h2>
+
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Acosta Herrera, Marialbert", "label": "Acosta Herrera, Marialbert", "shape": "dot", "size": 20, "title": "Acosta Herrera, Marialbert (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Molecular", "id": "Berzal Herranz, Alfredo", "label": "Berzal Herranz, Alfredo", "shape": "dot", "size": 20, "title": "Berzal Herranz, Alfredo (Biolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Castanys, Santiago", "label": "Castanys, Santiago", "shape": "dot", "size": 20, "title": "Castanys, Santiago (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Delgado Mora, Mario", "label": "Delgado Mora, Mario", "shape": "dot", "size": 20, "title": "Delgado Mora, Mario (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "label": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "shape": "dot", "size": 20, "title": "Est\u00e9vez Garc\u00eda, Antonio Manuel (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "G\u00f3mez Castilla, Jordi", "label": "G\u00f3mez Castilla, Jordi", "shape": "dot", "size": 20, "title": "G\u00f3mez Castilla, Jordi (Biolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "G\u00f3mez D\u00edaz, Elena", "label": "G\u00f3mez D\u00edaz, Elena", "shape": "dot", "size": 20, "title": "G\u00f3mez D\u00edaz, Elena (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Gonz\u00e1lez Pacanowska, Dolores", "label": "Gonz\u00e1lez Pacanowska, Dolores", "shape": "dot", "size": 20, "title": "Gonz\u00e1lez Pacanowska, Dolores (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Ruiz P\u00e9rez, Luis Miguel", "label": "Ruiz P\u00e9rez, Luis Miguel", "shape": "dot", "size": 20, "title": "Ruiz P\u00e9rez, Luis Miguel (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Gonz\u00e1lez Rey, Elena", "label": "Gonz\u00e1lez Rey, Elena", "shape": "dot", "size": 20, "title": "Gonz\u00e1lez Rey, Elena (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina", "label": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina", "shape": "dot", "size": 20, "title": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Molecular", "id": "L\u00f3pez Gim\u00e9nez, Juan F.", "label": "L\u00f3pez Gim\u00e9nez, Juan F.", "shape": "dot", "size": 20, "title": "L\u00f3pez Gim\u00e9nez, Juan F. (Biolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "L\u00f3pez L\u00f3pez, Manuel Carlos", "label": "L\u00f3pez L\u00f3pez, Manuel Carlos", "shape": "dot", "size": 20, "title": "L\u00f3pez L\u00f3pez, Manuel Carlos (Biolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "label": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "shape": "dot", "size": 20, "title": "M\u00e1rquez Ortiz, Ana Mar\u00eda (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "label": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "shape": "dot", "size": 20, "title": "Mart\u00edn Ib\u00e1\u00f1ez, Javier (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Matesanz del Barrio, Fuencisla", "label": "Matesanz del Barrio, Fuencisla", "shape": "dot", "size": 20, "title": "Matesanz del Barrio, Fuencisla (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Alcina, Antonio", "label": "Alcina, Antonio", "shape": "dot", "size": 20, "title": "Alcina, Antonio (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Morales S\u00e1nchez, Juan Carlos", "label": "Morales S\u00e1nchez, Juan Carlos", "shape": "dot", "size": 20, "title": "Morales S\u00e1nchez, Juan Carlos (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "Navarro Carretero, Miguel", "label": "Navarro Carretero, Miguel", "shape": "dot", "size": 20, "title": "Navarro Carretero, Miguel (Biolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Oliver Pozo, Francisco Javier", "label": "Oliver Pozo, Francisco Javier", "shape": "dot", "size": 20, "title": "Oliver Pozo, Francisco Javier (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Ortiz Fern\u00e1ndez, Lourdes", "label": "Ortiz Fern\u00e1ndez, Lourdes", "shape": "dot", "size": 20, "title": "Ortiz Fern\u00e1ndez, Lourdes (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "label": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "shape": "dot", "size": 20, "title": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "S\u00e1nchez Luque, Francisco Jos\u00e9", "label": "S\u00e1nchez Luque, Francisco Jos\u00e9", "shape": "dot", "size": 20, "title": "S\u00e1nchez Luque, Francisco Jos\u00e9 (Biolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "S\u00e1nchez Navarro, Macarena", "label": "S\u00e1nchez Navarro, Macarena", "shape": "dot", "size": 20, "title": "S\u00e1nchez Navarro, Macarena (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "Su\u00f1\u00e9, Carlos", "label": "Su\u00f1\u00e9, Carlos", "shape": "dot", "size": 20, "title": "Su\u00f1\u00e9, Carlos (Biolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Molecular", "id": "Thomas, Mar\u00eda del Carmen", "label": "Thomas, Mar\u00eda del Carmen", "shape": "dot", "size": 20, "title": "Thomas, Mar\u00eda del Carmen (Biolog\u00eda Molecular)"}, {"group": "Bioqu\u00edmica y Farmacolog\u00eda Molecular", "id": "Vidal Romero, Antonio", "label": "Vidal Romero, Antonio", "shape": "dot", "size": 20, "title": "Vidal Romero, Antonio (Bioqu\u00edmica y Farmacolog\u00eda Molecular)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Zubiaur, Mercedes", "label": "Zubiaur, Mercedes", "shape": "dot", "size": 20, "title": "Zubiaur, Mercedes (Biolog\u00eda Celular e Inmunolog\u00eda)"}, {"group": "Biolog\u00eda Celular e Inmunolog\u00eda", "id": "Sancho L\u00f3pez, Jaime", "label": "Sancho L\u00f3pez, Jaime", "shape": "dot", "size": 20, "title": "Sancho L\u00f3pez, Jaime (Biolog\u00eda Celular e Inmunolog\u00eda)"}]);
+                  edges = new vis.DataSet([{"from": "Acosta Herrera, Marialbert", "to": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "value": 7}, {"from": "Acosta Herrera, Marialbert", "to": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "value": 61}, {"from": "Acosta Herrera, Marialbert", "to": "Ortiz Fern\u00e1ndez, Lourdes", "value": 11}, {"from": "Berzal Herranz, Alfredo", "to": "S\u00e1nchez Luque, Francisco Jos\u00e9", "value": 22}, {"from": "Berzal Herranz, Alfredo", "to": "G\u00f3mez Castilla, Jordi", "value": 5}, {"from": "Berzal Herranz, Alfredo", "to": "Morales S\u00e1nchez, Juan Carlos", "value": 2}, {"from": "Castanys, Santiago", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 45}, {"from": "Castanys, Santiago", "to": "Ruiz P\u00e9rez, Luis Miguel", "value": 5}, {"from": "Castanys, Santiago", "to": "Gonz\u00e1lez Pacanowska, Dolores", "value": 5}, {"from": "Castanys, Santiago", "to": "Navarro Carretero, Miguel", "value": 2}, {"from": "Castanys, Santiago", "to": "Delgado Mora, Mario", "value": 5}, {"from": "Castanys, Santiago", "to": "Gonz\u00e1lez Rey, Elena", "value": 6}, {"from": "Castanys, Santiago", "to": "Morales S\u00e1nchez, Juan Carlos", "value": 1}, {"from": "Castanys, Santiago", "to": "Vidal Romero, Antonio", "value": 1}, {"from": "Delgado Mora, Mario", "to": "Gonz\u00e1lez Rey, Elena", "value": 120}, {"from": "Delgado Mora, Mario", "to": "Morales S\u00e1nchez, Juan Carlos", "value": 4}, {"from": "Delgado Mora, Mario", "to": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "value": 6}, {"from": "Delgado Mora, Mario", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 4}, {"from": "Delgado Mora, Mario", "to": "Oliver Pozo, Francisco Javier", "value": 2}, {"from": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "to": "Ruiz P\u00e9rez, Luis Miguel", "value": 5}, {"from": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "to": "Gonz\u00e1lez Pacanowska, Dolores", "value": 5}, {"from": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 1}, {"from": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "to": "Vidal Romero, Antonio", "value": 2}, {"from": "Est\u00e9vez Garc\u00eda, Antonio Manuel", "to": "G\u00f3mez D\u00edaz, Elena", "value": 1}, {"from": "Gonz\u00e1lez Pacanowska, Dolores", "to": "Vidal Romero, Antonio", "value": 25}, {"from": "Gonz\u00e1lez Pacanowska, Dolores", "to": "Ruiz P\u00e9rez, Luis Miguel", "value": 159}, {"from": "Gonz\u00e1lez Pacanowska, Dolores", "to": "Navarro Carretero, Miguel", "value": 15}, {"from": "Ruiz P\u00e9rez, Luis Miguel", "to": "Navarro Carretero, Miguel", "value": 14}, {"from": "Ruiz P\u00e9rez, Luis Miguel", "to": "Vidal Romero, Antonio", "value": 22}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "Morales S\u00e1nchez, Juan Carlos", "value": 5}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "value": 4}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 5}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "Thomas, Mar\u00eda del Carmen", "value": 1}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "Oliver Pozo, Francisco Javier", "value": 3}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "S\u00e1nchez Navarro, Macarena", "value": 1}, {"from": "Gonz\u00e1lez Rey, Elena", "to": "Navarro Carretero, Miguel", "value": 1}, {"from": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina", "to": "Su\u00f1\u00e9, Carlos", "value": 62}, {"from": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina", "to": "Oliver Pozo, Francisco Javier", "value": 1}, {"from": "Hern\u00e1ndez L\u00f3pez de Muna\u00edn, Cristina", "to": "S\u00e1nchez Navarro, Macarena", "value": 2}, {"from": "L\u00f3pez L\u00f3pez, Manuel Carlos", "to": "Thomas, Mar\u00eda del Carmen", "value": 161}, {"from": "L\u00f3pez L\u00f3pez, Manuel Carlos", "to": "S\u00e1nchez Luque, Francisco Jos\u00e9", "value": 8}, {"from": "L\u00f3pez L\u00f3pez, Manuel Carlos", "to": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "value": 3}, {"from": "L\u00f3pez L\u00f3pez, Manuel Carlos", "to": "Morales S\u00e1nchez, Juan Carlos", "value": 1}, {"from": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "to": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "value": 94}, {"from": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "to": "Ortiz Fern\u00e1ndez, Lourdes", "value": 27}, {"from": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "to": "Matesanz del Barrio, Fuencisla", "value": 1}, {"from": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "to": "Alcina, Antonio", "value": 1}, {"from": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "to": "Ortiz Fern\u00e1ndez, Lourdes", "value": 54}, {"from": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "to": "Matesanz del Barrio, Fuencisla", "value": 4}, {"from": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "to": "Alcina, Antonio", "value": 4}, {"from": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "to": "Thomas, Mar\u00eda del Carmen", "value": 1}, {"from": "Matesanz del Barrio, Fuencisla", "to": "Alcina, Antonio", "value": 86}, {"from": "Morales S\u00e1nchez, Juan Carlos", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 17}, {"from": "Morales S\u00e1nchez, Juan Carlos", "to": "S\u00e1nchez Luque, Francisco Jos\u00e9", "value": 2}, {"from": "Morales S\u00e1nchez, Juan Carlos", "to": "Thomas, Mar\u00eda del Carmen", "value": 1}, {"from": "Navarro Carretero, Miguel", "to": "Vidal Romero, Antonio", "value": 2}, {"from": "Navarro Carretero, Miguel", "to": "P\u00e9rez Victoria, Jos\u00e9 Mar\u00eda", "value": 1}, {"from": "Oliver Pozo, Francisco Javier", "to": "Su\u00f1\u00e9, Carlos", "value": 1}, {"from": "Oliver Pozo, Francisco Javier", "to": "Thomas, Mar\u00eda del Carmen", "value": 1}, {"from": "S\u00e1nchez Luque, Francisco Jos\u00e9", "to": "Thomas, Mar\u00eda del Carmen", "value": 8}, {"from": "S\u00e1nchez Navarro, Macarena", "to": "Su\u00f1\u00e9, Carlos", "value": 2}, {"from": "Zubiaur, Mercedes", "to": "Sancho L\u00f3pez, Jaime", "value": 81}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"nodes": {"font": {"size": 16, "face": "Tahoma"}, "shape": "dot"}, "edges": {"color": {"inherit": true}, "smooth": false}, "interaction": {"hover": true, "tooltipDelay": 200}, "physics": {"barnesHut": {"gravitationalConstant": -12000, "springLength": 250, "springConstant": 0.02, "damping": 0.6}, "minVelocity": 0.75, "stabilization": {"iterations": 250}}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

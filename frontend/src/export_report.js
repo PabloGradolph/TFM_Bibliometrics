@@ -235,6 +235,22 @@ export function setupExportReportButton() {
                     if (images.pie) formData.append('pie_img', images.pie);
                     if (images.bar) formData.append('bar_img', images.bar);
 
+                    // Añadir el nombre del HTML de la red de palabras clave si corresponde
+                    if (
+                        (window.currentCommunityView === 'keywords' || (typeof currentCommunityView !== 'undefined' && currentCommunityView === 'keywords')) &&
+                        (window.currentClusteringModel || typeof currentClusteringModel !== 'undefined') &&
+                        (window.currentNClusters || typeof currentNClusters !== 'undefined')
+                    ) {
+                        const model = window.currentClusteringModel || currentClusteringModel;
+                        const nClusters = window.currentNClusters || currentNClusters;
+                        if (model && nClusters) {
+                            const modelSlug = model.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const htmlName = `${modelSlug}_k${nClusters}.html`;
+                            console.log('Enviando network_html:', htmlName);
+                            formData.append('network_html', htmlName);
+                        }
+                    }
+
                     fetch(apiExportUrl, {
                         method: 'POST',
                         body: formData

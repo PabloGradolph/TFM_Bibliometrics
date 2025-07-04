@@ -1,0 +1,129 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 700px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+<h2 style='text-align:center; font-family:Tahoma;'>Colaboraciones de Sánchez Luque, Francisco José</h2>
+
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#b3003c", "id": "141466", "label": "S\u00e1nchez Luque, Francisco Jos\u00e9", "shape": "dot", "size": 22}, {"color": "#a9a9a9", "id": "21710", "label": "Romero L\u00f3pez, Cristina", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21711", "label": "Berzal Herranz, Alfredo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21712", "label": "Mac\u00edas Huete, Francisco", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "22298", "label": "Marton Garc\u00eda, Soledad", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "29745", "label": "Alonso Bedate, Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "54451", "label": "Mart\u00edn Molina, Francisco", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "323370", "label": "Garc\u00eda P\u00e9rez, Jos\u00e9 Luis", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "338691", "label": "Garc\u00eda Canadas, M.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "307405", "label": "Morales S\u00e1nchez, Juan Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "110304", "label": "Puerta Fern\u00e1ndez, Elena", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128052", "label": "Afonso Lehmann, Raquel Nicole", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128064", "label": "Barroso del Jes\u00fas, Alicia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128081", "label": "Carreira, Patricia E.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128137", "label": "D\u00edaz Gonz\u00e1lez, Raquel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128398", "label": "G\u00f3mez Garc\u00eda, Inmaculada Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128752", "label": "L\u00f3pez L\u00f3pez, Manuel Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128816", "label": "Mu\u00f1oz Fern\u00e1ndez, Pilar", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128856", "label": "Rodr\u00edguez Heras, Sara", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129113", "label": "Thomas, Mar\u00eda del Carmen", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129169", "label": "Reyes Darias, Jos\u00e9 Antonio", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "136673", "label": "Requena Rolan\u00eda, Jos\u00e9 Mar\u00eda", "shape": "dot", "size": 16}]);
+                  edges = new vis.DataSet([{"color": "#3b8bff", "from": "141466", "to": "21710", "value": 14}, {"color": "#3b8bff", "from": "141466", "to": "21711", "value": 22}, {"color": "#3b8bff", "from": "141466", "to": "21712", "value": 7}, {"color": "#3b8bff", "from": "141466", "to": "22298", "value": 4}, {"color": "#3b8bff", "from": "141466", "to": "29745", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "54451", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "323370", "value": 3}, {"color": "#3b8bff", "from": "141466", "to": "338691", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "307405", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "110304", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "128052", "value": 1}, {"color": "#3b8bff", "from": "141466", "to": "128064", "value": 1}, {"color": "#3b8bff", "from": "141466", "to": "128081", "value": 4}, {"color": "#3b8bff", "from": "141466", "to": "128137", "value": 1}, {"color": "#3b8bff", "from": "141466", "to": "128398", "value": 2}, {"color": "#3b8bff", "from": "141466", "to": "128752", "value": 8}, {"color": "#3b8bff", "from": "141466", "to": "128816", "value": 1}, {"color": "#3b8bff", "from": "141466", "to": "128856", "value": 1}, {"color": "#3b8bff", "from": "141466", "to": "129113", "value": 8}, {"color": "#3b8bff", "from": "141466", "to": "129169", "value": 10}, {"color": "#3b8bff", "from": "141466", "to": "136673", "value": 3}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"nodes": {"font": {"size": 16, "face": "Tahoma"}, "shape": "dot"}, "edges": {"color": {"inherit": true}, "smooth": false}, "interaction": {"hover": true, "tooltipDelay": 200}, "physics": {"barnesHut": {"gravitationalConstant": -12000, "springLength": 250, "springConstant": 0.02, "damping": 0.6}, "minVelocity": 0.75, "stabilization": {"iterations": 250}}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

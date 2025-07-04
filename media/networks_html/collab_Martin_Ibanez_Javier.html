@@ -1,0 +1,224 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 700px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+             #loadingBar {
+                 position:absolute;
+                 top:0px;
+                 left:0px;
+                 width: 100%;
+                 height: 700px;
+                 background-color:rgba(200,200,200,0.8);
+                 -webkit-transition: all 0.5s ease;
+                 -moz-transition: all 0.5s ease;
+                 -ms-transition: all 0.5s ease;
+                 -o-transition: all 0.5s ease;
+                 transition: all 0.5s ease;
+                 opacity:1;
+             }
+
+             #bar {
+                 position:absolute;
+                 top:0px;
+                 left:0px;
+                 width:20px;
+                 height:20px;
+                 margin:auto auto auto auto;
+                 border-radius:11px;
+                 border:2px solid rgba(30,30,30,0.05);
+                 background: rgb(0, 173, 246); /* Old browsers */
+                 box-shadow: 2px 0px 4px rgba(0,0,0,0.4);
+             }
+
+             #border {
+                 position:absolute;
+                 top:10px;
+                 left:10px;
+                 width:500px;
+                 height:23px;
+                 margin:auto auto auto auto;
+                 box-shadow: 0px 0px 4px rgba(0,0,0,0.2);
+                 border-radius:10px;
+             }
+
+             #text {
+                 position:absolute;
+                 top:8px;
+                 left:530px;
+                 width:30px;
+                 height:50px;
+                 margin:auto auto auto auto;
+                 font-size:22px;
+                 color: #000000;
+             }
+
+             div.outerBorder {
+                 position:relative;
+                 top:400px;
+                 width:600px;
+                 height:44px;
+                 margin:auto auto auto auto;
+                 border:8px solid rgba(0,0,0,0.1);
+                 background: rgb(252,252,252); /* Old browsers */
+                 background: -moz-linear-gradient(top,  rgba(252,252,252,1) 0%, rgba(237,237,237,1) 100%); /* FF3.6+ */
+                 background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(252,252,252,1)), color-stop(100%,rgba(237,237,237,1))); /* Chrome,Safari4+ */
+                 background: -webkit-linear-gradient(top,  rgba(252,252,252,1) 0%,rgba(237,237,237,1) 100%); /* Chrome10+,Safari5.1+ */
+                 background: -o-linear-gradient(top,  rgba(252,252,252,1) 0%,rgba(237,237,237,1) 100%); /* Opera 11.10+ */
+                 background: -ms-linear-gradient(top,  rgba(252,252,252,1) 0%,rgba(237,237,237,1) 100%); /* IE10+ */
+                 background: linear-gradient(to bottom,  rgba(252,252,252,1) 0%,rgba(237,237,237,1) 100%); /* W3C */
+                 filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#fcfcfc', endColorstr='#ededed',GradientType=0 ); /* IE6-9 */
+                 border-radius:72px;
+                 box-shadow: 0px 0px 10px rgba(0,0,0,0.2);
+             }
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+<h2 style='text-align:center; font-family:Tahoma;'>Colaboraciones de Martín Ibáñez, Javier</h2>
+
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+            <div id="loadingBar">
+              <div class="outerBorder">
+                <div id="text">0%</div>
+                <div id="border">
+                  <div id="bar"></div>
+                </div>
+              </div>
+            </div>
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#b3003c", "id": "384929", "label": "Mart\u00edn Ib\u00e1\u00f1ez, Javier", "shape": "dot", "size": 22}, {"color": "#a9a9a9", "id": "40564", "label": "Morales, Sonia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "54451", "label": "Mart\u00edn Molina, Francisco", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "54452", "label": "Aguilar Quesada, Rocio", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "54552", "label": "Varela Hern\u00e1ndez, Nieves", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "66864", "label": "Fraile Ramos, Alberto", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "66982", "label": "Nieto Mart\u00edn, Amelia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "768725", "label": "Carmen Terron, Laura", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "768726", "label": "Fernandez Rengel, Ivan", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "768724", "label": "Maria Marquez, Ana", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "653046", "label": "Borrego Yaniz, Gonzalo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "543649", "label": "Madrid Paredes, Adela", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "737487", "label": "A. Marquez", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "542507", "label": "Oliver, Javier", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "619163", "label": "Fern\u00e1ndez Guti\u00e9rrez, Benjam\u00edn", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "689603", "label": "Mart\u00ednez L\u00f3pez, Javier", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "392422", "label": "Vinasco, J.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "458846", "label": "Delgado Mora, Mario", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "515047", "label": "Estupi\u00f1\u00e1n Moreno, Elkyn", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "564872", "label": "Castaneda, S.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "662844", "label": "Madrid Paredes, A.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "755860", "label": "Lina-Marcela Diaz-Gallo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "755859", "label": "Maria Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747643", "label": "G Orozco", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "850535", "label": "Amelia Fernandez-Martin", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "699650", "label": "Carlos Garcia-Porrua", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "852546", "label": "Amalia Sanchez-Andrade", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "699647", "label": "Miguel A Gonzalez-Gay", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "593073", "label": "Gordillo Gonz\u00e1lez, Fernando", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "796705", "label": "Rosa-Baez, Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "522828", "label": "Rodr\u00edguez Mart\u00edn, Inmaculada", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747701", "label": "L M Diaz-Gallo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747699", "label": "B Rueda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747700", "label": "M Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "827683", "label": "Y. Bera\u00fan", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "730532", "label": "Fraile, A.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "827684", "label": "L. Matar\u00e1n", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747702", "label": "L M Diaz-Gallo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747696", "label": "Lina M. D\u00edaz-Gallo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747695", "label": "Mar\u00eda Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "768777", "label": "M. Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "768779", "label": "M. Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "755857", "label": "Maria Teruel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "755858", "label": "Lina-Marcela Diaz-Gallo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "392421", "label": "Puerta, Concepci\u00f3n", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747542", "label": "L M. G\u00f3mez", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "747644", "label": "J M. Anaya", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "468886", "label": "Garc\u00eda Gim\u00e9nez, Jos\u00e9 A.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21755", "label": "Teruel Artacho, Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21760", "label": "Robledo P\u00e9rez, Gema", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21761", "label": "M\u00e1rquez Ortiz, Ana Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21781", "label": "Garc\u00eda Bermudez, Ma. de Las Mercedes", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21788", "label": "Rodr\u00edguez Rodriguez, Luis", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21798", "label": "Bossini Castillo, Lara Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21799", "label": "Rueda Medina, Blanca Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21816", "label": "Fedetz, Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21834", "label": "L\u00f3pez Isac, Elena", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21842", "label": "Ochoa Ruiz, Eguzkine", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21868", "label": "Fern\u00e1ndez Aranguren, Tamara", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21893", "label": "Serrano Lopera, Mar\u00eda Aurora", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21908", "label": "Mara\u00f1\u00f3n Lizana, Concepci\u00f3n", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "21923", "label": "Caro Moreno, Marta", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "27275", "label": "Ortiz Fern\u00e1ndez, Lourdes", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "29745", "label": "Alonso Bedate, Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "104701", "label": "Gonz\u00e1lez Serna, David", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "106164", "label": "Cenit Laguna, Mar\u00eda Carmen", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "108156", "label": "Carmona Guzm\u00e1n, Ernesto", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "113978", "label": "Balsa, Alejandro", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128050", "label": "Acosta Herrera, Marialbert", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128055", "label": "Andr\u00e9s Le\u00f3n, Eduardo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128072", "label": "Bera\u00fan, Yasmina", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128077", "label": "Campillo Davo, Diana", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128080", "label": "Carmona L\u00f3pez, Francisco David", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128081", "label": "Carreira, Patricia E.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128107", "label": "Chorny, Alejo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128123", "label": "Davila Fajardo, Cristina Lucia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128136", "label": "D\u00edaz Gallo, Lina Marcela", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128139", "label": "Dolade, Nuria", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128411", "label": "Gonz\u00e1lez Aguilar, Antonio", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128660", "label": "Kerick, Martin", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128752", "label": "L\u00f3pez L\u00f3pez, Manuel Carlos", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128784", "label": "Mart\u00edn Rodr\u00edguez, Jos\u00e9 Ezequiel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128814", "label": "Mucientes, Arkaitz", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128827", "label": "Palma, Ana B.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "128828", "label": "Palomino Morales, Rogelio Jes\u00fas", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129082", "label": "S\u00e1nchez Rodr\u00edguez, Elena", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129094", "label": "Serrano Fern\u00e1ndez, Alberto", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129113", "label": "Thomas, Mar\u00eda del Carmen", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129115", "label": "Torres Garc\u00eda, Orlando Alfredo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129120", "label": "Vargas Roldan, Sofia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129130", "label": "Gonz\u00e1lez Rey, Elena", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129134", "label": "Orozco Cebada, Gisela", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129146", "label": "Gonz\u00e1lez Escribano, Mar\u00eda Francisca", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "129174", "label": "Le\u00f3n Rodr\u00edguez, Daniel, A.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "135092", "label": "Matesanz del Barrio, Fuencisla", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "135469", "label": "Marquez Maqueda, Augusto", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "136673", "label": "Requena Rolan\u00eda, Jos\u00e9 Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "141310", "label": "Corb\u00ed L\u00f3pez, \u00c1ngel Luis", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "154264", "label": "Alcina, Antonio", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "159061", "label": "Simeon, C. P.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "159063", "label": "Castellvi, I.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "160737", "label": "Terr\u00f3n Camero, Laura Carmen", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "164154", "label": "Carmona, Elio G.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "174426", "label": "Casares Marfil, Desir\u00e9", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "190705", "label": "Ortego Centeno, Norberto", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "200181", "label": "Alcaraz, Alexia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "210378", "label": "Mayes, Maureen D", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "228927", "label": "Palma Vega, Miriam", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "298227", "label": "G\u00f3mez Osorio, Luis Miguel", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "306255", "label": "Nieto D\u00edaz, Antonio", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "311094", "label": "Villanueva Mart\u00edn, Gonzalo", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "313389", "label": "Padyukov, Leonid", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "338660", "label": "P\u00e9rez Armengol, Cristina", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "338666", "label": "Fern\u00e1ndez Mart\u00edn, Amelia", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "338679", "label": "Ruiz Blas, Mar\u00eda Paz", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "355358", "label": "Pascual, Mar\u00eda", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "357942", "label": "Collado Escobar, Mar\u00eda Dolores", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "362098", "label": "de Groof, Aur\u00e9lie", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "362099", "label": "Ducreux, Julie", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376211", "label": "Zanelli, E.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376212", "label": "Roovers, E.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376213", "label": "Breedveld, F. C.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376215", "label": "Jones, G.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376216", "label": "Shing, D.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376217", "label": "Van der Slik, A. R.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376218", "label": "Giphart, M. J.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376219", "label": "Schreuder, G. M. Th.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376220", "label": "de Vries, R. R. P.", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376357", "label": "Matar\u00e1n, Luis", "shape": "dot", "size": 16}, {"color": "#a9a9a9", "id": "376438", "label": "Calzada, Jos\u00e9 Eduardo", "shape": "dot", "size": 16}]);
+                  edges = new vis.DataSet([{"color": "#3b8bff", "from": "384929", "to": "40564", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "54451", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "54452", "value": 5}, {"color": "#3b8bff", "from": "384929", "to": "54552", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "66864", "value": 10}, {"color": "#3b8bff", "from": "384929", "to": "66982", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "768725", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "768726", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "768724", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "653046", "value": 6}, {"color": "#3b8bff", "from": "384929", "to": "543649", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "737487", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "542507", "value": 14}, {"color": "#3b8bff", "from": "384929", "to": "619163", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "689603", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "392422", "value": 7}, {"color": "#3b8bff", "from": "384929", "to": "458846", "value": 6}, {"color": "#3b8bff", "from": "384929", "to": "515047", "value": 5}, {"color": "#3b8bff", "from": "384929", "to": "564872", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "662844", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "755860", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "755859", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747643", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "850535", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "699650", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "852546", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "699647", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "593073", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "796705", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "522828", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "747701", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747699", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747700", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "827683", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "730532", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "827684", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747702", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747696", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747695", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "768777", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "768779", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "755857", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "755858", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "392421", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "747542", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "747644", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "468886", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "21755", "value": 27}, {"color": "#3b8bff", "from": "384929", "to": "21760", "value": 22}, {"color": "#3b8bff", "from": "384929", "to": "21761", "value": 94}, {"color": "#3b8bff", "from": "384929", "to": "21781", "value": 50}, {"color": "#3b8bff", "from": "384929", "to": "21788", "value": 14}, {"color": "#3b8bff", "from": "384929", "to": "21798", "value": 60}, {"color": "#3b8bff", "from": "384929", "to": "21799", "value": 58}, {"color": "#3b8bff", "from": "384929", "to": "21816", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "21834", "value": 37}, {"color": "#3b8bff", "from": "384929", "to": "21842", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "21868", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "21893", "value": 18}, {"color": "#3b8bff", "from": "384929", "to": "21908", "value": 5}, {"color": "#3b8bff", "from": "384929", "to": "21923", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "27275", "value": 54}, {"color": "#3b8bff", "from": "384929", "to": "29745", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "104701", "value": 25}, {"color": "#3b8bff", "from": "384929", "to": "106164", "value": 9}, {"color": "#3b8bff", "from": "384929", "to": "108156", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "113978", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "128050", "value": 61}, {"color": "#3b8bff", "from": "384929", "to": "128055", "value": 17}, {"color": "#3b8bff", "from": "384929", "to": "128072", "value": 14}, {"color": "#3b8bff", "from": "384929", "to": "128077", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "128080", "value": 82}, {"color": "#3b8bff", "from": "384929", "to": "128081", "value": 17}, {"color": "#3b8bff", "from": "384929", "to": "128107", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "128123", "value": 5}, {"color": "#3b8bff", "from": "384929", "to": "128136", "value": 18}, {"color": "#3b8bff", "from": "384929", "to": "128139", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "128411", "value": 20}, {"color": "#3b8bff", "from": "384929", "to": "128660", "value": 65}, {"color": "#3b8bff", "from": "384929", "to": "128752", "value": 3}, {"color": "#3b8bff", "from": "384929", "to": "128784", "value": 49}, {"color": "#3b8bff", "from": "384929", "to": "128814", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "128827", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "128828", "value": 24}, {"color": "#3b8bff", "from": "384929", "to": "129082", "value": 42}, {"color": "#3b8bff", "from": "384929", "to": "129094", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "129113", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "129115", "value": 14}, {"color": "#3b8bff", "from": "384929", "to": "129120", "value": 6}, {"color": "#3b8bff", "from": "384929", "to": "129130", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "129134", "value": 37}, {"color": "#3b8bff", "from": "384929", "to": "129146", "value": 83}, {"color": "#3b8bff", "from": "384929", "to": "129174", "value": 7}, {"color": "#3b8bff", "from": "384929", "to": "135092", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "135469", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "136673", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "141310", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "154264", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "159061", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "159063", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "160737", "value": 7}, {"color": "#3b8bff", "from": "384929", "to": "164154", "value": 7}, {"color": "#3b8bff", "from": "384929", "to": "174426", "value": 11}, {"color": "#3b8bff", "from": "384929", "to": "190705", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "200181", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "210378", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "228927", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "298227", "value": 6}, {"color": "#3b8bff", "from": "384929", "to": "306255", "value": 33}, {"color": "#3b8bff", "from": "384929", "to": "311094", "value": 12}, {"color": "#3b8bff", "from": "384929", "to": "313389", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "338660", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "338666", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "338679", "value": 4}, {"color": "#3b8bff", "from": "384929", "to": "355358", "value": 15}, {"color": "#3b8bff", "from": "384929", "to": "357942", "value": 7}, {"color": "#3b8bff", "from": "384929", "to": "362098", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "362099", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376211", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "376212", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376213", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376215", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376216", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376217", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "376218", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "376219", "value": 1}, {"color": "#3b8bff", "from": "384929", "to": "376220", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "376357", "value": 2}, {"color": "#3b8bff", "from": "384929", "to": "376438", "value": 6}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"nodes": {"font": {"size": 16, "face": "Tahoma"}, "shape": "dot"}, "edges": {"color": {"inherit": true}, "smooth": false}, "interaction": {"hover": true, "tooltipDelay": 200}, "physics": {"barnesHut": {"gravitationalConstant": -12000, "springLength": 250, "springConstant": 0.02, "damping": 0.6}, "minVelocity": 0.75, "stabilization": {"iterations": 250}}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+                      network.on("stabilizationProgress", function(params) {
+                          document.getElementById('loadingBar').removeAttribute("style");
+                          var maxWidth = 496;
+                          var minWidth = 20;
+                          var widthFactor = params.iterations/params.total;
+                          var width = Math.max(minWidth,maxWidth * widthFactor);
+                          document.getElementById('bar').style.width = width + 'px';
+                          document.getElementById('text').innerHTML = Math.round(widthFactor*100) + '%';
+                      });
+                      network.once("stabilizationIterationsDone", function() {
+                          document.getElementById('text').innerHTML = '100%';
+                          document.getElementById('bar').style.width = '496px';
+                          document.getElementById('loadingBar').style.opacity = 0;
+                          // really clean the dom element
+                          setTimeout(function () {document.getElementById('loadingBar').style.display = 'none';}, 500);
+                      });
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

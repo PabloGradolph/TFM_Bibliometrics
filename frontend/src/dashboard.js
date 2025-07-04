@@ -233,7 +233,7 @@ export function initFiltersAndSearch() {
             }
 
             // Si ya es la vista actual, no hacer nada
-            if (currentCommunityView === selectedView) {
+            if (window.currentCommunityView === selectedView) {
                 document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
                     link.classList.remove('active');
                 });
@@ -241,7 +241,7 @@ export function initFiltersAndSearch() {
                 return;
             }
 
-            currentCommunityView = selectedView;
+            window.currentCommunityView = selectedView;
 
             document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
                 link.classList.remove('active');
@@ -788,7 +788,7 @@ export function initFiltersAndSearch() {
 
                 // Obtener datos de la red de colaboración
                 const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
-                networkParams.append('view_type', currentCommunityView); // Añadir el tipo de vista de comunidad
+                networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
 
                 fetch(`/api/dashboard/collaboration-network/?${networkParams.toString()}`)
                 .then(response => response.json())
@@ -1747,9 +1747,9 @@ export function initFiltersAndSearch() {
         });
     }
 
-    let currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
-    let currentClusteringModel = null;
-    let currentNClusters = null;
+    window.currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
+    window.currentClusteringModel = null;
+    window.currentNClusters = null;
     let isFullNetwork = false;
 
 
@@ -1761,7 +1761,7 @@ export function initFiltersAndSearch() {
             const selectedView = this.dataset.communityView; // Obtener el tipo de vista del data-attribute
 
             // Si ya es la vista actual, no hacer nada
-            if (currentCommunityView === selectedView) {
+            if (window.currentCommunityView === selectedView) {
                  // Actualizar visualmente el menú para marcar la opción activa (en caso de que no lo estuviera)
                 document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
                     link.classList.remove('active');
@@ -1770,7 +1770,7 @@ export function initFiltersAndSearch() {
                 return; // Salir de la función si la vista no cambia
             }
 
-            currentCommunityView = selectedView; // Actualizar el estado
+            window.currentCommunityView = selectedView; // Actualizar el estado
 
             // Actualizar visualmente el menú para marcar la opción activa
             document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
@@ -1811,7 +1811,7 @@ export function initFiltersAndSearch() {
             );
 
             // Ocultar el botón de toggle en todas las vistas de la red completa
-            if (currentCommunityView === 'keywords') {
+            if (window.currentCommunityView === 'keywords') {
                 toggleButton.style.display = 'none';
             } else {
                 toggleButton.style.display = 'block';
@@ -1826,15 +1826,15 @@ export function initFiltersAndSearch() {
                 }
 
                 let messageText = '';
-                if (currentCommunityView === 'department') {
+                if (window.currentCommunityView === 'department') {
                     messageText = currentLang === 'es'
                         ? 'Los investigadores han sido clasificados en departamentos utilizando un Node2VecTransformer y un MLPClassifier. Esta clasificación no es 100% precisa. No aparecen investigadores sin colaboraciones.'
                         : 'Researchers have been classified into departments using a Node2VecTransformer and MLPClassifier. This classification is not 100% accurate. There are no researchers without collaborations.';
-                } else if (currentCommunityView === 'modularity-7') {
+                } else if (window.currentCommunityView === 'modularity-7') {
                     messageText = currentLang === 'es'
                         ? 'Se ha utilizado el algoritmo de detección de comunidades Lovaina sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
                         : 'The Louvain community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
-                }  else if (currentCommunityView === 'modularity-5') {
+                }  else if (window.currentCommunityView === 'modularity-5') {
                     messageText = currentLang === 'es'
                         ? 'Se ha utilizado el algoritmo de detección de comunidades Leiden sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
                         : 'The Leiden community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
@@ -1884,7 +1884,7 @@ export function initFiltersAndSearch() {
                 }
             }
 
-            if (currentCommunityView === 'keywords') {
+            if (window.currentCommunityView === 'keywords') {
                 cardTitle.textContent = currentLang === 'es'
                     ? 'Red de coincidencia de palabras clave (entre IPs)'
                     : 'Keyword Coincidence Network (between IPs)';
@@ -1935,11 +1935,11 @@ export function initFiltersAndSearch() {
             });
         } else {
             let groupByProp;
-            if (currentCommunityView === 'department') {
+            if (window.currentCommunityView === 'department') {
                 groupByProp = 'department';
-            } else if (currentCommunityView === 'modularity-5') {
+            } else if (window.currentCommunityView === 'modularity-5') {
                 groupByProp = 'leiden_community';
-            } else if (currentCommunityView === 'modularity-7') {
+            } else if (window.currentCommunityView === 'modularity-7') {
                 groupByProp = 'community';  // aquí es lovaina_community en back
             } else {
                 groupByProp = 'community';
@@ -1983,9 +1983,9 @@ export function initFiltersAndSearch() {
     
             const nodeColor = data.is_author_view
                 ? (node.is_selected ? '#e6194b' : '#bbbbbb')
-                : (currentCommunityView === 'department'
+                : (window.currentCommunityView === 'department'
                     ? departmentColorScale(dept)
-                    : (currentCommunityView === 'modularity-5'
+                    : (window.currentCommunityView === 'modularity-5'
                         ? colorByCommunity(leiden)
                         : colorByCommunity(comm)));
     
@@ -2032,7 +2032,7 @@ export function initFiltersAndSearch() {
         });
     
         // Leyenda
-        if (!data.is_author_view && !(isFullNetwork && currentCommunityView === 'modularity-7') && !(isFullNetwork && currentCommunityView === 'modularity-5')) {
+        if (!data.is_author_view && !(isFullNetwork && window.currentCommunityView === 'modularity-7') && !(isFullNetwork && window.currentCommunityView === 'modularity-5')) {
             const legend = document.createElement('div');
             legend.id = 'networkLegend';
             Object.assign(legend.style, {
@@ -2052,12 +2052,12 @@ export function initFiltersAndSearch() {
             title.style.fontWeight = 'bold';
             title.style.marginBottom = '6px';
         
-            if (currentCommunityView === 'department') {
+            if (window.currentCommunityView === 'department') {
                 title.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
-            } else if (currentCommunityView === 'keywords') {
+            } else if (window.currentCommunityView === 'keywords') {
                 title.textContent = currentLang === 'es' ? 'Comunidades de Palabras Clave' : 'Keyword Communities';
-            } else if (currentCommunityView === 'modularity-5' || currentCommunityView === 'modularity-7') {
-                const k = currentCommunityView === 'modularity-7' ? 7 : 5;
+            } else if (window.currentCommunityView === 'modularity-5' || window.currentCommunityView === 'modularity-7') {
+                const k = window.currentCommunityView === 'modularity-7' ? 7 : 5;
                 title.textContent = currentLang === 'es'
                     ? `Comunidades (${k})`
                     : `Communities (${k})`;
@@ -2070,7 +2070,7 @@ export function initFiltersAndSearch() {
             counts.textContent = `${data.nodes.length} nodos / ${data.edges.length} enlaces`;
             legend.appendChild(counts);
         
-            if (currentCommunityView === 'department') {
+            if (window.currentCommunityView === 'department') {
                 const departments = [...new Set(data.nodes.map(n => n.department))];
                 departments.forEach(dept => {
                     const item = document.createElement('div');
@@ -2097,11 +2097,11 @@ export function initFiltersAndSearch() {
             } else {
                 // === Obtener comunidades ===
                 let communities = [];
-                if (currentCommunityView === 'keywords') {
+                if (window.currentCommunityView === 'keywords') {
                     communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
-                } else if (currentCommunityView === 'modularity-5') {
+                } else if (window.currentCommunityView === 'modularity-5') {
                     communities = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
-                } else if (currentCommunityView === 'modularity-7') {
+                } else if (window.currentCommunityView === 'modularity-7') {
                     communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
                 }
         
@@ -2126,7 +2126,7 @@ export function initFiltersAndSearch() {
                     if (comm === -1 || isNaN(comm)) {
                         label.textContent = currentLang === 'es' ? 'Outlier' : 'Outlier';
                     } else {
-                        const num = (currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
+                        const num = (window.currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
                         const word = currentLang === 'es' ? 'Comunidad' : 'Community';
                         label.textContent = `${word} ${num}`;
                     }
@@ -2245,9 +2245,9 @@ export function initFiltersAndSearch() {
         }
     
         // === ESTABLECER LA VISTA EN KEYWORDS ===
-        currentCommunityView = 'keywords';
-        currentClusteringModel = model;
-        currentNClusters = nClusters;
+        window.currentCommunityView = 'keywords';
+        window.currentClusteringModel = model;
+        window.currentNClusters = nClusters;
     
         const params = new URLSearchParams({
             communityView: 'keywords',
@@ -2292,19 +2292,19 @@ export function initFiltersAndSearch() {
         const currentLang = window.location.pathname.split('/')[1];
         let text = '';
 
-        if (currentCommunityView === 'department') {
+        if (window.currentCommunityView === 'department') {
             text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
-        } else if (currentCommunityView === 'modularity-7') {
+        } else if (window.currentCommunityView === 'modularity-7') {
             text = currentLang === 'es' 
                 ? (isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)')
                 : (isFullNetwork ? 'Louvain' : 'Louvain (7 communities)');
-        } else if (currentCommunityView === 'modularity-5') {
+        } else if (window.currentCommunityView === 'modularity-5') {
             text = currentLang === 'es' 
                 ? (isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)')
                 : (isFullNetwork ? 'Leiden' : 'Leiden (5 communities)');
-        } else if (currentCommunityView === 'keywords') {
-            const modelName = model || currentClusteringModel;
-            const nClustersValue = nClusters || currentNClusters;
+        } else if (window.currentCommunityView === 'keywords') {
+            const modelName = model || window.currentClusteringModel;
+            const nClustersValue = nClusters || window.currentNClusters;
             if (modelName && nClustersValue) {
                 text = currentLang === 'es'
                     ? `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`
@@ -2456,13 +2456,13 @@ export function initFiltersAndSearch() {
         
         // Actualizar la red con el nuevo modo
         const params = new URLSearchParams({
-            communityView: currentCommunityView,
+            communityView: window.currentCommunityView,
             fullNetwork: isFullNetwork
         });
         
-        if (currentClusteringModel) {
-            params.append('clusteringModel', currentClusteringModel);
-            params.append('nClusters', currentNClusters);
+        if (window.currentClusteringModel) {
+            params.append('clusteringModel', window.currentClusteringModel);
+            params.append('nClusters', window.currentNClusters);
             params.append('autoMode', 'true');
             params.append('globalMode', 'true');
         }
@@ -2502,7 +2502,7 @@ export function initFiltersAndSearch() {
                 updateCollaborationNetwork(data);
 
                 // Actualizar visibilidad del botón
-                if (!isFullNetwork && (currentCommunityView === 'modularity-5' || currentCommunityView === 'keywords')) {
+                if (!isFullNetwork && (window.currentCommunityView === 'modularity-5' || window.currentCommunityView === 'keywords')) {
                     button.style.display = 'none';
                 } else {
                     button.style.display = 'block';
@@ -2526,7 +2526,7 @@ export function initFiltersAndSearch() {
             if (this.classList.contains('disabled')) return;
             
             const view = this.getAttribute('data-community-view');
-            currentCommunityView = view;
+            window.currentCommunityView = view;
             
             // Actualizar clases activas
             document.querySelectorAll('.network-community-view').forEach(i => i.classList.remove('active'));
@@ -2577,9 +2577,9 @@ export function initFiltersAndSearch() {
                 fullNetwork: isFullNetwork
             });
             
-            if (currentClusteringModel) {
-                params.append('clusteringModel', currentClusteringModel);
-                params.append('nClusters', currentNClusters);
+            if (window.currentClusteringModel) {
+                params.append('clusteringModel', window.currentClusteringModel);
+                params.append('nClusters', window.currentNClusters);
                 params.append('autoMode', 'true');
                 params.append('globalMode', 'true');
             }
