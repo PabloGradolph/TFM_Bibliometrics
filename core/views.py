@@ -22,6 +22,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.colors import blue
 import unicodedata
 from django.urls import reverse
+from pathlib import Path
 
 # Create your views here.
 
@@ -663,8 +664,8 @@ def get_collaboration_network(request):
                 G.add_edge(author_id, collaborator_id, weight=collab.publication_count)
         else:
             # Lógica original para la red de IPs
-            nodes_path = "analysis/data/networks/lab_nodes.csv"
-            edges_path = "analysis/data/networks/lab_edges.csv"
+            nodes_path = Path(settings.BASE_DIR) / "analysis" / "data" / "networks" / "lab_nodes.csv"
+            edges_path = Path(settings.BASE_DIR) / "analysis" / "data" / "networks" / "lab_edges.csv"
 
             with open(nodes_path, encoding="utf-8") as f:
                 for row in csv.DictReader(f):
