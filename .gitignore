@@ -6,3 +6,4 @@ venv/
 *.zip
 /analysis/data/
 /node_modules
+.github/

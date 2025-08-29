@@ -435,9 +435,8 @@ def publication_detail(request, publication_id):
     return render(request, 'core/publication_detail.html', context)
 
 
-# Mapeo entre clave y función de ordenación
-@login_required(login_url='/accounts/login/')
 def get_metric_value(pub, key):
+# Mapeo entre clave y función de ordenación
     if key == 'International Collaboration':
         return pub.international_collab if pub.international_collab is not None else -1
     

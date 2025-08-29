@@ -449,3 +449,15 @@ msgstr "Introduce y confirma la nueva contraseña."
 
 msgid "The reset link is invalid or has expired."
 msgstr "El enlace de restablecimiento no es válido o ha expirado."
+
+msgid "Documentation"
+msgstr "Documentación"
+
+msgid "Download the user and technical guides for more information about the platform."
+msgstr "Descarga las guías de usuario y técnica para obtener una mayor información sobre la herramienta."
+
+msgid "User Guide (PDF)"
+msgstr "Guía de Usuario (PDF)"
+
+msgid "Technical Guide (PDF)"
+msgstr "Guía Técnica (PDF)"
