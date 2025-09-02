@@ -7,20 +7,27 @@ Output:
 - JSONL file: data/data/json/gesbib_institutions.jsonl
 """
 
-import os
 import re
 import json
+import os
 import time
-from datetime import datetime
 from bs4 import BeautifulSoup
 from django.core.management.base import BaseCommand
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import (
+    TimeoutException, NoSuchElementException, StaleElementReferenceException
+)
+
+# Import the reusable login helpers
+from core.scraping.gesbib_login import login_gesbib, dump_state
 
 
 def extract_institute_id(url):
@@ -116,6 +123,9 @@ def extract_complex_headers(soup):
     return headers
 
 
+
+# ---------------------- Django Management Command ----------------------
+
 class Command(BaseCommand):
     help = 'Extrae todos los autores de GesBIB con enlaces y campos completos'
 
@@ -127,28 +137,27 @@ class Command(BaseCommand):
         self.stdout.write('Iniciando el scraping de instituciones de GesBIB...')
 
         output_path = 'data/data/IPBLN/json/gesbib_institutions.jsonl'
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         chrome_options = Options()
-        # chrome_options.add_argument('--headless')
+        # chrome_options.add_argument('--headless=new')  # uncomment for headless
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
         try:
-            url = 'https://apps.csic.es/gesbib/adv/listadoInstitutos.html'
-            driver.get(url)
+            # 1) Login (reusable helper)
+            login_gesbib(driver, options['user'], options['password'], stdout_print=self.stdout.write)
 
-            # Login
-            driver.find_element(By.ID, "username").clear()
-            driver.find_element(By.ID, "username").send_keys(options['user'])
-            driver.find_element(By.ID, "password").clear()
-            driver.find_element(By.ID, "password").send_keys(options['password'])
-            driver.find_element(By.CSS_SELECTOR, "form#auth-login button[type='submit']").click()
-
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-            self.stdout.write(self.style.SUCCESS("✅ Login exitoso."))
+            # 2) Ya estás autenticado. Si quieres, fuerza la URL objetivo:
+            driver.get("https://apps.csic.es/gesbib/adv/listadoInstitutos.html")
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
             soup = BeautifulSoup(driver.page_source, 'html.parser')
 
@@ -178,7 +187,7 @@ class Command(BaseCommand):
 
                 page_data.append(row_info)
 
-            with open(output_path, 'a', encoding='utf-8') as f:
+            with open(output_path, 'w', encoding='utf-8') as f:
                 for row in page_data:
                     f.write(json.dumps(row, ensure_ascii=False) + '\n')
 
