@@ -130,5 +130,12 @@ def main():
     remove_empty_columns(CSV_OUTPUT_PATH, CLEANED_CSV_OUTPUT_PATH)
     print(f"\n📄 Cleaned CSV with {line_count} lines saved to: {CLEANED_CSV_OUTPUT_PATH}")
 
+    try:
+        os.remove(CSV_OUTPUT_PATH)  # deletes the file
+    except FileNotFoundError:
+        print("File not found.")
+    except PermissionError:
+        print("No permission to delete the file (is it open?).")
+
 if __name__ == "__main__":
     main()

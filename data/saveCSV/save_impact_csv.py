@@ -182,7 +182,21 @@ def main():
             data.extend(convert_jsonl_to_tsv(input_file, JSON_TO_CSV_MAP))
     save_to_tsv(data, raw_output, JSON_TO_CSV_MAP)
     clean_empty_columns(raw_output, clean_output)
-    print(f"📁 File saved as: {clean_output}")
+    print(f"📁 File saved as: {raw_output}")
+
+    try:
+        os.remove(raw_output)  # deletes the file
+    except FileNotFoundError:
+        print("File not found.")
+    except PermissionError:
+        print("No permission to delete the file (is it open?).")
+
+    try:
+        os.replace(clean_output, raw_output)  # overwrites dst if it exists (atomic when possible)
+    except FileNotFoundError:
+        print("Source file not found.")
+    except PermissionError:
+        print("No permission to rename/move.")
 
 if __name__ == "__main__":
     main()

@@ -28,6 +28,9 @@ from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 
+# Import the reusable login helpers
+from core.scraping.gesbib_login import login_gesbib, dump_state
+
 
 def extract_id_from_url(url):
     """
@@ -80,26 +83,23 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"📄 Retomando desde página {current_page}"))
 
         chrome_options = Options()
-        # chrome_options.add_argument('--headless')
+        # chrome_options.add_argument('--headless=new')  # uncomment for headless
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
         try:
-            url = 'https://apps.csic.es/gesbib/adv/listadoAutores.html'
-            driver.get(url)
-
-            # Login
-            driver.find_element(By.ID, "username").clear()
-            driver.find_element(By.ID, "username").send_keys(options['user'])
-            driver.find_element(By.ID, "password").clear()
-            driver.find_element(By.ID, "password").send_keys(options['password'])
-            driver.find_element(By.CSS_SELECTOR, "form#auth-login button[type='submit']").click()
-
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-            self.stdout.write(self.style.SUCCESS("✅ Login exitoso."))
+            # 1) Login (reusable helper)
+            login_gesbib(driver, options['user'], options['password'], stdout_print=self.stdout.write, target_url='https://apps.csic.es/gesbib/adv/listadoAutores.html')
+            # 2) Ya estás autenticado. Si quieres, fuerza la URL objetivo:
+            driver.get("https://apps.csic.es/gesbib/adv/listadoAutores.html")
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
             # Select 500 results per page
             select_element = Select(driver.find_element(By.ID, "mainForm:dataTable_rppDD"))
