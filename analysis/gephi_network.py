@@ -31,10 +31,30 @@ edges_summary = edges_summary[
     edges_summary['Target'].isin(autores_ipbln_ids)
 ]
 edges_summary.to_csv('data/data/IPBLN/networks/coautorias_IPBLN.csv', index=False)
+edges_summary.to_csv('analysis/data/networks/coautorias_IPBLN.csv', index=False)
 
 nodos = pd.DataFrame({'Id': list(autores_ipbln_ids)})
 nodos = nodos.merge(autores_df[['id_autor_gesbib', 'Nombre']], left_on='Id', right_on='id_autor_gesbib', how='left')
 nodos = nodos[['Id', 'Nombre']].rename(columns={'Nombre': 'Label'})
 nodos.to_csv('data/data/IPBLN/networks/nodos_IPBLN.csv', index=False)
+nodos.to_csv('analysis/data/networks/nodos_IPBLN.csv', index=False)
 
+# Renombrar columna 'Id' a 'author_id' solo en analysis/data/networks/nodos_IPBLN.csv
+import csv
+with open('analysis/data/networks/nodos_IPBLN.csv', 'r', encoding='utf-8') as infile:
+    reader = list(csv.reader(infile))
+    if reader and reader[0][0] == 'Id':
+        reader[0][0] = 'author_id'
+with open('analysis/data/networks/nodos_IPBLN.csv', 'w', encoding='utf-8', newline='') as outfile:
+    writer = csv.writer(outfile)
+    writer.writerows(reader)
 
+# Renombrar columna 'Id' a 'author_id' solo en analysis/data/networks/coautorias_IPBLN.csv
+import csv
+with open('analysis/data/networks/coautorias_IPBLN.csv', 'r', encoding='utf-8') as infile:
+    reader = list(csv.reader(infile))
+    if reader and reader[0][0] == 'Id':
+        reader[0][0] = 'author_id'
+with open('analysis/data/networks/coautorias_IPBLN.csv', 'w', encoding='utf-8', newline='') as outfile:
+    writer = csv.writer(outfile)
+    writer.writerows(reader)
