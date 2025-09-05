@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 # API Token and base URL
 load_dotenv()
 TOKEN = os.getenv("MY_API_KEY")
-BASE_API_URL = f'https://apps.csic.es/gesbib/rest/{TOKEN}/1/items/id/'
+BASE_API_URL = f'https://gesbib.urici.csic.es/rest/{TOKEN}/1/items/id/'
 
 # HTTP headers for requests
 HEADERS = {
@@ -84,7 +84,7 @@ def main():
     for index, pub_id in enumerate(publication_ids, start=1):
         data = fetch_publication_data(pub_id)
         publication_data[pub_id] = data
-        status = "✅" if "error" not in data else "❌"
+        status = "✅" if data is not None else "❌"
         print(f"[{index}/{total}] {status} Publication {pub_id}")
         time.sleep(0.2)  # API rate limiting
 

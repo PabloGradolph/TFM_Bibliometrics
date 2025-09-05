@@ -41,7 +41,7 @@ class Command(BaseCommand):
         created, updated = 0, 0
 
         for pub_id, item in items.items():
-            j = json_data.get(pub_id, {}).get("sd", {})
+            j = json_data.get(pub_id, {})
             print(f"Procesando publicación {pub_id}...")
             def jv(k):
                 val = j.get(k)
@@ -59,7 +59,7 @@ class Command(BaseCommand):
                     "title_link": item.get("Título link"),
                     "doi": jv("doi"),
                     "year": int(item.get("Año") or 0),
-                    "publication_date": jv("fecha_publicacion"),
+                    "publication_date": jv("fechaPublicacion"),
                     "publication_type": jv("doctype"), # Lista
                     "source": item.get("Fuente"),
                     "source_link": item.get("Fuente link"),
@@ -74,19 +74,19 @@ class Command(BaseCommand):
                     "language": jv("idioma"),
                     "abstract": jv("abstract"),
                     "isbn": jv("isbn"), # Lista
-                    "issns": jv("issns"), # Lista
-                    "conference_name": jv("conferencia_nombre"), # Lista
-                    "conference_location": jv("conferencia_lugar"), # Lista
-                    "conference_date": jv("conferencia_fecha"), # Lista
-                    "keywords_all": jv("keywords_all"), # Lista
-                    "affiliations": clean_list(jv("afiliaciones")), # Lista a editar
-                    "num_countries": int(jv("num_pais")) if jv("num_pais") else 0,
-                    "num_spanish_affils": int(jv("num_spanish_affils")) if jv("num_spanish_affils") else 0,
-                    "num_foreign_affils": int(jv("num_foreign_affils")) if jv("num_foreign_affils") else 0,
-                    "ccaas": clean_list(jv("ccaa")), # Lista a editar
-                    "provinces": clean_list(jv("provincia")), # Lista a editar
-                    "areas_all": jv("area_all"), # Lista
-                    "jcr_materias": clean_list(jv("jcr_materia")),
+                    "issns": jv("issn"), # Lista
+                    "conference_name": jv("conferenciaTitulo"), # Lista
+                    "conference_location": jv("conferenciaLugar"), # Lista
+                    "conference_date": jv("conferenciaFecha"), # Lista
+                    "keywords_all": jv("additionalKeywords"), # Lista
+                    "affiliations": clean_list(jv("afiliacionesConEntidades")), # Lista a editar
+                    "num_countries": int(jv("numPaises")) if jv("numPaises") else 0,
+                    "num_spanish_affils": int(jv("numFiliacionesSpanish")) if jv(" numFiliacionesSpanish") else 0,
+                    "num_foreign_affils": int(jv("numFiliacionesForeign")) if jv("numFiliacionesForeign") else 0,
+                    "ccaas": clean_list(jv("ccaas")), # Lista a editar
+                    "provinces": clean_list(jv("provincias")), # Lista a editar
+                    "areas_all": jv("areas"), # Lista
+                    "jcr_materias": clean_list(jv("jcrMaterias")),
                 }
             )
 
@@ -108,7 +108,7 @@ class Command(BaseCommand):
             obj.authors.set(autores_obj)
 
             otros_autores_nombres = []
-            lista_autores_json = j.get("autores", [])
+            lista_autores_json = j.get("autoresReconocidos", [])
             for autor_str in lista_autores_json:
                 partes = autor_str.split("|", 1)
                 if len(partes) == 2:
@@ -120,7 +120,7 @@ class Command(BaseCommand):
             # === Instituciones ===
             institutions_objs = []
             
-            for inst in jv("institutos_csic_recon") or []:
+            for inst in jv("institutosReconocidos") or []:
                 parts = inst.split("|")
                 if len(parts) > 1:
                     name = parts[1].strip()
