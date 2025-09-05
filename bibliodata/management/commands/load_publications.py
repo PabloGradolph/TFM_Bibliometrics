@@ -19,6 +19,91 @@ def parse_number(val):
         return float(token) if token != "" else None
     except (ValueError, AttributeError):
         return None
+    
+# --- helpers ---------------------------------------------------------------
+
+def to_int(x, default=0):
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+def jv_factory(j):
+    """
+    Devuelve un closure jv(key, default=None) seguro sobre el dict 'j'.
+    - Si j no es dict o es None -> default
+    - Si el valor es {"value": ...} -> devuelve ese value
+    """
+    def jv(key, default=None):
+        if not isinstance(j, dict):
+            return default
+        v = j.get(key, default)
+        if isinstance(v, dict) and "value" in v:
+            v = v.get("value", default)
+        return default if v is None else v
+    return jv
+
+def parse_jcr_materias(value):
+    names = []
+    if isinstance(value, list):
+        for el in value:
+            if isinstance(el, dict):
+                name = (el.get('nombre') or '').strip()
+            else:
+                s = str(el).strip()
+                name = s.split('|', 1)[1].strip() if '|' in s else s
+            if name and name not in names:
+                names.append(name)
+    elif isinstance(value, str) and value.strip():
+        for part in value.split(';'):
+            s = part.strip()
+            name = s.split('|', 1)[1].strip() if '|' in s else s
+            if name and name not in names:
+                names.append(name)
+    return names
+
+def parse_affiliations(value):
+    out = []
+    if isinstance(value, list):
+        for el in value:
+            if isinstance(el, dict):
+                recog = el.get('institutosReconocidos')
+                if isinstance(recog, dict) and recog:
+                    for name in recog.values():
+                        name = (name or '').strip()
+                        if name and name not in out:
+                            out.append(name)
+                else:
+                    desc = (el.get('descripcion') or '').strip()
+                    if desc and desc not in out:
+                        out.append(desc)
+            else:
+                s = str(el).strip()
+                s = s.split('|', 1)[1].strip() if '|' in s else s
+                if s and s not in out:
+                    out.append(s)
+    elif isinstance(value, str) and value.strip():
+        s = value.strip()
+        s = s.split('|', 1)[1].strip() if '|' in s else s
+        if s and s not in out:
+            out.append(s)
+    return out
+
+def extract_recognized_institution_names(afiliaciones):
+    """
+    From the new 'afiliacionesConEntidades', collect all recognized institute names.
+    Returns a de-duplicated list.
+    """
+    names = []
+    if isinstance(afiliaciones, list):
+        for el in afiliaciones:
+            if isinstance(el, dict) and isinstance(el.get('institutosReconocidos'), dict):
+                for name in el['institutosReconocidos'].values():
+                    n = (name or '').strip()
+                    if n and n not in names:
+                        names.append(n)
+    return names
+
 
 
 class Command(BaseCommand):
@@ -36,57 +121,57 @@ class Command(BaseCommand):
             impact = {row["id_publicacion"]: row for row in csv.DictReader(f, delimiter="\t")}
 
         with open(path_json, encoding="utf-8") as f:
-            json_data = json.load(f)
+            json_data = json.load(f) or {}
 
         created, updated = 0, 0
 
         for pub_id, item in items.items():
-            j = json_data.get(pub_id, {})
-            print(f"Procesando publicación {pub_id}...")
-            def jv(k):
-                val = j.get(k)
-                if isinstance(val, dict) and "value" in val:
-                    return val["value"]
-                else:
-                    return val  # puede ser lista, string, número, etc.
-            imp = impact.get(pub_id, {})
+            j = (json_data.get(pub_id) or {})
+            if not isinstance(j, dict):
+                j = {}
+            jv = jv_factory(j)
 
-            # === Datos básicos ===
+            imp = (impact.get(pub_id) or {})
+            if not isinstance(imp, dict):
+                imp = {}
+
+            self.stdout.write(f"Procesando publicación {pub_id}...")
+
             obj, created_flag = Publication.objects.update_or_create(
                 gb_id=pub_id,
                 defaults={
-                    "title": item.get("Título"),
+                    "title": item.get("Título") or "",
                     "title_link": item.get("Título link"),
-                    "doi": jv("doi"),
-                    "year": int(item.get("Año") or 0),
-                    "publication_date": jv("fechaPublicacion"),
-                    "publication_type": jv("doctype"), # Lista
+                    "doi": jv("doi", default=None),
+                    "year": to_int(item.get("Año"), 0),
+                    "publication_date": jv("fechaPublicacion", default=None),
+                    "publication_type": jv("doctype", default=[]),             # list
                     "source": item.get("Fuente"),
                     "source_link": item.get("Fuente link"),
                     "source_id": item.get("id_fuente"),
                     "editorial": item.get("Editorial"),
                     "editorial_link": item.get("Editorial link"),
                     "aa_link": item.get("AA link"),
-                    "extra_sources": item.get("Extra", "").split("; ") if item.get("Extra") else [],
-                    "extra_links": item.get("Extra link", "").split(" | ") if item.get("Extra link") else [],
-                    "citations": int(item.get("Citas") or 0),
+                    "extra_sources": (item.get("Extra", "") or "").split("; ") if item.get("Extra") else [],
+                    "extra_links": (item.get("Extra link", "") or "").split(" | ") if item.get("Extra link") else [],
+                    "citations": to_int(item.get("Citas"), 0),
                     "international_collab": parse_number(item.get("Colab. internac.")),
-                    "language": jv("idioma"),
-                    "abstract": jv("abstract"),
-                    "isbn": jv("isbn"), # Lista
-                    "issns": jv("issn"), # Lista
-                    "conference_name": jv("conferenciaTitulo"), # Lista
-                    "conference_location": jv("conferenciaLugar"), # Lista
-                    "conference_date": jv("conferenciaFecha"), # Lista
-                    "keywords_all": jv("additionalKeywords"), # Lista
-                    "affiliations": clean_list(jv("afiliacionesConEntidades")), # Lista a editar
-                    "num_countries": int(jv("numPaises")) if jv("numPaises") else 0,
-                    "num_spanish_affils": int(jv("numFiliacionesSpanish")) if jv(" numFiliacionesSpanish") else 0,
-                    "num_foreign_affils": int(jv("numFiliacionesForeign")) if jv("numFiliacionesForeign") else 0,
-                    "ccaas": clean_list(jv("ccaas")), # Lista a editar
-                    "provinces": clean_list(jv("provincias")), # Lista a editar
-                    "areas_all": jv("areas"), # Lista
-                    "jcr_materias": clean_list(jv("jcrMaterias")),
+                    "language": jv("idioma", default=None),
+                    "abstract": jv("abstract", default=None),
+                    "isbn": jv("isbn", default=[]),                             # list
+                    "issns": jv("issn", default=[]),                            # list
+                    "conference_name": jv("conferenciaTitulo", default=[]),     # list
+                    "conference_location": jv("conferenciaLugar", default=[]),  # list
+                    "conference_date": jv("conferenciaFecha", default=[]),      # list
+                    "keywords_all": jv("additionalKeywords", default=[]),       # list
+                    "affiliations": parse_affiliations(jv("afiliacionesConEntidades", default=[])),
+                    "num_countries": to_int(jv("numPaises"), 0),
+                    "num_spanish_affils": to_int(jv("numFiliacionesSpanish"), 0),
+                    "num_foreign_affils": to_int(jv("numFiliacionesForeign"), 0),
+                    "ccaas": clean_list(jv("ccaas", default=[])),
+                    "provinces": clean_list(jv("provincias", default=[])),
+                    "areas_all": jv("areas", default=[]),                       # list
+                    "jcr_materias": parse_jcr_materias(jv("jcrMaterias", default=[])),
                 }
             )
 
@@ -120,20 +205,20 @@ class Command(BaseCommand):
             # === Instituciones ===
             institutions_objs = []
             
-            for inst in jv("institutosReconocidos") or []:
-                parts = inst.split("|")
-                if len(parts) > 1:
-                    name = parts[1].strip()
-                    institution = Institution.objects.filter(name=name).first()
-                    if institution:
-                        institutions_objs.append(institution)
+            # Build the list of Institution objects from recognized names
+            recognized_names = extract_recognized_institution_names(jv("afiliacionesConEntidades"))
+            if recognized_names:
+                institutions_objs = list(Institution.objects.filter(name__in=recognized_names))
+                obj.institutions.set(institutions_objs)
+            else:
+                obj.institutions.clear()
 
             obj.institutions.set(institutions_objs)
 
             # === Temáticas ===
-            areas = jv("area_all") or []
+            areas = jv("areas") or []
             if not areas:
-                areas = clean_list(jv("jcr_materia")) or []
+                areas = parse_jcr_materias(jv("jcrMaterias")) or [] # Cambiar
 
             for area in areas:
                 area_obj, _ = ThematicArea.objects.get_or_create(name=area.strip())

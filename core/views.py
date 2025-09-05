@@ -29,14 +29,14 @@ from pathlib import Path
 def home(request):
     return render(request, 'core/home.html')
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def dashboard(request):
     return render(request, 'core/dashboard.html')
 
 def about(request):
     return render(request, 'core/about.html')
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filter_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -163,7 +163,7 @@ def get_filter_data(request):
         'publication_types': filtered_types_with_counts
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filtered_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -348,7 +348,7 @@ def get_filtered_data(request):
         'types': types_data
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_author_suggestions(request):
     query = request.GET.get('q', '').strip()
     if not query:
@@ -365,7 +365,7 @@ def get_author_suggestions(request):
         'suggestions': list(authors)
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def search_publications(request):
     query = request.GET.get('q', '').strip()
     author = request.GET.get('author', '').strip()
@@ -412,7 +412,7 @@ def search_publications(request):
 
     return JsonResponse({'results': results})
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def publication_detail(request, publication_id):
     # Obtener la publicación por su ID, o mostrar 404 si no existe
     publication = get_object_or_404(Publication, id=publication_id)
@@ -452,7 +452,7 @@ def get_metric_value(pub, key):
     return float(metric.impact_factor) if metric and metric.impact_factor is not None else -1
 
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_publications_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
@@ -571,7 +571,7 @@ def get_publications_data(request):
         }
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_collaboration_network(request):
     try:
         community_view = request.GET.get('communityView', 'department')
@@ -801,7 +801,7 @@ def get_collaboration_network(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_author_metrics(request):
     author_name = request.GET.get('author_id')  # Ahora recibimos el nombre
     if not author_name:
@@ -834,7 +834,7 @@ def get_author_metrics(request):
 
 @require_http_methods(["GET", "POST"])
 @csrf_exempt
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def export_report(request):
     import base64
     from io import BytesIO

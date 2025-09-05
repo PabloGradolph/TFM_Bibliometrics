@@ -212,7 +212,7 @@ export function setupExportReportButton() {
             }
 
             // Detectar el idioma de la URL para la API
-            const apiExportUrl = `/${lang}/api/export/report/`;
+            const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
 
             // Convertir SVGs a PNG base64 (async)
             let imagesReady = 0;

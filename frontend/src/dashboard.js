@@ -5,7 +5,6 @@ import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
 
-
 export function initFiltersAndSearch() {
 
     // Referencias a los elementos del DOM
@@ -42,6 +41,8 @@ export function initFiltersAndSearch() {
     const modelAutoMode = document.getElementById('modelAutoMode');
     const manualConfigContainer = document.getElementById('manualConfigContainer');
     const lovainaOptions = document.getElementById('lovainaOptions');
+
+    const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
 
     // Descripciones de los modelos en español
     const spanishModelDescriptions = {
@@ -289,7 +290,7 @@ export function initFiltersAndSearch() {
             return;
         }
 
-        fetch(`/api/search/authors/?q=${encodeURIComponent(query)}`)
+        fetch(`/BiblioMetrics/${lang}/api/search/authors/?q=${encodeURIComponent(query)}`)
             .then(response => response.json())
             .then(data => {
                 const suggestionsList = searchSuggestions.querySelector('.list-group');
@@ -416,7 +417,7 @@ export function initFiltersAndSearch() {
         }
 
         // Obtener las métricas del autor
-        fetch(`/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
+        fetch(`/BiblioMetrics/${lang}/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -496,7 +497,7 @@ export function initFiltersAndSearch() {
         }
 
         // Realizar la búsqueda
-        fetch(`/api/search/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/search/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 // Restaurar el botón
@@ -621,7 +622,7 @@ export function initFiltersAndSearch() {
 
     // Función para cargar los datos de los filtros
     function loadFilterData() {
-        fetch('/api/dashboard/filters/')
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/filters/`)
             .then(response => response.json())
             .then(data => {
                 // Establecer el rango de años disponible
@@ -782,7 +783,7 @@ export function initFiltersAndSearch() {
         }
 
         // Obtener los datos filtrados
-        fetch(`/api/dashboard/data/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/data/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
 
@@ -790,7 +791,7 @@ export function initFiltersAndSearch() {
                 const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
                 networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
 
-                fetch(`/api/dashboard/collaboration-network/?${networkParams.toString()}`)
+                fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${networkParams.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     updateCollaborationNetwork(data);
@@ -899,7 +900,7 @@ export function initFiltersAndSearch() {
         }
 
         // Retornar la promesa de fetch
-        return fetch(`/api/dashboard/publications/?${params.toString()}`)
+        return fetch(`/BiblioMetrics/${lang}/api/dashboard/publications/?${params.toString()}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -2258,7 +2259,7 @@ export function initFiltersAndSearch() {
         });
     
         // === HACER LA PETICIÓN AL BACKEND ===
-        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -2347,7 +2348,7 @@ export function initFiltersAndSearch() {
         const allTypes = currentLang === 'es' ? 'Todos los tipos' : 'All types';
 
         // Obtener datos actualizados de los filtros
-        fetch(`/api/dashboard/filters/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/filters/?${params.toString()}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -2476,7 +2477,7 @@ export function initFiltersAndSearch() {
             item.style.opacity = '1';
         });
 
-        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -2584,7 +2585,7 @@ export function initFiltersAndSearch() {
                 params.append('globalMode', 'true');
             }
 
-            fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+            fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
