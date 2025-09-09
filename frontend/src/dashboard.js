@@ -570,7 +570,7 @@ export function initFiltersAndSearch() {
                 const publicationId = this.dataset.publicationId;
                 if (publicationId) {
                     // Redirigir a la página de detalle de publicación
-                    window.location.href = `/publication/${publicationId}/`;
+                    window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
                 }
             });
         });
@@ -993,7 +993,7 @@ export function initFiltersAndSearch() {
                         row.addEventListener('click', function() {
                             const publicationId = this.dataset.publicationId;
                             if (publicationId) {
-                                window.location.href = `/publication/${publicationId}/`;
+                                window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
                             }
                         });
                     });

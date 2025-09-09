@@ -23,7 +23,7 @@ BASE_API_URL = f'https://gesbib.urici.csic.es/rest/{TOKEN}/1/items/id/'
 
 # HTTP headers for requests
 HEADERS = {
-    "Accept": "application/json"
+    "Accept": "application/json; charset=utf-8"
 }
 
 # Input and output paths

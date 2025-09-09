@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% load i18n %}
+{% load i18n i18n_extras %}
 {% load static %}
 <html lang="{{ LANGUAGE_CODE|default:'en' }}">
 <head>
@@ -241,17 +241,17 @@
                             <div id="language-dropdown" class="language-dropdown" role="menu">
                                 <form action="{% url 'set_language' %}" method="post" class="language-form">
                                     {% csrf_token %}
-                                    <input name="next" type="hidden" value="{{ request.path }}">
+                                    <input name="next" type="hidden" value="{% switch_language_url 'es' %}">
                                     <input name="language" type="hidden" value="es">
-                                    <button type="submit" class="language-option">
+                                    <button type="submit" class="language-option" {% if LANGUAGE_CODE == 'es' %}disabled{% endif %}>
                                         <i class="fas fa-flag me-1"></i>{% trans "Spanish" %}
                                     </button>
                                 </form>
                                 <form action="{% url 'set_language' %}" method="post" class="language-form">
                                     {% csrf_token %}
-                                    <input name="next" type="hidden" value="{{ request.path }}">
+                                    <input name="next" type="hidden" value="{% switch_language_url 'en' %}">
                                     <input name="language" type="hidden" value="en">
-                                    <button type="submit" class="language-option">
+                                    <button type="submit" class="language-option" {% if LANGUAGE_CODE == 'en' %}disabled{% endif %}>
                                         <i class="fas fa-flag me-1"></i>{% trans "English" %}
                                     </button>
                                 </form>

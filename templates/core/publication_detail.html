@@ -61,11 +61,7 @@
                     <h5 class="card-title">{% trans "Identifiers and Topics" %}</h5>
                     {% if publication.doi %}
                         <p><strong>DOI:</strong>
-                            {% for d in publication.doi %}
-                                {% if d %}
-                                    <a href="https://doi.org/{{ d }}" target="_blank">{{ d }}</a>{% if not forloop.last %}, {% endif %}
-                                {% endif %}
-                            {% endfor %}
+                            <a href="https://doi.org/{{ publication.doi }}" target="_blank">{{ publication.doi }}</a>
                         </p>
                     {% endif %}
                     {% if publication.issns %}

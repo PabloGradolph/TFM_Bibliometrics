@@ -33,13 +33,12 @@ msgstr "Acerca de"
 msgid "Spanish"
 msgstr "Español"
 
+msgid "EN"
+msgstr "ES"
+
 #: .\core\views.py
 msgid "English"
 msgstr "Inglés"
-
-#: .\core\views.py
-msgid "EN"
-msgstr "ES"
 
 #: .\core\views.py
 msgid "Interactive web tool for scientific production analysis"
