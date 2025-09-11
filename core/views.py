@@ -1065,7 +1065,7 @@ def export_report(request):
     # Construir la tabla
     data = [[Paragraph('<b>Título</b>', styles['Normal']), Paragraph('<b>Año</b>', styles['Normal'])]]
     for pub in pubs:
-        pub_url = request.build_absolute_uri(f"/publication/{pub.id}")
+        pub_url = request.build_absolute_uri(f"/BiblioMetrics/publication/{pub.id}")
         title_link = f'<a href="{pub_url}">{pub.title}</a>'
         data.append([Paragraph(title_link, link_style), str(pub.year) if pub.year else '-'])
     if len(data) == 1:
