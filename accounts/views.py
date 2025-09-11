@@ -40,7 +40,7 @@ def register(request):
         # Enviar email de confirmación
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        confirm_url = request.build_absolute_uri(f"/accounts/confirm-email/{uid}/{token}/")
+        confirm_url = request.build_absolute_uri(f"/BiblioMetrics/accounts/confirm-email/{uid}/{token}/")
         subject = _('Confirma tu registro en la plataforma')
         html_message = render_to_string('accounts/email_confirmation.html', {'confirm_url': confirm_url, 'user': user})
         email_message = EmailMultiAlternatives(subject, '', settings.DEFAULT_FROM_EMAIL, [email])
