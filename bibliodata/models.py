@@ -339,3 +339,24 @@ class ThematicArea(models.Model):
 
     def __str__(self):
         return self.name
+    
+    
+class PublicationEmbedding(models.Model):
+    """
+    Stores the embedding vector and relevant metadata for a publication to enable semantic search.
+
+    Fields:
+        - publication: ForeignKey to Publication
+        - embedding: TextField (serialized vector, e.g. JSON or comma-separated string)
+        - created_at: DateTime of embedding creation
+        - updated_at: DateTime of last update
+        - source_fields: JSONField with the fields used to generate the embedding (title, abstract, keywords, etc.)
+    """
+    publication = models.OneToOneField("Publication", on_delete=models.CASCADE, related_name="embedding")
+    embedding = models.TextField("Embedding vector (JSON or string)")
+    source_fields = models.JSONField("Fields used for embedding", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Embedding for: {self.publication.title[:60]}..."

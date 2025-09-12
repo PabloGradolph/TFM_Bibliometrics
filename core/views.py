@@ -23,8 +23,48 @@ from reportlab.lib.colors import blue
 import unicodedata
 from django.urls import reverse
 from pathlib import Path
+from bibliodata.models import PublicationEmbedding
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
-# Create your views here.
+@csrf_exempt
+@require_http_methods(["POST"])
+def semantic_search(request):
+    """
+    Receives a search query, vectorizes it, computes cosine similarity with publication embeddings,
+    and returns publications with similarity > 0.5, ordered by similarity.
+    """
+    import json
+    data = json.loads(request.body.decode('utf-8'))
+    query = data.get('query', '')
+    if not query:
+        return JsonResponse({'results': [], 'error': 'No query provided.', 'received_query': query}, status=400)
+
+    model_name = 'all-MiniLM-L6-v2'
+    model = SentenceTransformer(model_name)
+    query_emb = model.encode(query)
+
+    results = []
+    for emb_obj in PublicationEmbedding.objects.select_related('publication').all():
+        pub = emb_obj.publication
+        emb = np.array(json.loads(emb_obj.embedding))
+        sim = float(np.dot(query_emb, emb) / (np.linalg.norm(query_emb) * np.linalg.norm(emb)))
+        if sim > 0.3:
+            results.append({
+                'id': pub.id,
+                'title': pub.title,
+                'year': pub.year,
+                'abstract': pub.abstract,
+                'similarity': round(sim, 3),
+                'authors': pub.other_authors,
+                'keywords': pub.keywords_all,
+                'areas': pub.areas_all,
+            })
+    # Ordenar por similitud descendente
+    results.sort(key=lambda x: x['similarity'], reverse=True)
+    print(f"Semantic search for query '{query}' returned {len(results)} results.")
+    print(results[:5])  # Print top 5 results for debugging
+    return JsonResponse({'results': results, 'received_query': query})
 
 def home(request):
     return render(request, 'core/home.html')

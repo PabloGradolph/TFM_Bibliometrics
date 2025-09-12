@@ -99,15 +99,19 @@
                         <div class="form-group">
                             <label for="aiSearch" class="form-label">
                                 <i class="fas fa-robot me-1"></i>{% trans "AI-Powered Search" %}
-                                <span class="badge bg-info ms-1">{% trans "Coming Soon" %}</span>
                             </label>
                             <div class="input-group">
-                                <input type="text" class="form-control" id="aiSearch" 
-                                       placeholder="{% trans 'Ask anything about the publications...' %}" disabled>
-                                <button class="btn btn-secondary" id="aiSearchBtn" disabled>
+                                <input type="text" class="form-control" id="aiSearch"
+                                       placeholder="{% trans 'Ask anything about the publications...' %}">
+                                <button class="btn btn-primary" id="aiSearchBtn">
                                     <i class="fas fa-robot"></i>
                                 </button>
                             </div>
+                            <!-- Badge para filtro de búsqueda IA -->
+                            <span id="aiSearchFilter" class="badge bg-info text-dark mt-2" style="display:none;cursor:pointer;">
+                                <!-- El texto de la búsqueda IA se mostrará aquí -->
+                                <i class="fas fa-times ms-1"></i>
+                            </span>
                         </div>
                     </div>
                 </div>
