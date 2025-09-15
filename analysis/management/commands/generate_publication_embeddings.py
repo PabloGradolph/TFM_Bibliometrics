@@ -19,21 +19,25 @@ class Command(BaseCommand):
         total = publications.count()
         self.stdout.write(f"Processing {total} publications...")
 
+
         for idx, pub in enumerate(publications, start=1):
-            # Combina los campos relevantes en un solo texto
             title = pub.title or ''
-            year = str(pub.year) if pub.year else ''
+            areas = ', '.join(pub.areas_all or []) if pub.areas_all else ''
             abstract = pub.abstract or ''
             keywords = ', '.join(pub.keywords_all or []) if pub.keywords_all else ''
             authors = ', '.join(pub.other_authors or []) if pub.other_authors else ''
-            areas = ', '.join(pub.areas_all or []) if pub.areas_all else ''
-            combined_text = f"{title} {year} {abstract} {keywords} {authors} {areas}"
+            year = str(pub.year) if pub.year else ''
 
-            # Genera el embedding
-            embedding = model.encode(combined_text)
-            embedding_list = embedding.tolist()  # Para guardar como JSON
+            # Weighted text: prioritize title and areas
+            weighted_text = (
+                f"TITLE: {title}. AREAS: {areas}. "
+                f"{title}. {areas}. "  # Repeat for extra weight
+                f"ABSTRACT: {abstract}. KEYWORDS: {keywords}. AUTHORS: {authors}. YEAR: {year}."
+            )
 
-            # Guarda o actualiza el embedding en la base de datos
+            embedding = model.encode(weighted_text)
+            embedding_list = embedding.tolist()
+
             obj, created = PublicationEmbedding.objects.update_or_create(
                 publication=pub,
                 defaults={
@@ -45,7 +49,7 @@ class Command(BaseCommand):
                         'keywords_all': keywords,
                         'other_authors': authors,
                         'areas_all': areas,
-                        'combined_text': combined_text,
+                        'weighted_text': weighted_text,
                     }
                 }
             )

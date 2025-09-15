@@ -1,3 +1,4 @@
+import logging
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from bibliodata.models import Publication, Author, Collaboration
@@ -5,26 +6,26 @@ from django.db.models import Count, Min, Max, Q, F
 from django.http import JsonResponse
 from bibliodata.models import Author  # Para mapear nombres
 from django.db.models import Max as DBMax, Min as DBMin
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _
 import random
 import networkx as nx
 import csv
 import random
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-import base64
-from reportlab.platypus import Image
+from reportlab.platypus import PageBreak
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.colors import blue
 import unicodedata
-from django.urls import reverse
 from pathlib import Path
 from bibliodata.models import PublicationEmbedding
-import numpy as np
+from sentence_transformers import SentenceTransformer
+
+# --- Optimized: Use HNSWlib index ---
+import hnswlib
+import os
 from sentence_transformers import SentenceTransformer
 
 @csrf_exempt
@@ -40,31 +41,74 @@ def semantic_search(request):
     if not query:
         return JsonResponse({'results': [], 'error': 'No query provided.', 'received_query': query}, status=400)
 
+    # Load model (same as used for embeddings)
     model_name = 'all-MiniLM-L6-v2'
     model = SentenceTransformer(model_name)
     query_emb = model.encode(query)
 
-    results = []
-    for emb_obj in PublicationEmbedding.objects.select_related('publication').all():
-        pub = emb_obj.publication
-        emb = np.array(json.loads(emb_obj.embedding))
-        sim = float(np.dot(query_emb, emb) / (np.linalg.norm(query_emb) * np.linalg.norm(emb)))
-        if sim > 0.3:
-            results.append({
-                'id': pub.id,
-                'title': pub.title,
-                'year': pub.year,
-                'abstract': pub.abstract,
-                'similarity': round(sim, 3),
-                'authors': [author.name for author in pub.authors.all()],
-                'keywords': pub.keywords_all,
-                'areas': pub.areas_all,
-            })
-    # Ordenar por similitud descendente
-    results.sort(key=lambda x: x['similarity'], reverse=True)
-    print(f"Semantic search for query '{query}' returned {len(results)} results.")
-    print(results[:5])  # Print top 5 results for debugging
-    return JsonResponse({'results': results, 'received_query': query})
+    # Load HNSW index (path configurable)
+    index_path = r'C:\hnsw_index.bin'
+    logger = logging.getLogger("django")
+    logger.info(f"[semantic_search] Index path: {index_path}")
+    if not os.path.exists(index_path):
+        logger.error(f"[semantic_search] HNSW index not found at {index_path}")
+        return JsonResponse({'results': [], 'error': 'HNSW index not found.', 'received_query': query}, status=500)
+
+    # Load index (cache in global for efficiency)
+    if not hasattr(semantic_search, '_hnsw_index'):
+        first_emb = PublicationEmbedding.objects.first()
+        if not first_emb:
+            return JsonResponse({'results': [], 'error': 'No embeddings found.', 'received_query': query}, status=500)
+        emb_dim = len(json.loads(first_emb.embedding))
+        p = hnswlib.Index(space='cosine', dim=emb_dim)
+        p.load_index(index_path)
+        p.set_ef(100)
+        semantic_search._hnsw_index = p
+    else:
+        p = semantic_search._hnsw_index
+
+    # Search top-N (e.g. 50)
+    top_k = 50
+    ids, distances = p.knn_query(query_emb, k=top_k)
+    ids = ids[0]
+    distances = distances[0]
+
+    # Convert cosine distance to similarity (1 - distance)
+    candidates = []
+    emb_objs = {pe.publication_id: pe for pe in PublicationEmbedding.objects.filter(publication_id__in=ids).select_related('publication')}
+    for idx, pub_id in enumerate(ids):
+        pe = emb_objs.get(pub_id)
+        if not pe:
+            continue
+        pub = pe.publication
+        similarity = 1 - distances[idx]
+        if similarity < 0.1:
+            continue
+        candidates.append({
+            'id': pub.id,
+            'title': pub.title,
+            'year': pub.year,
+            'abstract': pub.abstract,
+            'similarity': round(similarity, 3),
+            'authors': [author.name for author in pub.authors.all()],
+            'keywords': pub.keywords_all,
+            'areas': pub.areas_all,
+        })
+
+    # Reranking con cross-encoder
+    from sentence_transformers import CrossEncoder
+    cross_encoder_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+    cross_encoder = CrossEncoder(cross_encoder_model)
+    # Prepara los pares (query, texto candidato)
+    pairs = [(query, c['title'] + ' ' + (c['abstract'] or '')) for c in candidates]
+    if pairs:
+        scores = cross_encoder.predict(pairs)
+        # Añade la puntuación de reranking
+        for i, c in enumerate(candidates):
+            c['rerank_score'] = float(scores[i])
+        # Ordena por rerank_score descendente
+        candidates.sort(key=lambda x: x['rerank_score'], reverse=True)
+    return JsonResponse({'results': candidates, 'received_query': query})
 
 def home(request):
     return render(request, 'core/home.html')
