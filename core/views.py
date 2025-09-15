@@ -56,7 +56,7 @@ def semantic_search(request):
                 'year': pub.year,
                 'abstract': pub.abstract,
                 'similarity': round(sim, 3),
-                'authors': pub.other_authors,
+                'authors': [author.name for author in pub.authors.all()],
                 'keywords': pub.keywords_all,
                 'areas': pub.areas_all,
             })

@@ -580,6 +580,100 @@ export function initFiltersAndSearch() {
         modalInstance.show();
     }
 
+    /**
+     * Show semantic search results in a modal, ordered by similarity.
+     * @param {Array<Object>} results - Array of publication objects returned by the semantic search API.
+     */
+    function showSemanticResults(results) {
+        const currentLang = window.location.pathname.split('/')[1];
+        const titleText = currentLang === 'es' ? 'Resultados IA' : 'AI Search Results';
+
+        // Defensive: ensure we have an array
+        if (!Array.isArray(results)) results = [];
+
+        // Sort by similarity desc if similarity field exists
+        results = results.slice().sort((a, b) => {
+            const sa = (typeof a.similarity === 'number') ? a.similarity : 0;
+            const sb = (typeof b.similarity === 'number') ? b.similarity : 0;
+            return sb - sa;
+        });
+
+        // Create modal if not present
+        let modal = document.getElementById('semanticResultsModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'semanticResultsModal';
+            modal.className = 'modal fade';
+            modal.setAttribute('tabindex', '-1');
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${titleText}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="semanticResultsList"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            // update title language
+            const hdr = modal.querySelector('.modal-title');
+            if (hdr) hdr.textContent = titleText;
+        }
+
+        const list = document.getElementById('semanticResultsList');
+        if (!list) return;
+
+        if (results.length === 0) {
+            list.innerHTML = '<p class="text-center">' + (currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.') + '</p>';
+        } else {
+            list.innerHTML = results.map(r => {
+                const simText = (typeof r.similarity === 'number') ? `<div class="text-end text-muted" style="font-size:0.9rem">${(r.similarity*100).toFixed(1)}% similar</div>` : '';
+                const authors = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
+                const areas = Array.isArray(r.areas) ? r.areas.join(', ') : (r.areas || '');
+                const pubType = r.publication_type || '';
+                const year = r.year || '';
+                const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
+
+                return `
+                    <div class="card mb-3">
+                        <div class="card-body" data-publication-id="${r.id}" style="cursor: pointer;">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h5 class="card-title mb-1">${r.title}</h5>
+                                    <h6 class="card-subtitle mb-2 text-muted">${year} ${pubType ? '- ' + pubType : ''}</h6>
+                                </div>
+                                ${simText}
+                            </div>
+                            <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}</p>
+                            <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Áreas' : 'Areas'}:</strong> ${areas}</p>
+                            <div>${urlLink}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Attach click handlers
+            const container = document.getElementById('semanticResultsList');
+            container.querySelectorAll('.card-body').forEach(cardBody => {
+                cardBody.addEventListener('click', function() {
+                    const publicationId = this.dataset.publicationId;
+                    if (publicationId) {
+                        window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
+                    }
+                });
+            });
+        }
+
+        // Show modal
+        const modalInstance = new bootstrap.Modal(document.getElementById('semanticResultsModal'));
+        modalInstance.show();
+    }
+
     // Event listeners para el autocompletado
     standardSearch.addEventListener('input', function() {
         if (selectedAuthorName) return;
@@ -609,6 +703,44 @@ export function initFiltersAndSearch() {
         if (e.key === 'Enter') {
             performSearch();
         }
+    });
+
+    // AI Semantic search elements (connect to semantic_search endpoint and show modal)
+    const aiSearch = document.getElementById('aiSearch');
+    const aiSearchBtn = document.getElementById('aiSearchBtn');
+
+    function handleAISearch() {
+        const query = aiSearch ? aiSearch.value.trim() : '';
+        if (!query) return;
+
+        // Show spinner on button
+        if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        const payload = { query };
+        fetch(`/BiblioMetrics/${lang}/semantic_search/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            // Restore button icon
+            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
+
+            // Backend returns list in data.results or data
+            const results = data.results || data;
+            showSemanticResults(results);
+        })
+        .catch(error => {
+            console.error('Error performing semantic search:', error);
+            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
+            alert('Error performing AI search.');
+        });
+    }
+
+    if (aiSearchBtn) aiSearchBtn.addEventListener('click', handleAISearch);
+    if (aiSearch) aiSearch.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') handleAISearch();
     });
 
     // Inicializar estado del botón al cargar la página

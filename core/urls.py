@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/search/', views.search_publications, name='search_publications'),
     path('api/search/authors/', views.get_author_suggestions, name='get_author_suggestions'),
     path('api/author/metrics/', views.get_author_metrics, name='get_author_metrics'),
+    path('semantic_search/', views.semantic_search, name='semantic_search'),
     path('publication/<int:publication_id>/', views.publication_detail, name='publication_detail'),
     path('api/export/report/', views.export_report, name='export_report'),
 ]
