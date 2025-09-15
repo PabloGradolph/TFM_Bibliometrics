@@ -33,6 +33,14 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# Force Python ssl to use certifi bundle
+# Descomentar en prodcución
+# try:
+#     import os, certifi
+#     os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+#     os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+# except Exception:
+#     pass
 
 # Application definition
 
