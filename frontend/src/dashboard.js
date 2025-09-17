@@ -495,6 +495,13 @@ export function initFiltersAndSearch() {
         } else {
             params.append('q', standardSearch.value.trim());
         }
+        // Recoger el parámetro del selector de número de resultados IA
+        const topKSelect = document.getElementById('semanticTopK');
+        let top_k = 50;
+        if (topKSelect) {
+            top_k = parseInt(topKSelect.value) || 50;
+        }
+        params.append('top_k', top_k);
 
         // Realizar la búsqueda
         fetch(`/BiblioMetrics/${lang}/api/search/?${params.toString()}`)
@@ -503,8 +510,8 @@ export function initFiltersAndSearch() {
                 // Restaurar el botón
                 standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
 
-                // Crear y mostrar el modal de resultados
-                showSearchResults(data.results);
+                // Crear y mostrar el modal de resultados (máximo top_k)
+                showSearchResults((data.results || []).slice(0, top_k));
             })
             .catch(error => {
                 console.error('Error performing search:', error);
@@ -546,7 +553,12 @@ export function initFiltersAndSearch() {
         if (results.length === 0) {
             resultsList.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
         } else {
-            resultsList.innerHTML = results.map(result => `
+            resultsList.innerHTML = results.map(result => {
+                const authors = Array.isArray(result.authors) ? result.authors.join(', ') : (result.authors || '');
+                const otherAuthors = Array.isArray(result.other_authors) && result.other_authors.length > 0
+                    ? ` <span class="text-muted">(${result.other_authors.join(', ')})</span>`
+                    : '';
+                return `
                 <div class="card mb-3">
                     <div class="card-body" data-publication-id="${result.id}" style="cursor: pointer;">
                         <h5 class="card-title">${result.title}</h5>
@@ -554,14 +566,15 @@ export function initFiltersAndSearch() {
                             ${result.year} - ${result.publication_type}
                         </h6>
                         <p class="card-text">
-                            <strong>Autores:</strong> ${result.authors.join(', ')}<br>
+                            <strong>Autores:</strong> ${authors}${otherAuthors}<br>
                             <strong>Instituciones:</strong> ${result.institutions.join(', ')}<br>
                             <strong>Áreas:</strong> ${result.areas.join(', ')}
                         </p>
                         ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">Ver publicación</a>` : ''}
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // Añadir evento de clic a cada tarjeta de resultado
@@ -628,44 +641,71 @@ export function initFiltersAndSearch() {
         const list = document.getElementById('semanticResultsList');
         if (!list) return;
 
-        if (results.length === 0) {
-            list.innerHTML = '<p class="text-center">' + (currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.') + '</p>';
-        } else {
-            list.innerHTML = results.map(r => {
-                const simText = (typeof r.similarity === 'number') ? `<div class="text-end text-muted" style="font-size:0.9rem">${(r.similarity*100).toFixed(1)}% similar</div>` : '';
-                const authors = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
-                const areas = Array.isArray(r.areas) ? r.areas.join(', ') : (r.areas || '');
-                const pubType = r.publication_type || '';
-                const year = r.year || '';
-                const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
+        function renderSemanticResults(res) {
+            if (res.length === 0) {
+                list.innerHTML = '<p class="text-center">' + (currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.') + '</p>';
+            } else {
+                list.innerHTML = res.map(r => {
+                    const simText = (typeof r.similarity === 'number') ? `<div class="text-end text-muted" style="font-size:0.9rem">${(r.similarity*100).toFixed(1)}% similar</div>` : '';
+                    const authors = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
+                    const otherAuthors = Array.isArray(r.other_authors) && r.other_authors.length > 0
+                        ? ` <span class="text-muted">(${r.other_authors.join(', ')})</span>`
+                        : '';
+                    const areas = Array.isArray(r.areas) ? r.areas.join(', ') : (r.areas || '');
+                    const pubType = r.publication_type || '';
+                    const year = r.year || '';
+                    const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
 
-                return `
-                    <div class="card mb-3">
-                        <div class="card-body" data-publication-id="${r.id}" style="cursor: pointer;">
-                            <div class="d-flex justify-content-between">
-                                <div>
-                                    <h5 class="card-title mb-1">${r.title}</h5>
-                                    <h6 class="card-subtitle mb-2 text-muted">${year} ${pubType ? '- ' + pubType : ''}</h6>
+                    return `
+                        <div class="card mb-3">
+                            <div class="card-body" data-publication-id="${r.id}" style="cursor: pointer;">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title mb-1">${r.title}</h5>
+                                        <h6 class="card-subtitle mb-2 text-muted">${year} ${pubType ? '- ' + pubType : ''}</h6>
+                                    </div>
+                                    ${simText}
                                 </div>
-                                ${simText}
+                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}${otherAuthors}</p>
+                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Áreas' : 'Areas'}:</strong> ${areas}</p>
+                                <div>${urlLink}</div>
                             </div>
-                            <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}</p>
-                            <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Áreas' : 'Areas'}:</strong> ${areas}</p>
-                            <div>${urlLink}</div>
                         </div>
-                    </div>
-                `;
-            }).join('');
-
-            // Attach click handlers
-            const container = document.getElementById('semanticResultsList');
-            container.querySelectorAll('.card-body').forEach(cardBody => {
-                cardBody.addEventListener('click', function() {
-                    const publicationId = this.dataset.publicationId;
-                    if (publicationId) {
-                        window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
-                    }
+                    `;
+                }).join('');
+                // Attach click handlers
+                const container = document.getElementById('semanticResultsList');
+                container.querySelectorAll('.card-body').forEach(cardBody => {
+                    cardBody.addEventListener('click', function() {
+                        const publicationId = this.dataset.publicationId;
+                        if (publicationId) {
+                            window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
+                        }
+                    });
                 });
+            }
+        }
+
+        renderSemanticResults(results);
+
+        // Añadir evento al selector para cambiar el número de resultados
+        const topKSelect = document.getElementById('semanticTopK');
+        if (topKSelect) {
+            topKSelect.addEventListener('change', function() {
+                const topK = parseInt(this.value);
+                // Aquí deberías volver a hacer la petición al backend con el nuevo top_k
+                // Puedes guardar el último query en una variable global si lo necesitas
+                if (window.lastSemanticQuery) {
+                    fetch(`/BiblioMetrics/${currentLang}/semantic_search/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: window.lastSemanticQuery, top_k: topK })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        renderSemanticResults(data.results || []);
+                    });
+                }
             });
         }
 
@@ -716,7 +756,14 @@ export function initFiltersAndSearch() {
         // Show spinner on button
         if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        const payload = { query };
+        // Guardar el último query para el selector de top_k
+        window.lastSemanticQuery = query;
+        const topKSelect = document.getElementById('semanticTopK');
+        let top_k = 50;
+        if (topKSelect) {
+            top_k = parseInt(topKSelect.value) || 50;
+        }
+        const payload = { query, top_k };
         fetch(`/BiblioMetrics/${lang}/semantic_search/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -25,14 +25,15 @@ class Command(BaseCommand):
             areas = ', '.join(pub.areas_all or []) if pub.areas_all else ''
             abstract = pub.abstract or ''
             keywords = ', '.join(pub.keywords_all or []) if pub.keywords_all else ''
-            authors = ', '.join(pub.other_authors or []) if pub.other_authors else ''
+            authors_main = ', '.join([a.name for a in pub.authors.all()]) if hasattr(pub, 'authors') else ''
+            authors_secondary = ', '.join(pub.other_authors or []) if pub.other_authors else ''
             year = str(pub.year) if pub.year else ''
 
-            # Weighted text: prioritize title and areas
+            # Optimized weighted text: prioritize title, areas, authors
             weighted_text = (
-                f"TITLE: {title}. AREAS: {areas}. "
-                f"{title}. {areas}. "  # Repeat for extra weight
-                f"ABSTRACT: {abstract}. KEYWORDS: {keywords}. AUTHORS: {authors}. YEAR: {year}."
+                f"TITLE: {title}. AREAS: {areas}. AUTHORS: {authors_main}. "
+                f"{title}. {areas}. AUTHORS: {authors_main}. "  # Extra weight for title/areas/authors
+                f"ABSTRACT: {abstract}. KEYWORDS: {keywords}. OTHER_AUTHORS: {authors_secondary}."
             )
 
             embedding = model.encode(weighted_text)
@@ -47,7 +48,8 @@ class Command(BaseCommand):
                         'year': year,
                         'abstract': abstract,
                         'keywords_all': keywords,
-                        'other_authors': authors,
+                        'authors_main': authors_main,
+                        'other_authors': authors_secondary,
                         'areas_all': areas,
                         'weighted_text': weighted_text,
                     }

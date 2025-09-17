@@ -67,8 +67,13 @@ def semantic_search(request):
     else:
         p = semantic_search._hnsw_index
 
-    # Search top-N (e.g. 50)
-    top_k = 50
+    # Permitir que el usuario defina el número de resultados (top_k)
+    try:
+        top_k = int(data.get('top_k', 50))
+        if top_k < 1 or top_k > 500:
+            top_k = 50
+    except Exception:
+        top_k = 50
     ids, distances = p.knn_query(query_emb, k=top_k)
     ids = ids[0]
     distances = distances[0]
@@ -84,6 +89,7 @@ def semantic_search(request):
         similarity = 1 - distances[idx]
         if similarity < 0.1:
             continue
+
         candidates.append({
             'id': pub.id,
             'title': pub.title,
@@ -91,6 +97,7 @@ def semantic_search(request):
             'abstract': pub.abstract,
             'similarity': round(similarity, 3),
             'authors': [author.name for author in pub.authors.all()],
+            'other_authors': getattr(pub, 'other_authors', []),
             'keywords': pub.keywords_all,
             'areas': pub.areas_all,
         })
@@ -491,7 +498,8 @@ def search_publications(request):
             'authors': authors,
             'institutions': institutions,
             'areas': areas,
-            'url': pub.url if hasattr(pub, 'url') else None
+            'url': pub.url if hasattr(pub, 'url') else None,
+            'other_authors': getattr(pub, 'other_authors', [])
         })
 
     return JsonResponse({'results': results})
