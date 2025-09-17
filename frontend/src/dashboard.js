@@ -4,6 +4,7 @@ import Graph from 'graphology';
 import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
+import { initWorldMap } from './worldmap.js';
 
 export function initFiltersAndSearch() {
 
@@ -2834,7 +2835,10 @@ export function initFiltersAndSearch() {
         if (overlay) overlay.style.display = 'none';
     }
 
-    window.addEventListener('DOMContentLoaded', function() {
+    window.addEventListener('DOMContentLoaded', () => {
+        // Ejemplo: países activos España y Francia
+        initWorldMap('worldmap-container', ['ES', 'FR']);
+
         const btn = document.getElementById('togglePredictedAreasBtn');
         if (btn) {
             btn.addEventListener('click', function() {

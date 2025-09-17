@@ -394,6 +394,26 @@
             </div>
         </div>
     </div>
+
+    <!-- Card para el mapamundi colaboraciones -->
+    <div class="col-12 h-100 mt-4">
+        <div class="card dashboard-card">
+            <div class="card-body" style="position:relative;">
+                <h5 class="card-title mb-2">
+                    <i class="fas fa-globe-europe me-1"></i>{% trans "International Collaborations" %}
+                </h5>
+                <div id="worldmap-container" style="width:100%; aspect-ratio: 16/9; min-height:320px; height:auto; overflow:hidden;"></div>
+                <style>
+                    /* Ensure Leaflet fills the container and background is transparent */
+                    #worldmap-container .leaflet-container {
+                        background: transparent !important;
+                    }
+                    #worldmap-container .leaflet-pane { background: transparent !important; }
+                    #worldmap-container .leaflet-control-container { display:none; }
+                </style>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 

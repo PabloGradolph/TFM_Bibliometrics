@@ -17,6 +17,7 @@
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "html2canvas": "^1.4.1",
+    "leaflet": "^1.9.4",
     "sigma": "^3.0.2"
   }
 }
