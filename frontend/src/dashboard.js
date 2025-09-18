@@ -4,7 +4,7 @@ import Graph from 'graphology';
 import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
-import { initWorldMap } from './worldmap.js';
+import { initWorldMap, setWorldMapActiveCountries, setWorldMapLoading } from './worldmap.js';
 
 export function initFiltersAndSearch() {
 
@@ -1001,6 +1001,148 @@ export function initFiltersAndSearch() {
                 // Actualizar la tabla de publicaciones
                 updatePublicationsTable(1).then(() => {
                 });
+
+                // También calcular países a partir de TODAS las publicaciones filtradas (no solo la página visible)
+                try {
+                    // Show loading on the world map while we compute and fetch all publications
+                    setWorldMapLoading(true);
+                    const paramsAll = new URLSearchParams(params);
+                    paramsAll.set('page', '1');
+                    paramsAll.set('per_page', '100000'); // valor grande para traer todas
+                    fetch(`/BiblioMetrics/${lang}/api/dashboard/publications/?${paramsAll.toString()}`)
+                        .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to fetch publications for countries')))
+                        .then(pubData => {
+                            const pubs = (pubData && pubData.publications && Array.isArray(pubData.publications.data)) ? pubData.publications.data : [];
+                            // We'll build counts per canonical country name
+                            const countsByCountryName = new Map();
+                            if (pubs.length > 0) {
+                                // Always include Spain if there is at least one publication.
+                                // For tooltips, set Spain count = total filtered publications (assumption: map displays global activity).
+                                countsByCountryName.set('Spain', pubs.length);
+                                // Reuse same normalization tables as above
+                                const KNOWN_COUNTRIES = new Set([
+                                    'Spain','Italy','Australia','Germany','Switzerland','Netherlands','France','Latvia','Colombia','United Kingdom','Portugal','Canada','United States','Norway','Ireland','Belgium','China','Sweden','Japan','Slovakia','South Korea','Luxembourg','Greece','Venezuela','Brazil','Mexico','Argentina','Bolivia','Austria','Hungary','Chile','Estonia','Poland','Israel','Costa Rica','Denmark','Turkey','Singapore','Romania','Russia','Nigeria','Finland','Jordan','Qatar','Malaysia','Lebanon','Tunisia','Slovenia','Bulgaria','Cuba','El Salvador','Nicaragua','Honduras','Kenya','Tanzania','Ukraine','Morocco','Ghana','Philippines','Taiwan','Cameroon','Serbia','Croatia','Iran','Saudi Arabia','New Zealand','Hong Kong','United Arab Emirates','Puerto Rico','Burkina Faso','Liechtenstein','Lithuania','Iceland','Paraguay','Ecuador','Uruguay','Panama','Zambia','Peru','Czech Republic','Dominican Republic'
+                                ]);
+                                const MULTI_MAP = new Map([
+                                    ['united states', 'United States'],
+                                    ['estados unidos', 'United States'],
+                                    ['united kingdom', 'United Kingdom'],
+                                    ['reino unido', 'United Kingdom'],
+                                    ['saudi arabia', 'Saudi Arabia'],
+                                    ['arabia saudi', 'Saudi Arabia'],
+                                    ['czech republic', 'Czech Republic'],
+                                    ['republica checa', 'Czech Republic'],
+                                    ['dominican republic', 'Dominican Republic'],
+                                    ['new zealand', 'New Zealand'],
+                                    ['nueva zelanda', 'New Zealand'],
+                                    ['hong kong', 'Hong Kong'],
+                                    ['puerto rico', 'Puerto Rico'],
+                                    ['costa rica', 'Costa Rica'],
+                                    ['united arab emirates', 'United Arab Emirates'],
+                                    ['emiratos arabes unidos', 'United Arab Emirates'],
+                                    ['burkina faso', 'Burkina Faso'],
+                                    ['russian federation', 'Russia'],
+                                ]);
+                                const SINGLE_MAP = new Map([
+                                    'espana','Spain','españa','Spain','spain','Spain','csic','Spain',
+                                    'usa','United States','us','United States','eeuu','United States','u.s.a.','United States','states','United States','unidos','United States',
+                                    'uk','United Kingdom','u.k.','United Kingdom','england','United Kingdom','scotland','United Kingdom','wales','United Kingdom','kingdom','United Kingdom',
+                                    'italia','Italy','italy','Italy','alemania','Germany','germany','Germany','francia','France','france','France',
+                                    'paiseshbajos','Netherlands','paisesbajos','Netherlands','netherlands','Netherlands','holanda','Netherlands',
+                                    'suiza','Switzerland','switzerland','Switzerland','letonia','Latvia','latvia','Latvia','colombia','Colombia','portugal','Portugal','canada','Canada',
+                                    'noruega','Norway','norway','Norway','irlanda','Ireland','ireland','Ireland','belgica','Belgium','belgium','Belgium',
+                                    'china','China','suecia','Sweden','sweden','Sweden','japon','Japan','japan','Japan','eslovaquia','Slovakia','slovakia','Slovakia',
+                                    'corea','South Korea','korea','South Korea','luxemburgo','Luxembourg','luxembourg','Luxembourg','grecia','Greece','greece','Greece','venezuela','Venezuela',
+                                    'brasil','Brazil','brazil','Brazil','mexico','Mexico','argentina','Argentina','bolivia','Bolivia','austria','Austria','hungria','Hungary','hungary','Hungary','chile','Chile',
+                                    'estonia','Estonia','polonia','Poland','poland','Poland','israel','Israel','dinamarca','Denmark','denmark','Denmark','turquia','Turkey','turkey','Turkey',
+                                    'singapur','Singapore','singapore','Singapore','rumania','Romania','romania','Romania','rusia','Russia','russian','Russia','nigeria','Nigeria','finlandia','Finland','finland','Finland',
+                                    'jordania','Jordan','jordan','Jordan','qatar','Qatar','malasia','Malaysia','malaysia','Malaysia','libano','Lebanon','lebanon','Lebanon','tunez','Tunisia','tunisia','Tunisia',
+                                    'eslovenia','Slovenia','slovenia','Slovenia','bulgaria','Bulgaria','cuba','Cuba','salvador','El Salvador','elsalvador','El Salvador','nicaragua','Nicaragua','honduras','Honduras',
+                                    'kenia','Kenya','kenya','Kenya','tanzania','Tanzania','ucrania','Ukraine','ukraine','Ukraine','marruecos','Morocco','morocco','Morocco','ghana','Ghana','filipinas','Philippines','philippines','Philippines',
+                                    'taiwan','Taiwan','camerun','Cameroon','cameroon','Cameroon','serbia','Serbia','croacia','Croatia','croatia','Croatia','iran','Iran','arabia','Saudi Arabia',
+                                    'nuevazelanda','New Zealand','zelanda','New Zealand','zealand','New Zealand','kong','Hong Kong','hong','Hong Kong','emirates','United Arab Emirates','emiratos','United Arab Emirates',
+                                    'puertorico','Puerto Rico','rico','Puerto Rico','rica','Costa Rica','burkina','Burkina Faso','faso','Burkina Faso',
+                                    'liechtenstein','Liechtenstein','lituania','Lithuania','lithuania','Lithuania','islandia','Iceland','iceland','Iceland','paraguay','Paraguay','ecuador','Ecuador','uruguay','Uruguay','panama','Panama','zambia','Zambia','peru','Peru'
+                                ].reduce((m, v, i, a) => (i % 2 === 0 ? m.set(a[i], a[i+1]) : m), new Map()));
+                                const NON_COUNTRY_BLACKLIST = new Set([
+                                    'university','hospital','institute','instituto','center','centre','service','group','sciences','science','medicine','immunology','rheumatology','farmacologia','protected','health','clinica','and','s/n','fe','cologne/germany','america','africa','granada','madrid','valencia','barcelona','sabadell','vizcaya','murcia','malaga','london','salamanca','jersey','berlin','hannover','luebeck','freiburg','monterrey','parana','octubre','paz','nieves','san','college','school','department','csic-uam','csic-ugr','csic-upv','csic-upf','csic-uva','csic-usal','csic-inta','csic-umh','csic-jclm-uclm','upv/ehu','iis-ip','iis-princesa','iibb-uab','ifimav','armilla-granada','melbourne','lille','salvador','granada','valencia','santander','pamplona','vigo','lugo'
+                                ]);
+                                const normalizeCountryFromAffiliation = (affiliation) => {
+                                    if (!affiliation || typeof affiliation !== 'string') return null;
+                                    let segment = affiliation.split(',').pop().trim();
+                                    segment = segment.replace(/[.;:()\[\]\-]+$/g, '');
+                                    const norm = segment.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+                                    if (!norm) return null;
+                                    if (NON_COUNTRY_BLACKLIST.has(norm)) return null;
+                                    if (norm.includes('csic') || norm.includes('universi') || norm.includes('institu') || norm.includes('hospit') || norm.includes('clinic')) {
+                                        return null;
+                                    }
+                                    const tokens = norm.split(/\s+/).filter(Boolean);
+                                    const len = tokens.length;
+                                    const trySeq = (n) => {
+                                        if (len < n) return null;
+                                        const seq = tokens.slice(len - n).join(' ');
+                                        return MULTI_MAP.get(seq) || null;
+                                    };
+                                    let cand = trySeq(3) || trySeq(2);
+                                    if (!cand) {
+                                        const last = tokens[len - 1];
+                                        cand = SINGLE_MAP.get(last) || null;
+                                    }
+                                    if (!cand) {
+                                        const last = tokens[len - 1].replace(/[\/\-]/g, '');
+                                        cand = SINGLE_MAP.get(last) || null;
+                                    }
+                                    if (!cand) {
+                                        if (tokens[len - 1] === 'states' || tokens[len - 1] === 'unidos') cand = 'United States';
+                                    }
+                                    if (cand && KNOWN_COUNTRIES.has(cand)) return cand;
+                                    return null;
+                                };
+                                pubs.forEach(pub => {
+                                    const numCountries = typeof pub.num_countries === 'number' ? pub.num_countries : null;
+                                    if (numCountries !== null && numCountries > 1) {
+                                        const affs = Array.isArray(pub.affiliations) ? pub.affiliations : [];
+                                        // Ensure we count each country at most once per publication
+                                        const perPubCountries = new Set();
+                                        affs.forEach(aff => {
+                                            const c = normalizeCountryFromAffiliation(aff);
+                                            if (c) perPubCountries.add(c);
+                                        });
+                                        perPubCountries.forEach(cn => {
+                                                    // Avoid double counting Spain: baseline already set to total publications
+                                                    if (cn === 'Spain') return;
+                                                    const prev = countsByCountryName.get(cn) || 0;
+                                                    countsByCountryName.set(cn, prev + 1);
+                                        });
+                                    }
+                                });
+                            }
+                            // Map canonical names to ISO A2 codes
+                            const NAME_TO_ISO2 = {
+                                'Spain':'ES','Italy':'IT','Australia':'AU','Germany':'DE','Switzerland':'CH','Netherlands':'NL','France':'FR','Latvia':'LV','Colombia':'CO','United Kingdom':'GB','Portugal':'PT','Canada':'CA','United States':'US','Norway':'NO','Ireland':'IE','Belgium':'BE','China':'CN','Sweden':'SE','Japan':'JP','Slovakia':'SK','South Korea':'KR','Luxembourg':'LU','Greece':'GR','Venezuela':'VE','Brazil':'BR','Mexico':'MX','Argentina':'AR','Bolivia':'BO','Austria':'AT','Hungary':'HU','Chile':'CL','Estonia':'EE','Poland':'PL','Israel':'IL','Costa Rica':'CR','Denmark':'DK','Turkey':'TR','Singapore':'SG','Romania':'RO','Russia':'RU','Nigeria':'NG','Finland':'FI','Jordan':'JO','Qatar':'QA','Malaysia':'MY','Lebanon':'LB','Tunisia':'TN','Slovenia':'SI','Bulgaria':'BG','Cuba':'CU','El Salvador':'SV','Nicaragua':'NI','Honduras':'HN','Kenya':'KE','Tanzania':'TZ','Ukraine':'UA','Morocco':'MA','Ghana':'GH','Philippines':'PH','Taiwan':'TW','Cameroon':'CM','Serbia':'RS','Croatia':'HR','Iran':'IR','Saudi Arabia':'SA','New Zealand':'NZ','Hong Kong':'HK','United Arab Emirates':'AE','Puerto Rico':'PR','Burkina Faso':'BF','Liechtenstein':'LI','Lithuania':'LT','Iceland':'IS','Paraguay':'PY','Ecuador':'EC','Uruguay':'UY','Panama':'PA','Zambia':'ZM','Peru':'PE','Czech Republic':'CZ','Dominican Republic':'DO'
+                            };
+                            const countsByIso = {};
+                            countsByCountryName.forEach((count, name) => {
+                                const iso = NAME_TO_ISO2[name];
+                                if (iso) countsByIso[iso] = count;
+                            });
+                            // Update world map
+                            setWorldMapActiveCountries(countsByIso);
+                            // eslint-disable-next-line no-console
+                            console.log('[WorldMap] Counts by ISO (global filtered):', countsByIso);
+                            setWorldMapLoading(false);
+                        })
+                        .catch(err => {
+                            // eslint-disable-next-line no-console
+                            console.error('Error computing global countries list:', err);
+                            setWorldMapLoading(false);
+                        });
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.error('Unexpected error preparing countries computation:', e);
+                    setWorldMapLoading(false);
+                }
             })
             .catch(error => console.error('Error updating visualizations:', error));
     }
@@ -1093,6 +1235,157 @@ export function initFiltersAndSearch() {
                 }
 
                 const { data: publications, pagination: paginationData } = data.publications;
+
+                // Compute dynamic countries list from current publications page
+                try {
+                    // Known canonical country names (whitelist)
+                    const KNOWN_COUNTRIES = new Set([
+                        'Spain','Italy','Australia','Germany','Switzerland','Netherlands','France','Latvia','Colombia','United Kingdom','Portugal','Canada','United States','Norway','Ireland','Belgium','China','Sweden','Japan','Slovakia','South Korea','Luxembourg','Greece','Venezuela','Brazil','Mexico','Argentina','Bolivia','Austria','Hungary','Chile','Estonia','Poland','Israel','Costa Rica','Denmark','Turkey','Singapore','Romania','Russia','Nigeria','Finland','Jordan','Qatar','Malaysia','Lebanon','Tunisia','Slovenia','Bulgaria','Cuba','El Salvador','Nicaragua','Honduras','Kenya','Tanzania','Ukraine','Morocco','Ghana','Philippines','Taiwan','Cameroon','Serbia','Croatia','Iran','Saudi Arabia','New Zealand','Hong Kong','United Arab Emirates','Puerto Rico','Burkina Faso','Liechtenstein','Lithuania','Iceland','Paraguay','Ecuador','Uruguay','Panama','Zambia','Peru','Czech Republic','Dominican Republic'
+                    ]);
+
+                    // Multi-word mappings (normalized, no accents, lowercase)
+                    const MULTI_MAP = new Map([
+                        ['united states', 'United States'],
+                        ['estados unidos', 'United States'],
+                        ['united kingdom', 'United Kingdom'],
+                        ['reino unido', 'United Kingdom'],
+                        ['saudi arabia', 'Saudi Arabia'],
+                        ['arabia saudi', 'Saudi Arabia'],
+                        ['czech republic', 'Czech Republic'],
+                        ['republica checa', 'Czech Republic'],
+                        ['dominican republic', 'Dominican Republic'],
+                        ['new zealand', 'New Zealand'],
+                        ['nueva zelanda', 'New Zealand'],
+                        ['hong kong', 'Hong Kong'],
+                        ['puerto rico', 'Puerto Rico'],
+                        ['costa rica', 'Costa Rica'],
+                        ['united arab emirates', 'United Arab Emirates'],
+                        ['emiratos arabes unidos', 'United Arab Emirates'],
+                        ['burkina faso', 'Burkina Faso'],
+                        ['russian federation', 'Russia'],
+                    ]);
+
+                    // Single-word mappings (normalized token -> canonical country)
+                    const SINGLE_MAP = new Map([
+                        // Spain
+                        ['espana','Spain'], ['españa','Spain'], ['spain','Spain'], ['csic','Spain'],
+                        // USA/UK
+                        ['usa','United States'], ['us','United States'], ['eeuu','United States'], ['u.s.a.','United States'],
+                        ['uk','United Kingdom'], ['u.k.','United Kingdom'], ['england','United Kingdom'], ['scotland','United Kingdom'], ['wales','United Kingdom'], ['kingdom','United Kingdom'],
+                        // Common countries + Spanish variants
+                        ['italia','Italy'], ['italy','Italy'], ['alemania','Germany'], ['germany','Germany'], ['francia','France'], ['france','France'],
+                        ['paiseshbajos','Netherlands'], ['paisesbajos','Netherlands'], ['netherlands','Netherlands'], ['holanda','Netherlands'],
+                        ['suiza','Switzerland'], ['switzerland','Switzerland'],
+                        ['letonia','Latvia'], ['latvia','Latvia'],
+                        ['colombia','Colombia'], ['portugal','Portugal'], ['canada','Canada'],
+                        ['noruega','Norway'], ['norway','Norway'], ['irlanda','Ireland'], ['ireland','Ireland'],
+                        ['belgica','Belgium'], ['belgium','Belgium'], ['china','China'], ['suecia','Sweden'], ['sweden','Sweden'],
+                        ['japon','Japan'], ['japan','Japan'], ['eslovaquia','Slovakia'], ['slovakia','Slovakia'],
+                        ['corea','South Korea'], ['korea','South Korea'],
+                        ['luxemburgo','Luxembourg'], ['luxembourg','Luxembourg'],
+                        ['grecia','Greece'], ['greece','Greece'], ['venezuela','Venezuela'],
+                        ['brasil','Brazil'], ['brazil','Brazil'], ['mexico','Mexico'], ['argentina','Argentina'], ['bolivia','Bolivia'],
+                        ['austria','Austria'], ['hungria','Hungary'], ['hungary','Hungary'], ['chile','Chile'],
+                        ['estonia','Estonia'], ['polonia','Poland'], ['poland','Poland'], ['israel','Israel'],
+                        ['dinamarca','Denmark'], ['denmark','Denmark'], ['turquia','Turkey'], ['turkey','Turkey'],
+                        ['singapur','Singapore'], ['singapore','Singapore'], ['rumania','Romania'], ['romania','Romania'],
+                        ['rusia','Russia'], ['russian','Russia'], ['nigeria','Nigeria'], ['finlandia','Finland'], ['finland','Finland'],
+                        ['jordania','Jordan'], ['jordan','Jordan'], ['qatar','Qatar'], ['malasia','Malaysia'], ['malaysia','Malaysia'],
+                        ['libano','Lebanon'], ['lebanon','Lebanon'], ['tunez','Tunisia'], ['tunisia','Tunisia'],
+                        ['eslovenia','Slovenia'], ['slovenia','Slovenia'], ['bulgaria','Bulgaria'],
+                        ['cuba','Cuba'], ['salvador','El Salvador'], ['elsalvador','El Salvador'],
+                        ['nicaragua','Nicaragua'], ['honduras','Honduras'], ['kenia','Kenya'], ['kenya','Kenya'],
+                        ['tanzania','Tanzania'], ['ucrania','Ukraine'], ['ukraine','Ukraine'], ['marruecos','Morocco'], ['morocco','Morocco'],
+                        ['ghana','Ghana'], ['filipinas','Philippines'], ['philippines','Philippines'], ['taiwan','Taiwan'],
+                        ['camerun','Cameroon'], ['cameroon','Cameroon'], ['serbia','Serbia'], ['croacia','Croatia'], ['croatia','Croatia'],
+                        ['iran','Iran'], ['arabia','Saudi Arabia'],
+                        ['nuevazelanda','New Zealand'], ['zelanda','New Zealand'], ['zealand','New Zealand'],
+                        ['kong','Hong Kong'], ['hong','Hong Kong'],
+                        ['emirates','United Arab Emirates'], ['emiratos','United Arab Emirates'],
+                        ['puertorico','Puerto Rico'], ['rico','Puerto Rico'], ['rica','Costa Rica'],
+                        ['burkina','Burkina Faso'], ['faso','Burkina Faso'],
+                        ['liechtenstein','Liechtenstein'], ['lituania','Lithuania'], ['lithuania','Lithuania'], ['islandia','Iceland'], ['iceland','Iceland'],
+                        ['paraguay','Paraguay'], ['ecuador','Ecuador'], ['uruguay','Uruguay'], ['panama','Panama'], ['zambia','Zambia'], ['peru','Peru']
+                    ]);
+
+                    const NON_COUNTRY_BLACKLIST = new Set([
+                        'university','hospital','institute','instituto','center','centre','service','group','sciences','science','medicine','immunology','rheumatology','farmacologia','protected','health','clinica','and','s/n','fe','cologne/germany','america','africa','granada','madrid','valencia','barcelona','sabadell','vizcaya','murcia','malaga','london','salamanca','jersey','berlin','hannover','luebeck','freiburg','monterrey','parana','octubre','paz','nieves','san','college','school','department','csic-uam','csic-ugr','csic-upv','csic-upf','csic-uva','csic-usal','csic-inta','csic-umh','csic-jclm-uclm','upv/ehu','iis-ip','iis-princesa','iibb-uab','ifimav','armilla-granada','melbourne','lille','salvador','granada','valencia','santander','pamplona','vigo','lugo'
+                    ]);
+
+                    const normalizeCountryFromAffiliation = (affiliation) => {
+                        if (!affiliation || typeof affiliation !== 'string') return null;
+                        let segment = affiliation.split(',').pop().trim();
+                        // Remove trailing punctuation
+                        segment = segment.replace(/[.;:()\[\]\-]+$/g, '');
+                        const norm = segment.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+                        if (!norm) return null;
+
+                        // Quick blacklist exact matches
+                        if (NON_COUNTRY_BLACKLIST.has(norm)) return null;
+                        // Substring blacklisting (institutions/universities)
+                        if (norm.includes('csic') || norm.includes('universi') || norm.includes('institu') || norm.includes('hospit') || norm.includes('clinic')) {
+                            return null;
+                        }
+
+                        const tokens = norm.split(/\s+/).filter(Boolean);
+                        const len = tokens.length;
+
+                        // Try tri-gram, then bi-gram, then single word from the end
+                        const trySeq = (n) => {
+                            if (len < n) return null;
+                            const seq = tokens.slice(len - n).join(' ');
+                            return MULTI_MAP.get(seq) || null;
+                        };
+
+                        let cand = trySeq(3) || trySeq(2);
+                        if (!cand) {
+                            // Single token mapping
+                            const last = tokens[len - 1];
+                            cand = SINGLE_MAP.get(last) || null;
+                        }
+
+                        // If still no candidate, sometimes the second last + last pattern is split by hyphen or slash in the last token
+                        if (!cand) {
+                            const last = tokens[len - 1].replace(/[\/\-]/g, '');
+                            cand = SINGLE_MAP.get(last) || null;
+                        }
+
+                        // Validate against known countries
+                        // Special case: lone 'states' or 'unidos' map to United States
+                        if (!cand) {
+                            if (tokens[len - 1] === 'states' || tokens[len - 1] === 'unidos') cand = 'United States';
+                        }
+                        if (cand && KNOWN_COUNTRIES.has(cand)) return cand;
+                        return null;
+                    };
+
+                    /**
+                     * Build set of countries for current publications according to rules:
+                     * - If there is at least one publication, include 'Spain'.
+                     * - For each publication with num_countries > 1, scan affiliations and add country from last token.
+                     */
+                    const countriesSet = new Set();
+                    if (Array.isArray(publications) && publications.length > 0) {
+                        countriesSet.add('Spain');
+                        publications.forEach(pub => {
+                            const numCountries = typeof pub.num_countries === 'number' ? pub.num_countries : null;
+                            if (numCountries !== null && numCountries > 1) {
+                                const affs = Array.isArray(pub.affiliations) ? pub.affiliations : [];
+                                affs.forEach(aff => {
+                                    const c = normalizeCountryFromAffiliation(aff);
+                                    if (c) countriesSet.add(c);
+                                });
+                            }
+                        });
+                    }
+                    const countriesList = Array.from(countriesSet);
+                    // Print the list as a string (comma-separated)
+                    // eslint-disable-next-line no-console
+                    console.log('[WorldMap] Countries to paint:', countriesList.join(', '));
+                } catch (err) {
+                    // eslint-disable-next-line no-console
+                    console.error('Error computing countries list from publications:', err);
+                }
 
                 // Ordenar las métricas en un orden específico
                 const orderedMetrics = [
@@ -2837,7 +3130,8 @@ export function initFiltersAndSearch() {
 
     window.addEventListener('DOMContentLoaded', () => {
         // Ejemplo: países activos España y Francia
-        initWorldMap('worldmap-container', ['ES', 'FR']);
+    // Initialize world map without active countries; it will be fed by filtered counts
+    initWorldMap('worldmap-container');
 
         const btn = document.getElementById('togglePredictedAreasBtn');
         if (btn) {

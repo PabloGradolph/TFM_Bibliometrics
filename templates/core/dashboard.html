@@ -4,6 +4,11 @@
 
 {% block title %}{% trans "Dashboard - Bibliometrics IPBLN" %}{% endblock %}
 
+{% block extra_css %}
+    <!-- Leaflet CSS (required for proper rendering of the map and overlays) -->
+    <link rel="stylesheet" href="{% static 'css/leaflet.css' %}">
+{% endblock %}
+
 {% block content %}
 <style>
     .dashboard-card {

@@ -554,7 +554,13 @@ def get_publications_data(request):
     types = request.GET.getlist('types')
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
-    per_page = 20
+    # Allow overriding page size to fetch all filtered publications when needed
+    try:
+        per_page = int(request.GET.get('per_page', 20))
+        if per_page <= 0:
+            per_page = 20
+    except (TypeError, ValueError):
+        per_page = 20
 
     sort_by = request.GET.get('sort_by')
     sort_order = request.GET.get('sort_order', 'desc')
@@ -648,7 +654,9 @@ def get_publications_data(request):
             'year': pub.year,
             'publication_type': pub.publication_type[0] if isinstance(pub.publication_type, list) and pub.publication_type else pub.publication_type,
             'metrics': metrics,
-            'international_collab': pub.international_collab
+            'international_collab': pub.international_collab,
+            'num_countries': getattr(pub, 'num_countries', None),
+            'affiliations': getattr(pub, 'affiliations', None),
         })
 
     return JsonResponse({
