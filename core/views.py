@@ -657,6 +657,10 @@ def get_publications_data(request):
             'international_collab': pub.international_collab,
             'num_countries': getattr(pub, 'num_countries', None),
             'affiliations': getattr(pub, 'affiliations', None),
+            # New: expose backend-provided countries fields
+            'countries_ids': getattr(pub, 'countries_ids', None),
+            'countries': getattr(pub, 'countries', None),
+            'countries_iso2': getattr(pub, 'countries_iso2', None),
         })
 
     return JsonResponse({
@@ -1204,3 +1208,163 @@ def export_report(request):
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Informe.pdf"'
     return response
+
+
+@login_required(login_url='/BiblioMetrics/accounts/login/')
+def get_worldmap_counts(request):
+    """
+    Returns aggregated counts for the world map based on current filters, computed server-side.
+
+        New counting logic (Spain as a normal country):
+        - For each publication, increment +1 for each distinct ISO2 country present in
+            Publication.countries_iso2 (including 'ES' when present).
+        - Single-country publications are counted for that country.
+
+    Query params (all optional): year_from, year_to, areas, institutions, types, author
+    """
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    author = request.GET.get('author')
+
+    # Build base queryset
+    query = Publication.objects.all()
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for t in types:
+            type_query |= Q(publication_type__icontains=t)
+        query = query.filter(type_query)
+    if author:
+        query = query.filter(authors__name=author)
+
+    # Distinct publications
+    query = query.distinct()
+
+    total = query.count()
+
+    counts = {}
+
+    # Fetch only needed fields to minimize memory (include num_spanish_affils for fallback logic)
+    debug_mode = request.GET.get('debug') == '1'
+    missing_spain_ids = []  # publications where fallback added
+    for num_countries, countries_iso2, num_spanish_affils, pub_id in query.values_list('num_countries', 'countries_iso2', 'num_spanish_affils', 'id'):
+        try:
+            iso_list = countries_iso2 if isinstance(countries_iso2, list) else []
+            per_pub_iso = set()
+            for code in iso_list:
+                if isinstance(code, str):
+                    iso = code.strip().upper()
+                    if iso:
+                        per_pub_iso.add(iso)
+            # Fallback: if Spain affiliations exist but ES not captured in countries_iso2, add ES
+            if (not per_pub_iso or 'ES' not in per_pub_iso) and (num_spanish_affils or 0) > 0:
+                per_pub_iso.add('ES')
+                if debug_mode:
+                    missing_spain_ids.append(pub_id)
+            for iso in per_pub_iso:
+                counts[iso] = counts.get(iso, 0) + 1
+        except Exception:
+            # Be robust to malformed rows; skip silently
+            continue
+    response = {'counts': counts, 'total_publications': total}
+    if debug_mode:
+        response['fallback_spain_added'] = len(missing_spain_ids)
+        response['sample_missing_spain_publications'] = missing_spain_ids[:50]
+    return JsonResponse(response)
+
+
+@login_required(login_url='/BiblioMetrics/accounts/login/')
+def get_spainmap_counts(request):
+    """
+    Returns aggregated counts for the Spain map (Autonomous Communities and Provinces)
+    using current filters. Each publication contributes +1 to each distinct CCAA and
+    +1 to each distinct Province listed in its fields.
+
+    Response:
+    {
+        "ccaa": { "andalucia": 10, "madrid": 5, ... },
+        "provinces": { "granada": 3, "madrid": 7, ... },
+        "total_publications": N
+    }
+    Keys are normalized (accent-insensitive, lowercase, non-letters collapsed) for robust matching.
+    """
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    author = request.GET.get('author')
+
+    # Build base queryset
+    query = Publication.objects.all()
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        type_query = Q()
+        for t in types:
+            type_query |= Q(publication_type__icontains=t)
+        query = query.filter(type_query)
+    if author:
+        query = query.filter(authors__name=author)
+
+    query = query.distinct()
+
+    def normalize_key(name: str) -> str:
+        """Normalize region/province names for consistent matching (lowercase, no accents)."""
+        if not isinstance(name, str):
+            return ''
+        # Remove diacritics
+        nfkd = unicodedata.normalize('NFKD', name)
+        ascii_str = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+        # Replace unicode dashes with space, non-letters to space, collapse spaces
+        import re
+        s = re.sub(r'[‐‑‒–—―\-_/]+', ' ', ascii_str)
+        s = re.sub(r'[^A-Za-zÀ-ÿ ]+', ' ', s)
+        s = re.sub(r'\s+', ' ', s)
+        s = s.strip().lower()
+        return s
+
+    ccaa_counts = {}
+    prov_counts = {}
+
+    for ccaas, provinces in query.values_list('ccaas', 'provinces'):
+        try:
+            per_pub_ccaa = set()
+            for n in (ccaas or []):
+                key = normalize_key(n)
+                if key:
+                    per_pub_ccaa.add(key)
+            for key in per_pub_ccaa:
+                ccaa_counts[key] = ccaa_counts.get(key, 0) + 1
+
+            per_pub_prov = set()
+            for n in (provinces or []):
+                key = normalize_key(n)
+                if key:
+                    per_pub_prov.add(key)
+            for key in per_pub_prov:
+                prov_counts[key] = prov_counts.get(key, 0) + 1
+        except Exception:
+            continue
+
+    return JsonResponse({
+        'ccaa': ccaa_counts,
+        'provinces': prov_counts,
+        'total_publications': query.count(),
+    })

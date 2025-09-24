@@ -404,9 +404,25 @@
     <div class="col-12 h-100 mt-4">
         <div class="card dashboard-card">
             <div class="card-body" style="position:relative;">
-                <h5 class="card-title mb-2">
-                    <i class="fas fa-globe-europe me-1"></i>{% trans "International Collaborations" %}
-                </h5>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-globe-europe me-1"></i>{% trans "International Collaborations" %}
+                    </h5>
+                    <div class="d-flex align-items-center">
+                        <button type="button" class="btn btn-outline-primary btn-sm me-2" id="exportCollabMap" title="{% trans 'Download image' %}">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Map view">
+                            <button type="button" class="btn btn-outline-secondary active" data-map-view="world">{% trans "World" %}</button>
+                            <button type="button" class="btn btn-outline-secondary" data-map-view="spain">{% trans "Spain" %}</button>
+                        </div>
+                        <div class="btn-group btn-group-sm ms-2 d-none" id="spainLevelGroup" role="group" aria-label="Spain level">
+                            <button type="button" class="btn btn-outline-secondary active" data-spain-level="ccaa">{% trans "Autonomous Communities" %}</button>
+                            <button type="button" class="btn btn-outline-secondary" data-spain-level="provinces">{% trans "Provinces" %}</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- NOTE: Top 10 table now se renderiza como Leaflet control (bottom-right) dentro del mapa -->
                 <div id="worldmap-container" style="width:100%; aspect-ratio: 16/9; min-height:320px; height:auto; overflow:hidden;"></div>
                 <style>
                     /* Ensure Leaflet fills the container and background is transparent */
@@ -414,7 +430,10 @@
                         background: transparent !important;
                     }
                     #worldmap-container .leaflet-pane { background: transparent !important; }
-                    #worldmap-container .leaflet-control-container { display:none; }
+                    /* IMPORTANTE: Antes ocultábamos todos los controles. Se elimina para que aparezcan la leyenda (bottom-left) y la tabla Top10 (bottom-right). */
+                    /* Ajustes opcionales de tamaño/z-index */
+                    #worldmap-container .leaflet-control { font-size: 0.72rem; }
+                    #worldmap-container .worldmap-legend { font-size: 0.72rem; }
                 </style>
             </div>
         </div>

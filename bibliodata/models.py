@@ -48,6 +48,11 @@ class Publication(models.Model):
     affiliations = models.JSONField("Full affiliation strings", blank=True, null=True)
     institutions = models.ManyToManyField("Institution", related_name="publications", blank=True)
 
+    # Countries derived from the API field "paises" (list of numeric IDs)
+    countries_ids = models.JSONField("Countries IDs (from API)", blank=True, null=True)
+    countries = models.JSONField("Countries (names)", blank=True, null=True)
+    countries_iso2 = models.JSONField("Countries ISO A2", blank=True, null=True)
+
     def __str__(self):
         return f"{self.title[:80]}..."
 

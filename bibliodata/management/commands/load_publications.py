@@ -105,6 +105,49 @@ def extract_recognized_institution_names(afiliaciones):
     return names
 
 
+def normalize_country_name(name: str) -> str:
+    """Normalize country names loaded from CSV to fix mojibake and unify dashes.
+
+    This function attempts to correct common encoding artifacts (e.g., 'RepÃºblica')
+    by re-encoding from Latin-1 to UTF-8 when suspicious characters are present.
+    It also normalizes various Unicode dash characters to a standard hyphen and
+    trims whitespace. A small set of manual corrections is applied for known cases.
+
+    Args:
+        name: Raw country name string as read from CSV.
+
+    Returns:
+        A cleaned country name suitable for storage and display.
+    """
+    if not isinstance(name, str):
+        return ""
+
+    s = name.strip()
+    # Normalize Unicode dashes to simple hyphen
+    s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2015]", "-", s)
+    # Heuristic: if typical mojibake chars appear, try latin1->utf8 repair
+    if any(ch in s for ch in ("Ã", "Â", "�")):
+        try:
+            repaired = s.encode("latin1", errors="ignore").decode("utf-8", errors="ignore").strip()
+            if repaired:
+                s = repaired
+        except Exception:
+            pass
+    # Manual corrections for a few frequent cases (extend as needed)
+    fixes = {
+        "Cote d'Ivoire": "Côte d'Ivoire",
+        "Republica Dominicana": "República Dominicana",
+        "Republica Checa": "República Checa",
+        "Turquia": "Turquía",
+        "Espana": "España",
+        "Mexico": "México",
+        "Peru": "Perú",
+        "Bolivia, Estado Plurinacional de": "Bolivia",
+        "Viet Nam": "Vietnam",
+    }
+    return fixes.get(s, s)
+
+
 
 class Command(BaseCommand):
     help = "Carga publicaciones desde items.csv, impacto.csv y JSON enriquecido"
@@ -170,6 +213,7 @@ class Command(BaseCommand):
                     "num_foreign_affils": to_int(jv("numFiliacionesForeign"), 0),
                     "ccaas": clean_list(jv("ccaas", default=[])),
                     "provinces": clean_list(jv("provincias", default=[])),
+                    # countries fields will be assigned after reading mapping
                     "areas_all": jv("areas", default=[]),                       # list
                     "jcr_materias": parse_jcr_materias(jv("jcrMaterias", default=[])),
                 }
@@ -223,6 +267,52 @@ class Command(BaseCommand):
             for area in areas:
                 area_obj, _ = ThematicArea.objects.get_or_create(name=area.strip())
                 obj.thematic_areas.add(area_obj)
+
+            # === Countries ===
+            # Expecting j['paises'] as a list of numeric IDs
+            countries_ids = []
+            countries_names = []
+            countries_iso2 = []
+            try:
+                raw_ids = j.get('paises') or []
+                if isinstance(raw_ids, list):
+                    countries_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+            except Exception:
+                countries_ids = []
+
+            # Build a mapping from paises.csv only once (cache in function attribute)
+            if not hasattr(self, '_countries_map'):
+                self._countries_map = {}
+                try:
+                    with open('paises.csv', encoding='utf-8') as pf:
+                        reader = csv.DictReader(pf)
+                        for row in reader:
+                            try:
+                                pid = int(row.get('id_pais') or 0)
+                            except Exception:
+                                continue
+                            raw_name = (row.get('nombre') or '').strip()
+                            name = normalize_country_name(raw_name)
+                            iso2 = (row.get('iso_alpha_2') or '').strip().upper() or None
+                            if iso2 == 'UK':
+                                iso2 = 'GB'  # normalize non-standard UK code
+                            if pid and name:
+                                self._countries_map[pid] = {'name': name, 'iso2': iso2}
+                except FileNotFoundError:
+                    self._countries_map = {}
+
+            for pid in countries_ids:
+                info = self._countries_map.get(pid)
+                if not info:
+                    continue
+                if info['name'] and info['name'] not in countries_names:
+                    countries_names.append(info['name'])
+                if info['iso2'] and info['iso2'] not in countries_iso2:
+                    countries_iso2.append(info['iso2'])
+
+            obj.countries_ids = countries_ids or None
+            obj.countries = countries_names or None
+            obj.countries_iso2 = countries_iso2 or None
 
             obj.save()
 

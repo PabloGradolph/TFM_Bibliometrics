@@ -21,6 +21,12 @@ if (typeof document !== 'undefined' && !document.getElementById('worldmap-focus-
     .leaflet-control-zoom a:hover { background:#f2f2f2; }
     .worldmap-legend { font: 12px/1.2 system-ui, sans-serif; }
     .worldmap-legend div { line-height: 1.1; }
+    .worldmap-top10-table { font: 12px/1.2 system-ui, sans-serif; }
+    .worldmap-top10-table table { border-collapse: collapse; width:100%; }
+    .worldmap-top10-table th, .worldmap-top10-table td { padding:2px 6px; font-size:11px; text-align:left; white-space:nowrap; }
+    .worldmap-top10-table th { font-weight:600; border-bottom:1px solid #ddd; }
+    .worldmap-top10-table tbody tr:nth-child(even){ background:#f8f8f8; }
+    .worldmap-top10-table caption { text-align:left; font-weight:600; margin-bottom:4px; font-size:12px; }
     `;
     document.head.appendChild(styleEl);
 }
@@ -71,7 +77,36 @@ const worldMapRegistry = {
     debug: false, // disabled by default
     debugLayer: null,
     legendControl: null,
+    top10El: null,
+    top10Control: null,
 };
+
+// Country name dictionaries for Top 10 table display
+const ISO2_NAME_EN = {
+    AF:'Afghanistan', AL:'Albania', DZ:'Algeria', AO:'Angola', AR:'Argentina', AM:'Armenia', AU:'Australia', AT:'Austria', AZ:'Azerbaijan',
+    BD:'Bangladesh', BY:'Belarus', BE:'Belgium', BZ:'Belize', BJ:'Benin', BO:'Bolivia', BA:'Bosnia and Herzegovina', BW:'Botswana', BR:'Brazil', BG:'Bulgaria',
+    KH:'Cambodia', CM:'Cameroon', CA:'Canada', CL:'Chile', CN:'China', CO:'Colombia', CR:'Costa Rica', HR:'Croatia', CU:'Cuba', CY:'Cyprus', CZ:'Czech Republic',
+    DK:'Denmark', DO:'Dominican Republic', EC:'Ecuador', EG:'Egypt', SV:'El Salvador', EE:'Estonia', ET:'Ethiopia',
+    FI:'Finland', FR:'France', GA:'Gabon', GM:'Gambia', GE:'Georgia', DE:'Germany', GH:'Ghana', GR:'Greece', GT:'Guatemala', HN:'Honduras', HU:'Hungary',
+    IS:'Iceland', IN:'India', ID:'Indonesia', IR:'Iran', IE:'Ireland', IL:'Israel', IT:'Italy', CI:'Ivory Coast',
+    JM:'Jamaica', JP:'Japan', JO:'Jordan', KZ:'Kazakhstan', KE:'Kenya', KR:'South Korea', KW:'Kuwait', KG:'Kyrgyzstan',
+    LV:'Latvia', LB:'Lebanon', LR:'Liberia', LY:'Libya', LT:'Lithuania', LU:'Luxembourg',
+    MG:'Madagascar', MW:'Malawi', MY:'Malaysia', ML:'Mali', MT:'Malta', MX:'Mexico', MD:'Moldova', MN:'Mongolia', ME:'Montenegro', MA:'Morocco', MZ:'Mozambique',
+    MM:'Myanmar', NA:'Namibia', NP:'Nepal', NL:'Netherlands', NZ:'New Zealand', NI:'Nicaragua', NE:'Niger', NG:'Nigeria', MK:'North Macedonia', NO:'Norway',
+    OM:'Oman', PK:'Pakistan', PA:'Panama', PY:'Paraguay', PE:'Peru', PH:'Philippines', PL:'Poland', PT:'Portugal', PR:'Puerto Rico',
+    QA:'Qatar', RO:'Romania', RU:'Russia', RW:'Rwanda', SA:'Saudi Arabia', SN:'Senegal', RS:'Serbia', SL:'Sierra Leone', SG:'Singapore', SK:'Slovakia', SI:'Slovenia', ZA:'South Africa', ES:'Spain', SE:'Sweden', CH:'Switzerland', SY:'Syria',
+    TW:'Taiwan', TJ:'Tajikistan', TZ:'Tanzania', TH:'Thailand', TG:'Togo', TT:'Trinidad and Tobago', TN:'Tunisia', TR:'Turkey',
+    UG:'Uganda', UA:'Ukraine', AE:'United Arab Emirates', GB:'United Kingdom', US:'United States', UY:'Uruguay', UZ:'Uzbekistan',
+    VE:'Venezuela', VN:'Vietnam', ZM:'Zambia', ZW:'Zimbabwe'
+};
+const ISO2_NAME_ES = {
+    US:'Estados Unidos', GB:'Reino Unido', DE:'Alemania', IT:'Italia', NL:'Países Bajos', FR:'Francia', SE:'Suecia', CO:'Colombia', CH:'Suiza', ES:'España'
+};
+function isoToDisplayName(iso, lang) {
+    const up = String(iso||'').toUpperCase();
+    if (lang === 'es') return ISO2_NAME_ES[up] || ISO2_NAME_EN[up] || up;
+    return ISO2_NAME_EN[up] || up;
+}
 
 // Mapping manual overrides or special cases (e.g., XK for Kosovo not standard in some datasets)
 const ISO_OVERRIDES = {
@@ -248,6 +283,9 @@ export function initWorldMap(containerId, activeCountries = []) {
         zoomSnap: 0.1,
         zoomDelta: 0.5,
         scrollWheelZoom: false,
+        // Fuerza a Leaflet a renderizar capas vectoriales en Canvas en lugar de SVG.
+        // Necesario para que leaflet-image pueda rasterizar correctamente las geometrías.
+        preferCanvas: true,
         // Limitar la vista para no mostrar latitudes antárticas
         maxBounds: [
             [-60, -180], // suroeste (lat, lng)
@@ -258,7 +296,7 @@ export function initWorldMap(containerId, activeCountries = []) {
 
     // Añadir controles de zoom en la esquina superior derecha
     L.control.zoom({ position: 'topright' }).addTo(map);
-    // Añadir leyenda
+    // Añadir leyenda de escala de colores (ahora abajo-derecha tras swap solicitado)
     const legend = L.control({ position: 'bottomright' });
     legend.onAdd = function() {
         const div = L.DomUtil.create('div', 'leaflet-bar');
@@ -271,6 +309,27 @@ export function initWorldMap(containerId, activeCountries = []) {
     };
     legend.addTo(map);
     worldMapRegistry.legendControl = legend;
+
+    // Añadir control Top10 (tabla) en abajo-izquierda tras swap
+    const top10 = L.control({ position: 'bottomleft' });
+    top10.onAdd = function() {
+        const div = L.DomUtil.create('div', 'leaflet-bar worldmap-top10-table');
+        div.style.background = 'rgba(255,255,255,0.95)';
+        div.style.padding = '6px 8px';
+        div.style.borderRadius = '4px';
+        div.style.boxShadow = '0 1px 4px rgba(0,0,0,0.25)';
+    div.style.maxWidth = '280px';
+    // Eliminamos el límite de altura para que no aparezca scroll y se vean los 10 países
+    div.style.maxHeight = 'none';
+    div.style.overflow = 'visible';
+        const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
+        const title = currentLang === 'es' ? 'Top 10 países' : 'Top 10 countries';
+        div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${title}</div><div style="font-size:11px;color:#666;">—</div>`;
+        worldMapRegistry.top10El = div; // reutilizamos la referencia
+        return div;
+    };
+    top10.addTo(map);
+    worldMapRegistry.top10Control = top10;
 
     // Opcional: atajo de teclado +/- (sin interferir con inputs)
     if (typeof window !== 'undefined') {
@@ -451,6 +510,245 @@ export function initWorldMap(containerId, activeCountries = []) {
     window.addEventListener('resize', () => {
         map.invalidateSize();
     });
+
+// --- Helper: load leaflet-image UMD from CDN if not present ---
+function ensureLeafletImage() {
+  return new Promise((resolve, reject) => {
+    if (window.leafletImage) return resolve(window.leafletImage);
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/leaflet-image@0.0.4/leaflet-image.js';
+    s.async = true;
+    s.onload = () => resolve(window.leafletImage);
+    s.onerror = () => reject(new Error('Failed to load leaflet-image'));
+    document.head.appendChild(s);
+  });
+}
+
+if (typeof document !== 'undefined') {
+  const exportBtn = document.getElementById('exportCollabMap');
+  if (exportBtn && !exportBtn.dataset.boundExport) {
+    exportBtn.dataset.boundExport = '1';
+    exportBtn.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      try {
+        const cardBody = exportBtn.closest('.card-body');
+        if (!cardBody) return;
+        const mapContainer = cardBody.querySelector('#worldmap-container');
+        if (!mapContainer) return;
+
+        // 1) Render Leaflet map to bitmap (no controls)
+        await ensureLeafletImage();
+        const mapBitmapCanvas = await new Promise((resolve, reject) => {
+          window.leafletImage(map, (err, canvas) => {
+            if (err || !canvas) return reject(err || new Error('leaflet-image failed'));
+            resolve(canvas);
+          });
+        });
+
+                // Comprobamos si el canvas generado está en blanco (problema típico si no se usa preferCanvas)
+                const isBlank = (() => {
+                    try {
+                        const ctx = mapBitmapCanvas.getContext('2d');
+                        const sampleW = Math.min(20, mapBitmapCanvas.width);
+                        const sampleH = Math.min(20, mapBitmapCanvas.height);
+                        const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+                        for (let i = 3; i < data.length; i += 4) { // alpha channel
+                            if (data[i] !== 0) return false; // hay píxel pintado
+                        }
+                        return true;
+                    } catch (e) { return false; }
+                })();
+
+                if (isBlank) {
+                    console.warn('[WorldMap][Export] leaflet-image devolvió un canvas vacío. Se fuerza fallback a html2canvas directo.');
+                }
+
+        // Match current displayed size
+        const mapRect = mapContainer.getBoundingClientRect();
+        const cssW = Math.max(1, Math.round(mapRect.width));
+        const cssH = Math.max(1, Math.round(mapRect.height));
+
+        // Scale bitmap to displayed size
+        const scaledMap = document.createElement('canvas');
+        scaledMap.width = cssW;
+        scaledMap.height = cssH;
+        scaledMap.getContext('2d').drawImage(
+          mapBitmapCanvas, 0, 0, mapBitmapCanvas.width, mapBitmapCanvas.height, 0, 0, cssW, cssH
+        );
+
+                // 2) Clone card off-screen (solo si no está en blanco el canvas principal)
+        const cardRect = cardBody.getBoundingClientRect();
+        const clone = cardBody.cloneNode(true);
+        Object.assign(clone.style, {
+          position: 'absolute',
+          top: '-10000px',
+          left: '-10000px',
+          pointerEvents: 'none',
+          width: cardRect.width + 'px',
+          height: cardRect.height + 'px',
+          background: '#ffffff',
+          display: 'block'
+        });
+        document.body.appendChild(clone);
+
+        // Remove unwanted controls ONLY in the clone
+        ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom']
+          .forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
+
+        // Prepare cloned map container
+        const cloneMap = clone.querySelector('#worldmap-container');
+        if (!cloneMap) throw new Error('Clone map container not found');
+
+        // Fix size so it doesn't collapse
+        cloneMap.style.width = cssW + 'px';
+        cloneMap.style.height = cssH + 'px';
+        cloneMap.style.position = 'relative';
+        cloneMap.style.overflow = 'hidden';
+
+        // Make leaflet container backgrounds transparent in the CLONE
+        const cloneLeafletContainer =
+          cloneMap.querySelector('.leaflet-container') || cloneMap;
+        cloneLeafletContainer.style.background = 'transparent';
+        cloneLeafletContainer.style.border = 'none';
+
+        // Hide all Leaflet panes (tiles, vectors, markers) in the CLONE
+        cloneMap.querySelectorAll('.leaflet-pane').forEach(p => {
+          p.style.display = 'none';
+        });
+
+        // Insert the map image as an absolutely-positioned background layer
+        const bmp = document.createElement('img');
+        bmp.src = scaledMap.toDataURL('image/png');
+        Object.assign(bmp.style, {
+          position: 'absolute',
+          left: '0px',
+          top: '0px',
+          width: cssW + 'px',
+          height: cssH + 'px',
+          zIndex: '0',
+          display: 'block'
+        });
+        // Put it as the first child so it stays at the bottom
+        cloneLeafletContainer.insertBefore(bmp, cloneLeafletContainer.firstChild);
+
+        // Ensure any of your overlays (legend/top10) sit above the image
+        cloneMap.querySelectorAll('.legend, .legend-container, .top10, .top10-container')
+          .forEach(el => {
+            if (!el) return;
+            if (!el.style.position) el.style.position = 'absolute';
+            el.style.zIndex = '10';
+            el.style.background = el.style.background || 'transparent';
+          });
+
+                let baseCanvas;
+                if (!isBlank) {
+                    // 3a) Rasterizar clon con imagen del mapa fija
+                    const { default: html2canvas } = await import('html2canvas');
+                    const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+                    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                    baseCanvas = await html2canvas(clone, {
+                        backgroundColor: '#ffffff',
+                        scale,
+                        useCORS: true,
+                        logging: false,
+                        removeContainer: true,
+                        imageTimeout: 0
+                    });
+                } else {
+                    // 3b) Fallback: capturar directamente el cardBody original ocultando controles (sin clonado)
+                    const toHide = [
+                        '#exportCollabMap',
+                        '[data-map-view="world"]',
+                        '[data-map-view="spain"]',
+                        '.leaflet-control-zoom'
+                    ].map(sel => Array.from(cardBody.querySelectorAll(sel))).flat();
+                    toHide.forEach(el => { el.__prevVisibility = el.style.visibility; el.style.visibility = 'hidden'; });
+                    // Forzamos un reflow
+                    void cardBody.offsetHeight; // eslint-disable-line no-unused-expressions
+                    const { default: html2canvas } = await import('html2canvas');
+                    const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+                    baseCanvas = await html2canvas(cardBody, {
+                        backgroundColor: '#ffffff',
+                        scale,
+                        useCORS: true,
+                        logging: false,
+                        removeContainer: true,
+                        imageTimeout: 0
+                    });
+                    // Restaurar visibilidad
+                    toHide.forEach(el => { el.style.visibility = el.__prevVisibility || ''; delete el.__prevVisibility; });
+                    // Eliminamos el clon porque no lo usamos
+                    if (clone.parentNode) document.body.removeChild(clone);
+                }
+
+        // 4) Add margins (left/top)
+        const marginLeft = 60; // tweak to taste
+        const marginTop  = 50;
+
+        const paddedCanvas = document.createElement('canvas');
+        paddedCanvas.width  = baseCanvas.width  + marginLeft;
+        paddedCanvas.height = baseCanvas.height + marginTop;
+        const pctx = paddedCanvas.getContext('2d');
+        pctx.fillStyle = '#ffffff';
+        pctx.fillRect(0, 0, paddedCanvas.width, paddedCanvas.height);
+        pctx.drawImage(baseCanvas, marginLeft, marginTop);
+
+        // 5) Download & cleanup
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        const a = document.createElement('a');
+        a.download = `international_collaborations_${ts}.png`;
+        a.href = paddedCanvas.toDataURL('image/png');
+        a.click();
+
+                if (clone.parentNode) document.body.removeChild(clone);
+            } catch (err) {
+                console.error('[WorldMap][Export] Flujo principal falló, usando fallback simple html2canvas', err);
+                try {
+                    const cardBody = exportBtn.closest('.card-body');
+                    if (!cardBody) throw err;
+                    const toHide = [
+                        '#exportCollabMap',
+                        '[data-map-view="world"]',
+                        '[data-map-view="spain"]',
+                        '.leaflet-control-zoom'
+                    ].map(sel => Array.from(cardBody.querySelectorAll(sel))).flat();
+                    toHide.forEach(el => { el.__prevVisibility = el.style.visibility; el.style.visibility = 'hidden'; });
+                    const { default: html2canvas } = await import('html2canvas');
+                    const scale = Math.min(3, (window.devicePixelRatio || 1) * 2);
+                    await new Promise(r => requestAnimationFrame(r));
+                    const baseCanvas = await html2canvas(cardBody, {
+                        backgroundColor: '#ffffff',
+                        scale,
+                        useCORS: true,
+                        logging: false,
+                        removeContainer: true,
+                        imageTimeout: 0
+                    });
+                    toHide.forEach(el => { el.style.visibility = el.__prevVisibility || ''; delete el.__prevVisibility; });
+                    const marginLeft = 60; const marginTop = 50;
+                    const paddedCanvas = document.createElement('canvas');
+                    paddedCanvas.width = baseCanvas.width + marginLeft;
+                    paddedCanvas.height = baseCanvas.height + marginTop;
+                    const ctx = paddedCanvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0,0,paddedCanvas.width,paddedCanvas.height);
+                    ctx.drawImage(baseCanvas, marginLeft, marginTop);
+                    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                    const a = document.createElement('a');
+                    a.download = `international_collaborations_${ts}.png`;
+                    a.href = paddedCanvas.toDataURL('image/png');
+                    a.click();
+                } catch (fallbackErr) {
+                    console.error('[WorldMap][Export] Fallback html2canvas también falló', fallbackErr);
+                    alert('Failed to export image');
+                }
+            }
+    });
+  }
+}
+
 }
 
 /**
@@ -484,6 +782,38 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
 
     normalizeAndStore(countsByIsoA2 || {});
     updateLegend();
+
+    // Update Top-10 table (control interno) excluyendo España
+    try {
+        if (worldMapRegistry.top10El) {
+            const entries = Object.entries(worldMapRegistry.countsByIsoA2)
+                .filter(([iso, count]) => iso !== 'ES' && count > 0)
+                .sort((a,b) => b[1]-a[1])
+                .slice(0,10);
+            const totalAllExES = Object.entries(worldMapRegistry.countsByIsoA2)
+                .filter(([iso]) => iso !== 'ES')
+                .reduce((acc,[,v])=> acc+v, 0);
+            const denominator = totalAllExES > 0 ? totalAllExES : 0;
+            const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
+            const colCountry = currentLang === 'es' ? 'País' : 'Country';
+            const colItems = currentLang === 'es' ? 'Núm.' : 'Items';
+            const colPct = currentLang === 'es' ? '%' : '%';
+            const caption = currentLang === 'es' ? 'Top 10 países' : 'Top 10 countries';
+            if (!entries.length) {
+                worldMapRegistry.top10El.innerHTML = `<div style=\"font-weight:600;font-size:12px;margin-bottom:4px;\">${caption}</div><div style=\"font-size:11px;color:#666;\">—</div>`;
+            } else {
+                const rows = entries.map(([iso, cnt]) => {
+                    const pct = denominator > 0 ? ((cnt/denominator)*100).toFixed(1) : '0.0';
+                    const name = isoToDisplayName(iso, currentLang);
+                    return `<tr><td><strong>${name}</strong></td><td>${cnt}</td><td>${pct}%</td></tr>`;
+                }).join('');
+                worldMapRegistry.top10El.innerHTML = `<table aria-label=\"${caption}\"><caption>${caption}</caption><thead><tr><th>${colCountry}</th><th>${colItems}</th><th>${colPct}</th></tr></thead><tbody>${rows}</tbody></table>`;
+            }
+        }
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[WorldMap] Failed to update top10 table', e);
+    }
 
     // Re-style each feature and add debug markers
     const matchedISOs = new Set();
