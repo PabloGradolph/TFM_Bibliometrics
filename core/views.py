@@ -127,20 +127,62 @@ def dashboard(request):
 def about(request):
     return render(request, 'core/about.html')
 
+from bibliodata.utils_publication_types import CANON_TYPES  # <-- importa tu lista canónica
+from functools import reduce
+from operator import or_
+
+def _strip_accents_lower(s: str) -> str:
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.lower().strip()
+
+_CANON_LOOKUP = { _strip_accents_lower(c): c for c in CANON_TYPES }
+
+def _canonicalize_types(selected):
+    out = []
+    for t in (selected or []):
+        key = _strip_accents_lower(t)
+        out.append(_CANON_LOOKUP.get(key, t))
+    return out
+
+def _apply_type_filter(qs, types):
+    """
+    Filter by exact JSON equality (normalized_types == ["<canon>"]).
+    This avoids issues with Unicode escapes in SQLite JSON.
+    Also supports legacy rows where normalized_types might be a plain string.
+    """
+    canon_types = _canonicalize_types(types)
+    if not canon_types:
+        return qs
+
+    or_clauses = []
+    for t in canon_types:
+        # main: JSON list with a single canonical string
+        or_clauses.append(Q(normalized_types=[t]))
+        # legacy tolerance: if some rows were saved as a bare string
+        or_clauses.append(Q(normalized_types=t))
+
+    return qs.filter(reduce(or_, or_clauses))
+
+def _get_normalized_type_value(norm):
+    """Return the single canonical type from normalized_types JSONField."""
+    if isinstance(norm, list) and norm:
+        return (norm[0] or '').strip() or 'otro'
+    if isinstance(norm, str) and norm:
+        return norm.strip()
+    return 'otro'
+
+
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filter_data(request):
-    # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')   # canónicos
     author = request.GET.get('author')
 
-    # Construir el query base sin aplicar los filtros de área, institución y tipo aún
     base_query = Publication.objects.all()
-
-    # Aplicar filtros de año y autor al query base
     if year_from:
         base_query = base_query.filter(year__gte=year_from)
     if year_to:
@@ -148,110 +190,91 @@ def get_filter_data(request):
     if author:
         base_query = base_query.filter(authors__name=author)
 
-    # Obtener años disponibles con conteo de publicaciones (basado en query completamente filtrado para años)
-    # Note: Years query should still consider all filters including areas/institutions/types
-    # This part might need clarification depending on desired year filter interaction
-    # For now, let's keep it based on the final 'query' object as before for simplicity, or revisit if needed.
-    # Let's rebuild the main query to include areas/institutions/types for counting years.
+    # ---- Years (con todos los filtros, incl. tipos)
     query_with_all_filters = base_query
     if areas:
         query_with_all_filters = query_with_all_filters.filter(thematic_areas__name__in=areas)
     if institutions:
         query_with_all_filters = query_with_all_filters.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type_item in types:
-            # Para SQLite, necesitamos buscar el string dentro del JSON
-            type_query |= Q(publication_type__icontains=type_item)
-        query_with_all_filters = query_with_all_filters.filter(type_query)
+        query_with_all_filters = _apply_type_filter(query_with_all_filters, types)
 
-    years = query_with_all_filters.values('year').annotate(count=Count('id', distinct=True)).order_by('year')
+    years = (
+        query_with_all_filters
+        .values('year')
+        .annotate(count=Count('id', distinct=True))
+        .order_by('year')
+    )
 
-    # --- Obtener áreas temáticas con conteo ---
-    # Count based on base_query (filtered by year/author) + other filters (institutions, types) but NOT areas
+    # ---- Áreas (sin filtrar por área; con resto de filtros)
     areas_query = base_query
     if institutions:
         areas_query = areas_query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type_item in types:
-            type_query |= Q(publication_type__icontains=type_item)
-        areas_query = areas_query.filter(type_query)
+        areas_query = _apply_type_filter(areas_query, types)
 
-    # Use aggregation to get counts for areas
-    areas_with_counts = areas_query.values('thematic_areas__name')\
-        .annotate(name=F('thematic_areas__name'), count=Count('id', distinct=True))\
-        .filter(count__gt=0, thematic_areas__name__isnull=False)\
+    areas_with_counts = (
+        areas_query.values('thematic_areas__name')
+        .annotate(name=F('thematic_areas__name'), count=Count('id', distinct=True))
+        .filter(count__gt=0, thematic_areas__name__isnull=False)
         .order_by('-count', 'name')
+    )
 
-    # --- Obtener instituciones con conteo ---
-    # Count based on base_query (filtered by year/author) + other filters (areas, types) but NOT institutions
+    # ---- Instituciones (sin filtrar por institución; con resto de filtros)
     institutions_query = base_query
     if areas:
         institutions_query = institutions_query.filter(thematic_areas__name__in=areas)
     if types:
-        type_query = Q()
-        for type_item in types:
-            # Para SQLite, necesitamos buscar el string dentro del JSON
-            type_query |= Q(publication_type__icontains=type_item)
-        institutions_query = institutions_query.filter(type_query)
+        institutions_query = _apply_type_filter(institutions_query, types)
 
-    # Use aggregation to get counts for institutions
-    institutions_with_counts = institutions_query.values('institutions__name')\
-        .annotate(name=F('institutions__name'), count=Count('id', distinct=True))\
-        .filter(count__gt=0, institutions__name__isnull=False)\
+    institutions_with_counts = (
+        institutions_query.values('institutions__name')
+        .annotate(name=F('institutions__name'), count=Count('id', distinct=True))
+        .filter(count__gt=0, institutions__name__isnull=False)
         .order_by('-count', 'name')
+    )
 
-    # --- Obtener tipos de publicación con conteo ---
-    # Contar tipos individuales de publicaciones que cumplen los filtros aplicados (excepto tipo)
+    # ---- Tipos normalizados con conteo (mostrar TODOS, aunque cuenten 0)
     publications_for_type_counting = base_query
     if areas:
         publications_for_type_counting = publications_for_type_counting.filter(thematic_areas__name__in=areas)
     if institutions:
         publications_for_type_counting = publications_for_type_counting.filter(institutions__name__in=institutions)
+    # Nota: normalmente aquí NO aplicamos 'types' para mostrar el universo completo disponible
+    # según el resto de filtros. Si lo quieres aplicar, descomenta la siguiente línea:
+    # if types: publications_for_type_counting = _apply_type_filter(publications_for_type_counting, types)
 
-    # Recopilar todos los tipos individuales y contarlos
-    type_counts = {}
-    for pub in publications_for_type_counting.only('publication_type'): # Usamos .only() para optimizar la consulta
-        if isinstance(pub.publication_type, list):
-            for pub_type in pub.publication_type:
-                if pub_type:
-                    # Normalizar un poco (ej. remover espacios extra, minúsculas)
-                    clean_type = pub_type.strip()
-                    if clean_type:
-                         type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
-        elif pub.publication_type: # Manejar caso donde no es lista pero tiene valor
-             clean_type = str(pub.publication_type).strip()
-             if clean_type:
-                  type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
+    # 1) Inicializa todos los canónicos a 0
+    type_counts = {t: 0 for t in CANON_TYPES}
 
-    # Convertir el diccionario de conteos a la lista de objetos esperada por el frontend
-    types_with_counts = [{'publication_type': name, 'count': count} for name, count in type_counts.items()]
-    # Ordenar por conteo (descendente) y luego por nombre (ascendente)
+    # 2) Suma según el único valor guardado en normalized_types
+    for norm in publications_for_type_counting.values_list('normalized_types', flat=True):
+        if isinstance(norm, list) and norm:
+            key = (norm[0] or '').strip() or 'otro'
+        elif isinstance(norm, str) and norm:
+            key = norm.strip()
+        else:
+            key = 'otro'
+        # Ignora claves desconocidas por seguridad
+        if key in type_counts:
+            type_counts[key] += 1
+        else:
+            type_counts['otro'] += 1
+
+    types_with_counts = [
+        {'publication_type': name, 'count': count}
+        for name, count in type_counts.items()
+    ]
+    # Si prefieres orden fijo canónico, usa esta línea:
+    # types_with_counts.sort(key=lambda x: CANON_TYPES.index(x['publication_type']))
+    # Si prefieres como antes (por count desc y luego alfabético), deja esta:
     types_with_counts.sort(key=lambda x: (-x['count'], x['publication_type']))
-
-    # --- Filtrar tipos que empiezan con "comunicación" ---
-    # Esto se hace aquí después del conteo pero antes de devolver la respuesta
-    filtered_types_with_counts = [
-        item for item in types_with_counts
-        if not item['publication_type'].lower().startswith('comunicación')
-    ]
-
-    filtered_types_with_counts = [
-        item for item in filtered_types_with_counts
-        if not item['publication_type'].lower().startswith('capítulo de')
-    ]
-
-    filtered_types_with_counts = [
-        item for item in filtered_types_with_counts
-        if not item['publication_type'].lower() == "artículo"
-    ]
 
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),
         'institutions': list(institutions_with_counts),
-        'publication_types': filtered_types_with_counts
+        'publication_types': types_with_counts
     })
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
@@ -279,15 +302,7 @@ def get_filtered_data(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        filtered_ids = [
-            pub.id for pub in query
-            if pub.publication_type and any(
-                t.lower() in str(pub_type).lower()
-                for pub_type in pub.publication_type
-                for t in types
-            )
-        ]
-        query = Publication.objects.filter(id__in=filtered_ids)
+        query = _apply_type_filter(query, types)
     if author:
         query = query.filter(authors__name=author)
 
@@ -429,7 +444,15 @@ def get_filtered_data(request):
             areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
     
     institutions_data = list(query.values('institutions__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
-    types_data = list(query.values('publication_type').annotate(count=Count('id', distinct=True)).order_by('-count'))
+    # Tipos (NORMALIZADOS) para el front (mantiene la misma clave 'publication_type')
+    # Contamos a partir del queryset ya filtrado (sin agrupar en SQL por ser JSONField en SQLite)
+    type_counter = {}
+    for norm in query.values_list('normalized_types', flat=True):
+        key = _get_normalized_type_value(norm)
+        type_counter[key] = type_counter.get(key, 0) + 1
+
+    types_data = [{'publication_type': k, 'count': v} for k, v in type_counter.items()]
+    types_data.sort(key=lambda x: (-x['count'], x['publication_type']))
 
     return JsonResponse({
         'timeline': timeline_data,
@@ -458,48 +481,40 @@ def get_author_suggestions(request):
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def search_publications(request):
-    query = request.GET.get('q', '').strip()
+    q = request.GET.get('q', '').strip()
     author = request.GET.get('author', '').strip()
-    if not query and not author:
+    if not q and not author:
         return JsonResponse({'results': []})
 
-    # Construir la consulta base
     publications = Publication.objects.all()
-
-    # Si hay un autor seleccionado, filtrar por ese autor
     if author:
         publications = publications.filter(authors__name=author)
-    # Si hay una consulta de texto, buscar en títulos Y áreas temáticas
-    elif query:
+    elif q:
         publications = publications.filter(
-            Q(title__icontains=query) |
-            Q(thematic_areas__name__icontains=query)
+            Q(title__icontains=q) |
+            Q(thematic_areas__name__icontains=q)
         )
 
-    # Ordenar y limitar resultados
     publications = publications.distinct().order_by('-year', '-publication_date')[:50]
 
     results = []
     for pub in publications:
-        # Obtener los autores de la publicación
-        authors = [author.name for author in pub.authors.all()]
-        
-        # Obtener las instituciones
-        institutions = [inst.name for inst in pub.institutions.all()]
-        
-        # Obtener las áreas temáticas
-        areas = [area.name for area in pub.thematic_areas.all()]
-        
+        authors = [a.name for a in pub.authors.all()]
+        institutions = [i.name for i in pub.institutions.all()]
+        areas = [a.name for a in pub.thematic_areas.all()]
+
+        norm = _get_normalized_type_value(pub.normalized_types)
+
         results.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
-            'publication_type': pub.publication_type,
+            'publication_type': norm,  # <- now the canonical single type
             'authors': authors,
             'institutions': institutions,
             'areas': areas,
-            'url': pub.url if hasattr(pub, 'url') else None,
-            'other_authors': getattr(pub, 'other_authors', [])
+            'url': getattr(pub, 'url', None),
+            'other_authors': getattr(pub, 'other_authors', []),
         })
 
     return JsonResponse({'results': results})
@@ -546,15 +561,14 @@ def get_metric_value(pub, key):
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_publications_data(request):
-    # Obtener los parámetros de filtrado
+    # Params
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')  # canonical
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
-    # Allow overriding page size to fetch all filtered publications when needed
     try:
         per_page = int(request.GET.get('per_page', 20))
         if per_page <= 0:
@@ -565,10 +579,10 @@ def get_publications_data(request):
     sort_by = request.GET.get('sort_by')
     sort_order = request.GET.get('sort_order', 'desc')
 
-    # Construir el query base
+    # Base query
     query = Publication.objects.all()
 
-    # Aplicar filtros
+    # Filters
     if year_from:
         query = query.filter(year__gte=year_from)
     if year_to:
@@ -578,86 +592,62 @@ def get_publications_data(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type in types:
-            type_query |= Q(publication_type__icontains=type)
-        query = query.filter(type_query)
+        query = _apply_type_filter(query, types)
     if author:
         query = query.filter(authors__name=author)
 
-    # Obtener todas las publicaciones filtradas
+    # Fetch all filtered publications
     publications = list(query)
-    
-    # Aplicar ordenación si se especifica
+
+    # Sorting
     if sort_by:
         publications.sort(key=lambda pub: get_metric_value(pub, sort_by), reverse=(sort_order == 'desc'))
     else:
-        # Ordenación por defecto por año y fecha de publicación
         publications.sort(key=lambda pub: (pub.year or 0, pub.publication_date or ''), reverse=True)
 
-    # Paginar manualmente
+    # Pagination
     total_publications = len(publications)
     total_pages = (total_publications + per_page - 1) // per_page
     start = (page - 1) * per_page
     end = start + per_page
     publications = publications[start:end]
 
-    # Preparar los datos de las publicaciones con sus métricas
+    # Build payload
     publications_data = []
     for pub in publications:
-        # Obtener las métricas específicas
         metrics = {}
-        
-        # Dimensions citations
+
         dim_citations = pub.metrics.filter(source='dimensions', metric_type='citations').order_by('-year').first()
         if dim_citations:
-            metrics['Dimensions Citations'] = {
-                'value': dim_citations.impact_factor,
-                'year': dim_citations.year
-            }
-        
-        # WoS citations
+            metrics['Dimensions Citations'] = {'value': dim_citations.impact_factor, 'year': dim_citations.year}
+
         wos_citations = pub.metrics.filter(source='wos', metric_type='citations').order_by('-year').first()
         if wos_citations:
-            metrics['WoS Citations'] = {
-                'value': wos_citations.impact_factor,
-                'year': wos_citations.year
-            }
-        
-        # Scopus citations
+            metrics['WoS Citations'] = {'value': wos_citations.impact_factor, 'year': wos_citations.year}
+
         scopus_citations = pub.metrics.filter(source='scopus', metric_type='citations').order_by('-year').first()
         if scopus_citations:
-            metrics['Scopus Citations'] = {
-                'value': scopus_citations.impact_factor,
-                'year': scopus_citations.year
-            }
-        
-        # Dimensions FCR
+            metrics['Scopus Citations'] = {'value': scopus_citations.impact_factor, 'year': scopus_citations.year}
+
         dim_fcr = pub.metrics.filter(source='dimensions', metric_type='fcr').order_by('-year').first()
         if dim_fcr:
-            metrics['FCR'] = {
-                'value': dim_fcr.impact_factor,
-                'year': dim_fcr.year
-            }
-        
-        # Dimensions RCR
+            metrics['FCR'] = {'value': dim_fcr.impact_factor, 'year': dim_fcr.year}
+
         dim_rcr = pub.metrics.filter(source='dimensions', metric_type='rcr').order_by('-year').first()
         if dim_rcr:
-            metrics['RCR'] = {
-                'value': dim_rcr.impact_factor,
-                'year': dim_rcr.year
-            }
+            metrics['RCR'] = {'value': dim_rcr.impact_factor, 'year': dim_rcr.year}
+
+        norm_type = _get_normalized_type_value(pub.normalized_types)
 
         publications_data.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
-            'publication_type': pub.publication_type[0] if isinstance(pub.publication_type, list) and pub.publication_type else pub.publication_type,
+            'publication_type': norm_type,  # <- normalized single type (keeps same key)
             'metrics': metrics,
             'international_collab': pub.international_collab,
             'num_countries': getattr(pub, 'num_countries', None),
             'affiliations': getattr(pub, 'affiliations', None),
-            # New: expose backend-provided countries fields
             'countries_ids': getattr(pub, 'countries_ids', None),
             'countries': getattr(pub, 'countries', None),
             'countries_iso2': getattr(pub, 'countries_iso2', None),
@@ -949,11 +939,7 @@ def export_report(request):
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image
     from reportlab.lib.enums import TA_CENTER
     from datetime import datetime
-    from reportlab.lib.fonts import addMapping
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.lib.utils import ImageReader
-
+    
     # Permitir POST para recibir imágenes
     if request.method == 'POST':
         data = request.POST
@@ -1212,24 +1198,13 @@ def export_report(request):
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_worldmap_counts(request):
-    """
-    Returns aggregated counts for the world map based on current filters, computed server-side.
-
-        New counting logic (Spain as a normal country):
-        - For each publication, increment +1 for each distinct ISO2 country present in
-            Publication.countries_iso2 (including 'ES' when present).
-        - Single-country publications are counted for that country.
-
-    Query params (all optional): year_from, year_to, areas, institutions, types, author
-    """
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')  # canonical
     author = request.GET.get('author')
 
-    # Build base queryset
     query = Publication.objects.all()
     if year_from:
         query = query.filter(year__gte=year_from)
@@ -1240,24 +1215,20 @@ def get_worldmap_counts(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for t in types:
-            type_query |= Q(publication_type__icontains=t)
-        query = query.filter(type_query)
+        query = _apply_type_filter(query, types)
     if author:
         query = query.filter(authors__name=author)
 
-    # Distinct publications
     query = query.distinct()
 
     total = query.count()
-
     counts = {}
-
-    # Fetch only needed fields to minimize memory (include num_spanish_affils for fallback logic)
     debug_mode = request.GET.get('debug') == '1'
-    missing_spain_ids = []  # publications where fallback added
-    for num_countries, countries_iso2, num_spanish_affils, pub_id in query.values_list('num_countries', 'countries_iso2', 'num_spanish_affils', 'id'):
+    missing_spain_ids = []
+
+    for num_countries, countries_iso2, num_spanish_affils, pub_id in query.values_list(
+        'num_countries', 'countries_iso2', 'num_spanish_affils', 'id'
+    ):
         try:
             iso_list = countries_iso2 if isinstance(countries_iso2, list) else []
             per_pub_iso = set()
@@ -1266,7 +1237,6 @@ def get_worldmap_counts(request):
                     iso = code.strip().upper()
                     if iso:
                         per_pub_iso.add(iso)
-            # Fallback: if Spain affiliations exist but ES not captured in countries_iso2, add ES
             if (not per_pub_iso or 'ES' not in per_pub_iso) and (num_spanish_affils or 0) > 0:
                 per_pub_iso.add('ES')
                 if debug_mode:
@@ -1274,8 +1244,8 @@ def get_worldmap_counts(request):
             for iso in per_pub_iso:
                 counts[iso] = counts.get(iso, 0) + 1
         except Exception:
-            # Be robust to malformed rows; skip silently
             continue
+
     response = {'counts': counts, 'total_publications': total}
     if debug_mode:
         response['fallback_spain_added'] = len(missing_spain_ids)
@@ -1285,27 +1255,15 @@ def get_worldmap_counts(request):
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_spainmap_counts(request):
-    """
-    Returns aggregated counts for the Spain map (Autonomous Communities and Provinces)
-    using current filters. Each publication contributes +1 to each distinct CCAA and
-    +1 to each distinct Province listed in its fields.
+    import unicodedata, re
 
-    Response:
-    {
-        "ccaa": { "andalucia": 10, "madrid": 5, ... },
-        "provinces": { "granada": 3, "madrid": 7, ... },
-        "total_publications": N
-    }
-    Keys are normalized (accent-insensitive, lowercase, non-letters collapsed) for robust matching.
-    """
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')  # canonical
     author = request.GET.get('author')
 
-    # Build base queryset
     query = Publication.objects.all()
     if year_from:
         query = query.filter(year__gte=year_from)
@@ -1316,32 +1274,23 @@ def get_spainmap_counts(request):
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for t in types:
-            type_query |= Q(publication_type__icontains=t)
-        query = query.filter(type_query)
+        query = _apply_type_filter(query, types)
     if author:
         query = query.filter(authors__name=author)
 
     query = query.distinct()
 
     def normalize_key(name: str) -> str:
-        """Normalize region/province names for consistent matching (lowercase, no accents)."""
         if not isinstance(name, str):
             return ''
-        # Remove diacritics
         nfkd = unicodedata.normalize('NFKD', name)
         ascii_str = ''.join([c for c in nfkd if not unicodedata.combining(c)])
-        # Replace unicode dashes with space, non-letters to space, collapse spaces
-        import re
-        s = re.sub(r'[‐‑‒–—―\-_/]+', ' ', ascii_str)
+        s = re.sub(r'[‐-‒–—―\-_/]+', ' ', ascii_str)
         s = re.sub(r'[^A-Za-zÀ-ÿ ]+', ' ', s)
         s = re.sub(r'\s+', ' ', s)
-        s = s.strip().lower()
-        return s
+        return s.strip().lower()
 
-    ccaa_counts = {}
-    prov_counts = {}
+    ccaa_counts, prov_counts = {}, {}
 
     for ccaas, provinces in query.values_list('ccaas', 'provinces'):
         try:

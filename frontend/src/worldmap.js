@@ -793,7 +793,12 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
             const totalAllExES = Object.entries(worldMapRegistry.countsByIsoA2)
                 .filter(([iso]) => iso !== 'ES')
                 .reduce((acc,[,v])=> acc+v, 0);
-            const denominator = totalAllExES > 0 ? totalAllExES : 0;
+            // Prefer the backend-provided total of filtered publications to compute %
+            // This avoids underestimating the percentage when a publication counts in multiple countries.
+            const filteredTotal = (typeof window !== 'undefined' && typeof window.worldMapFilteredTotal === 'number' && window.worldMapFilteredTotal > 0)
+                ? window.worldMapFilteredTotal
+                : null;
+            const denominator = (filteredTotal && filteredTotal > 0) ? filteredTotal : (totalAllExES > 0 ? totalAllExES : 0);
             const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
             const colCountry = currentLang === 'es' ? 'País' : 'Country';
             const colItems = currentLang === 'es' ? 'Núm.' : 'Items';
