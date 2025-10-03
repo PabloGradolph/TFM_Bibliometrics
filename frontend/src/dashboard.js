@@ -1051,6 +1051,12 @@ export function initFiltersAndSearch() {
                                 setSpainMapCounts({ ccaa, provinces });
                                 // eslint-disable-next-line no-console
                                 console.log('[SpainMap] Counts:', { ccaa, provinces });
+                                // Guardar total de publicaciones filtradas para Top10 de España
+                                if (countsData && typeof countsData.total_publications === 'number') {
+                                    window.spainMapFilteredTotal = countsData.total_publications;
+                                } else {
+                                    window.spainMapFilteredTotal = null;
+                                }
                                 setSpainMapLoading(false);
                             })
                             .catch(err => {
@@ -2981,16 +2987,21 @@ export function initFiltersAndSearch() {
                 document.querySelectorAll('[data-map-view]')?.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const spainGroup = document.getElementById('spainLevelGroup');
+                // Update collaborations card title based on view and language
+                const titleEl = document.getElementById('collabCardTitleText');
+                const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es') ? 'es' : 'en';
                 if (view === 'spain') {
                     spainGroup?.classList.remove('d-none');
                     ensureSpainMap();
                         // Show Spain overlay and refresh sizes
                         setSpainMapVisible(true);
                         // Optionally hide world map tooltips/overlays if needed
+                        if (titleEl) titleEl.textContent = 'National Collaborations';
                 } else {
                     spainGroup?.classList.add('d-none');
                         // Hide Spain overlay when switching back to world
                         setSpainMapVisible(false);
+                        if (titleEl) titleEl.textContent = 'International Collaborations';
                 }
                 window.currentMapView = view;
                 // Refresh visualizations to load the right counts for the selected view

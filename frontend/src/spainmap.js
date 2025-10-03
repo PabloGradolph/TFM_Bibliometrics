@@ -16,6 +16,12 @@ if (typeof document !== 'undefined' && !document.getElementById('spainmap-focus-
   .leaflet-control-zoom a { background:#ffffff; width:30px; height:30px; line-height:30px; font-weight:600; font-size:16px; }
   .leaflet-control-zoom a:hover { background:#f2f2f2; }
   .spainmap-legend { font: 12px/1.2 system-ui, sans-serif; }
+  .spainmap-top10-table { font: 12px/1.2 system-ui, sans-serif; }
+  .spainmap-top10-table table { border-collapse: collapse; width:100%; }
+  .spainmap-top10-table th, .spainmap-top10-table td { padding:2px 6px; font-size:11px; text-align:left; white-space:nowrap; }
+  .spainmap-top10-table th { font-weight:600; border-bottom:1px solid #ddd; }
+  .spainmap-top10-table tbody tr:nth-child(even){ background:#f8f8f8; }
+  .spainmap-top10-table caption { text-align:left; font-weight:600; margin-bottom:4px; font-size:12px; }
   `;
   document.head.appendChild(styleEl);
 }
@@ -57,6 +63,12 @@ const registry = {
   // Loading overlay specific to the Spain map
   loadingEl: null,
   activeLevel: 'ccaa', // 'ccaa' | 'prov'
+  // Display name mappings for Top10 (canonical key -> display name)
+  ccaaCanonicalToDisplay: {},
+  provCanonicalToDisplay: {},
+  // Top10 control refs
+  top10El: null,
+  top10Control: null,
 };
 
 function normKey(s) {
@@ -71,6 +83,53 @@ function canonicalKey(s) {
   if (!base) return '';
   const tokens = base.split(' ').filter(Boolean).sort();
   return tokens.join(' ');
+}
+
+// Alias maps to reconcile backend naming variants with GeoJSON feature names
+// Keys must be normalized with normKey; values are strings that, once
+// canonicalized, match the GeoJSON feature canonical key
+const CCAA_ALIASES = new Map([
+  // Asturias
+  ['asturias principado de', 'asturias'],
+  ['principado de asturias', 'asturias'],
+  // Castilla y León
+  ['castilla y leon', 'castilla leon'],
+  // Comunidad Valenciana
+  ['comunidad valenciana', 'valencia'],
+  // Comunidad de Madrid
+  ['madrid comunidad de', 'madrid'],
+  ['comunidad de madrid', 'madrid'],
+  // Región de Murcia
+  ['murcia region de', 'murcia'],
+  ['region de murcia', 'murcia'],
+  // Comunidad Foral de Navarra
+  ['navarra comunidad foral de', 'navarra'],
+  ['comunidad foral de navarra', 'navarra'],
+]);
+
+const PROV_ALIASES = new Map([
+  // Vizcaya / Bizkaia (GeoJSON name is "Bizkaia/Vizcaya")
+  ['vizcaya', 'bizkaia vizcaya'],
+  ['bizkaia', 'bizkaia vizcaya'],
+]);
+
+/**
+ * Apply level-specific alias to a raw name before canonicalization.
+ * Ensures mismatched inputs map to the GeoJSON feature canonical keys.
+ * @param {string} name - input key from backend counts
+ * @param {'ccaa'|'prov'} level - target layer level
+ * @returns {string} - possibly remapped name to canonicalize
+ */
+function applyAlias(name, level) {
+  const n = normKey(name);
+  if (!n) return '';
+  if (level === 'ccaa') {
+    return CCAA_ALIASES.get(n) || n;
+  }
+  if (level === 'prov') {
+    return PROV_ALIASES.get(n) || n;
+  }
+  return n;
 }
 
 function styleFor(name, level) {
@@ -109,6 +168,47 @@ function styleFor(name, level) {
 function updateLegend(ctrl) {
   const c = ctrl && ctrl.getContainer ? ctrl.getContainer() : null;
   if (c) c.innerHTML = buildLegendHTML(registry.maxCount);
+}
+
+function updateTop10() {
+  try {
+    if (!registry.top10El) return;
+    const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
+    const isCCAA = registry.activeLevel === 'ccaa';
+    const title = isES ? (isCCAA ? 'Top 10 comunidades' : 'Top 10 provincias') : (isCCAA ? 'Top 10 communities' : 'Top 10 provinces');
+    const colName = isES ? (isCCAA ? 'Comunidad' : 'Provincia') : (isCCAA ? 'Community' : 'Province');
+    const colItems = isES ? 'Núm.' : 'Items';
+    const colPct = '%';
+
+    const counts = isCCAA ? (registry.countsCCAACanonical || {}) : (registry.countsProvCanonical || {});
+    const nameMap = isCCAA ? (registry.ccaaCanonicalToDisplay || {}) : (registry.provCanonicalToDisplay || {});
+    // Excluir Andalucía en CCAA y Granada en provincias del Top 10
+    const excludeSet = isCCAA ? new Set(['andalucia']) : new Set(['granada']);
+    // Filtrar solo claves presentes en el mapa (evita Canarias si están excluidas)
+    const entries = Object.entries(counts)
+      .filter(([ck, v]) => v > 0 && Object.prototype.hasOwnProperty.call(nameMap, ck) && !excludeSet.has(ck))
+      .sort((a,b) => b[1]-a[1])
+      .slice(0, 10);
+    // Denominador: preferir total del backend si está disponible
+    const backendTotal = (typeof window !== 'undefined' && typeof window.spainMapFilteredTotal === 'number') ? window.spainMapFilteredTotal : null;
+    const denom = (backendTotal && backendTotal > 0)
+      ? backendTotal
+      : Object.entries(counts).filter(([ck]) => Object.prototype.hasOwnProperty.call(nameMap, ck)).reduce((acc,[,v]) => acc + (typeof v === 'number' ? v : 0), 0);
+
+    if (!entries.length) {
+      registry.top10El.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${title}</div><div style="font-size:11px;color:#666;">—</div>`;
+      return;
+    }
+
+    const rows = entries.map(([ck, cnt]) => {
+      const pct = denom > 0 ? ((cnt/denom)*100).toFixed(1) : '0.0';
+      const name = nameMap[ck] || ck;
+      return `<tr><td><strong>${name}</strong></td><td>${cnt}</td><td>${pct}%</td></tr>`;
+    }).join('');
+    registry.top10El.innerHTML = `<div class="spainmap-top10-table"><table aria-label="${title}"><caption>${title}</caption><thead><tr><th>${colName}</th><th>${colItems}</th><th>${colPct}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } catch (e) {
+    try { console.warn('[SpainMap] Failed to update Top10', e); } catch (_) { /* noop */ }
+  }
 }
 
 export function initSpainMap(containerId) {
@@ -158,6 +258,8 @@ export function initSpainMap(containerId) {
     attributionControl: false,
     zoomControl: false,
     scrollWheelZoom: false,
+    // Force Canvas so leaflet-image can rasterize vector layers reliably
+    preferCanvas: true,
   });
   L.control.zoom({ position: 'topright' }).addTo(map);
   const legend = L.control({ position: 'bottomright' });
@@ -171,6 +273,26 @@ export function initSpainMap(containerId) {
     return div;
   };
   legend.addTo(map);
+
+  // Top 10 control (mirror world map layout: bottom-left to avoid overlapping legend)
+  const top10 = L.control({ position: 'bottomleft' });
+  top10.onAdd = function() {
+    const div = L.DomUtil.create('div', 'leaflet-bar spainmap-top10-table');
+    div.style.background = 'rgba(255,255,255,0.95)';
+    div.style.padding = '6px 8px';
+    div.style.borderRadius = '4px';
+    div.style.boxShadow = '0 1px 4px rgba(0,0,0,0.25)';
+    div.style.maxWidth = '280px';
+    div.style.maxHeight = 'none';
+    div.style.overflow = 'visible';
+    const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
+    const initialTitle = isES ? 'Top 10 comunidades' : 'Top 10 communities';
+    div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${initialTitle}</div><div style="font-size:11px;color:#666;">—</div>`;
+    registry.top10El = div;
+    return div;
+  };
+  top10.addTo(map);
+  registry.top10Control = top10;
 
   // Helper: try multiple URLs until one succeeds
   async function fetchJsonWithFallback(urls) {
@@ -210,7 +332,29 @@ export function initSpainMap(containerId) {
         provFeatures: Array.isArray(prov?.features) ? prov.features.length : 'N/A'
       });
     } catch (e) { /* noop */ }
-    const layerCCAA = L.geoJSON(ccaa, {
+    // Option: Exclude Canary Islands to center the peninsula
+    // Filter out CCAA "Canarias" and provinces "Las Palmas" and "Santa Cruz De Tenerife"
+    const ccaaFiltered = {
+      ...ccaa,
+      features: (Array.isArray(ccaa?.features) ? ccaa.features : []).filter(f => {
+        const n = (f.properties && (f.properties.name || f.properties.NAME)) || '';
+        const nk = canonicalKey(n);
+        // canonicalKey sorts tokens, so check for both tokens presence
+        // For Canarias, the canonical key will be 'canarias'
+        return nk !== 'canarias';
+      })
+    };
+    const provFiltered = {
+      ...prov,
+      features: (Array.isArray(prov?.features) ? prov.features : []).filter(f => {
+        const n = (f.properties && (f.properties.name || f.properties.NAME)) || '';
+        // Use normalized (not token-sorted) key to match exact province names
+        const nn = normKey(n);
+        return nn !== 'las palmas' && nn !== 'santa cruz de tenerife';
+      })
+    };
+
+    const layerCCAA = L.geoJSON(ccaaFiltered, {
       style: f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'ccaa'),
       onEachFeature: (f, lyr) => {
         const name = (f.properties && (f.properties.name || f.properties.NAME)) || 'Unknown';
@@ -223,7 +367,7 @@ export function initSpainMap(containerId) {
       }
   }).addTo(map);
 
-  const layerProv = L.geoJSON(prov, {
+  const layerProv = L.geoJSON(provFiltered, {
       style: f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'prov'),
       onEachFeature: (f, lyr) => {
         const name = (f.properties && (f.properties.name || f.properties.NAME)) || 'Unknown';
@@ -241,6 +385,20 @@ export function initSpainMap(containerId) {
     registry.layerProv = layerProv;
     registry.map = map;
 
+    // Build canonical -> display name maps from filtered features (ensures consistency with what is shown)
+    registry.ccaaCanonicalToDisplay = {};
+    (ccaaFiltered.features || []).forEach(f => {
+      const n = (f.properties && (f.properties.name || f.properties.NAME)) || '';
+      const ck = canonicalKey(n);
+      if (ck) registry.ccaaCanonicalToDisplay[ck] = n;
+    });
+    registry.provCanonicalToDisplay = {};
+    (provFiltered.features || []).forEach(f => {
+      const n = (f.properties && (f.properties.name || f.properties.NAME)) || '';
+      const ck = canonicalKey(n);
+      if (ck) registry.provCanonicalToDisplay[ck] = n;
+    });
+
   // Ensure layout is updated after layers attach
   try {
     setTimeout(() => {
@@ -251,6 +409,8 @@ export function initSpainMap(containerId) {
   try { console.debug('[SpainMap] CCAA layer added and fitted.'); } catch (e) { /* noop */ }
 
     if (registry.loadingEl) registry.loadingEl.style.display = 'none';
+    // Initial Top10 render (may be empty until counts arrive)
+    updateTop10();
   }).catch(err => {
     // eslint-disable-next-line no-console
     console.error('[SpainMap] Error loading GeoJSON:', err);
@@ -261,6 +421,141 @@ export function initSpainMap(containerId) {
   registry.legend = legend;
 }
 
+// --- Helper: load leaflet-image UMD from CDN if not present ---
+function ensureLeafletImage() {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== 'undefined' && window.leafletImage) return resolve(window.leafletImage);
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/leaflet-image@0.0.4/leaflet-image.js';
+    s.async = true;
+    s.onload = () => resolve(window.leafletImage);
+    s.onerror = () => reject(new Error('Failed to load leaflet-image'));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportSpainMapImage(exportBtnEl) {
+  try {
+    if (!registry.map || !registry.containerEl) return;
+    const exportBtn = exportBtnEl || (typeof document !== 'undefined' ? document.getElementById('exportCollabMap') : null);
+    const cardBody = exportBtn ? exportBtn.closest('.card-body') : null;
+    if (!cardBody) return;
+    const mapContainer = registry.containerEl; // overlay div (absolute) que contiene el mapa de España
+
+    // 1) Render Leaflet map to bitmap (no controls)
+  await ensureLeafletImage();
+  try { registry.map.invalidateSize(); } catch (e) { /* noop */ }
+  await new Promise(r => setTimeout(r, 30));
+    const mapBitmapCanvas = await new Promise((resolve, reject) => {
+      window.leafletImage(registry.map, (err, canvas) => {
+        if (err || !canvas) return reject(err || new Error('leaflet-image failed'));
+        resolve(canvas);
+      });
+    });
+
+    // Check blank canvas edge-case
+    const isBlank = (() => {
+      try {
+        const ctx = mapBitmapCanvas.getContext('2d');
+        const sampleW = Math.min(20, mapBitmapCanvas.width);
+        const sampleH = Math.min(20, mapBitmapCanvas.height);
+        const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+        for (let i = 3; i < data.length; i += 4) { if (data[i] !== 0) return false; }
+        return true;
+      } catch (e) { return false; }
+    })();
+
+    // Match current displayed size of the Spain overlay container
+    const mapRect = mapContainer.getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(mapRect.width));
+    const cssH = Math.max(1, Math.round(mapRect.height));
+    const scaledMap = document.createElement('canvas');
+    scaledMap.width = cssW; scaledMap.height = cssH;
+    scaledMap.getContext('2d').drawImage(mapBitmapCanvas, 0, 0, mapBitmapCanvas.width, mapBitmapCanvas.height, 0, 0, cssW, cssH);
+
+    // 2) Clone card off-screen
+    const cardRect = cardBody.getBoundingClientRect();
+    const clone = cardBody.cloneNode(true);
+    Object.assign(clone.style, {
+      position: 'absolute', top: '-10000px', left: '-10000px', pointerEvents: 'none',
+      width: cardRect.width + 'px', height: cardRect.height + 'px', background: '#ffffff', display: 'block'
+    });
+    document.body.appendChild(clone);
+
+    // Remove/hide unwanted controls ONLY in the clone
+    ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom', '[data-spain-level]']
+      .forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
+
+    // Prepare cloned Spain overlay container (same id as original overlay)
+    const overlayClone = clone.querySelector('#' + registry.containerEl.id);
+    if (!overlayClone) throw new Error('Clone overlay container not found');
+  overlayClone.style.width = cssW + 'px';
+  overlayClone.style.height = cssH + 'px';
+  overlayClone.style.position = 'relative';
+  overlayClone.style.overflow = 'hidden';
+    // Ensure transparent background and hide Leaflet panes
+    const cloneLeafletContainer = overlayClone.querySelector('.leaflet-container') || overlayClone;
+    cloneLeafletContainer.style.background = 'transparent';
+    cloneLeafletContainer.style.border = 'none';
+    overlayClone.querySelectorAll('.leaflet-pane').forEach(p => { p.style.display = 'none'; });
+    // Insert the map image as background layer
+    const bmp = document.createElement('img');
+    bmp.src = scaledMap.toDataURL('image/png');
+    Object.assign(bmp.style, { position: 'absolute', left: '0px', top: '0px', width: cssW + 'px', height: cssH + 'px', zIndex: '0', display: 'block' });
+  cloneLeafletContainer.insertBefore(bmp, cloneLeafletContainer.firstChild);
+
+    let baseCanvas;
+    if (!isBlank) {
+      // 3a) Rasterize clone with fixed map bitmap
+      const { default: html2canvas } = await import('html2canvas');
+      const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      baseCanvas = await html2canvas(clone, { backgroundColor: '#ffffff', scale, useCORS: true, logging: false, removeContainer: true, imageTimeout: 0 });
+    } else {
+      // 3b) Fallback: capture the original cardBody, hiding controls in-place
+      const toHide = [
+        '#exportCollabMap',
+        '[data-map-view="world"]',
+        '[data-map-view="spain"]',
+        '.leaflet-control-zoom',
+        '[data-spain-level]'
+      ].map(sel => Array.from(cardBody.querySelectorAll(sel))).flat();
+      toHide.forEach(el => { el.__prevVisibility = el.style.visibility; el.style.visibility = 'hidden'; });
+      const { default: html2canvas } = await import('html2canvas');
+      const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      baseCanvas = await html2canvas(cardBody, { backgroundColor: '#ffffff', scale, useCORS: true, logging: false, removeContainer: true, imageTimeout: 0 });
+      toHide.forEach(el => { el.style.visibility = el.__prevVisibility || ''; delete el.__prevVisibility; });
+      if (clone.parentNode) document.body.removeChild(clone);
+    }
+
+    // 4) Add margins and download
+    const marginLeft = 60; const marginTop = 50;
+    const paddedCanvas = document.createElement('canvas');
+    paddedCanvas.width = baseCanvas.width + marginLeft;
+    paddedCanvas.height = baseCanvas.height + marginTop;
+    const pctx = paddedCanvas.getContext('2d');
+    pctx.fillStyle = '#ffffff';
+    pctx.fillRect(0, 0, paddedCanvas.width, paddedCanvas.height);
+    pctx.drawImage(baseCanvas, marginLeft, marginTop);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const a = document.createElement('a');
+    a.download = `national_collaborations_${ts}.png`;
+    a.href = paddedCanvas.toDataURL('image/png');
+    a.click();
+
+  if (clone.parentNode) document.body.removeChild(clone);
+  } catch (err) {
+    console.error('[SpainMap][Export] Failed to export Spain map image', err);
+    alert('Failed to export image');
+  }
+}
+
+// Expose exporter for worldmap handler to delegate when Spain view is active
+if (typeof window !== 'undefined') {
+  window.__exportSpainMapImage = exportSpainMapImage;
+}
+
 export function setSpainMapCounts({ ccaa = {}, provinces = {} }) {
   // Show overlay while applying
   if (registry.loadingEl) registry.loadingEl.style.display = 'flex';
@@ -269,13 +564,16 @@ export function setSpainMapCounts({ ccaa = {}, provinces = {} }) {
   // Build canonical maps so lookup is insensitive to word order/diacritics
   registry.countsCCAACanonical = {};
   Object.entries(registry.countsCCAA).forEach(([k,v]) => {
-    const ck = canonicalKey(k);
+    // Apply alias mapping prior to canonicalization
+    const aliased = applyAlias(k, 'ccaa');
+    const ck = canonicalKey(aliased);
     if (!ck) return;
     registry.countsCCAACanonical[ck] = (typeof v === 'number' && isFinite(v) ? v : 0);
   });
   registry.countsProvCanonical = {};
   Object.entries(registry.countsProv).forEach(([k,v]) => {
-    const ck = canonicalKey(k);
+    const aliased = applyAlias(k, 'prov');
+    const ck = canonicalKey(aliased);
     if (!ck) return;
     registry.countsProvCanonical[ck] = (typeof v === 'number' && isFinite(v) ? v : 0);
   });
@@ -286,6 +584,7 @@ export function setSpainMapCounts({ ccaa = {}, provinces = {} }) {
   if (registry.layerCCAA) registry.layerCCAA.setStyle(f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'ccaa'));
   if (registry.layerProv) registry.layerProv.setStyle(f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'prov'));
   if (registry.legend) updateLegend(registry.legend);
+  updateTop10();
   if (registry.loadingEl) registry.loadingEl.style.display = 'none';
 }
 
@@ -302,6 +601,7 @@ export function showSpainLevel(level) {
     try { registry.map.fitBounds(layer.getBounds(), { padding: [10, 10] }); } catch (e) { /* noop */ }
   }
   if (registry.legend) updateLegend(registry.legend);
+  updateTop10();
 }
 
 export function setSpainMapLoading(visible) {

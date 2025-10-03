@@ -533,6 +533,16 @@ if (typeof document !== 'undefined') {
       ev.preventDefault();
       ev.stopPropagation();
 
+            // If Spain view is active, delegate export to Spain map module to include its overlayed map
+            if (typeof window !== 'undefined' && window.currentMapView === 'spain' && typeof window.__exportSpainMapImage === 'function') {
+                try {
+                    await window.__exportSpainMapImage(exportBtn);
+                    return;
+                } catch (e) {
+                    console.warn('[WorldMap][Export] Delegation to Spain export failed, falling back to world export', e);
+                }
+            }
+
       try {
         const cardBody = exportBtn.closest('.card-body');
         if (!cardBody) return;
@@ -595,7 +605,7 @@ if (typeof document !== 'undefined') {
         document.body.appendChild(clone);
 
         // Remove unwanted controls ONLY in the clone
-        ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom']
+                ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom', '[data-spain-level]']
           .forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
 
         // Prepare cloned map container
