@@ -21,12 +21,12 @@ from reportlab.lib.colors import blue
 import unicodedata
 from pathlib import Path
 from bibliodata.models import PublicationEmbedding
-from sentence_transformers import SentenceTransformer
 
 # --- Optimized: Use HNSWlib index ---
 import hnswlib
 import os
-from sentence_transformers import SentenceTransformer
+
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -103,7 +103,6 @@ def semantic_search(request):
         })
 
     # Reranking con cross-encoder
-    from sentence_transformers import CrossEncoder
     cross_encoder_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
     cross_encoder = CrossEncoder(cross_encoder_model)
     # Prepara los pares (query, texto candidato)
@@ -173,6 +172,62 @@ def _get_normalized_type_value(norm):
     return 'otro'
 
 
+def _parse_quartiles(selected):
+    """Normalize quartile input to a set of numeric values {1,2,3,4}.
+
+    Accepted formats (case-insensitive):
+    - 'Q1'..'Q4'
+    - 'D1'..'D4' (treated like Q1..Q4)
+    - '1'..'4'
+    - 1..4
+    """
+    values = set()
+    for q in (selected or []):
+        if q is None:
+            continue
+        s = str(q).strip().upper()
+        if not s:
+            continue
+        if s.startswith('Q') or s.startswith('D'):
+            try:
+                v = int(s[1:])
+            except ValueError:
+                continue
+        else:
+            try:
+                v = int(s)
+            except ValueError:
+                continue
+        if v in (1, 2, 3, 4):
+            values.add(v)
+    return values
+
+
+def _apply_quartile_filter(qs, quartiles, metric_source=None):
+    """Filter publications having any related metric in the given quartiles.
+
+    - quartiles: iterable like ['Q1', 'Q2'] or [1, 2].
+    - metric_source: optional ('wos' | 'scopus' | 'dimensions'). If provided,
+      only metrics from that source will be considered.
+    """
+    target_vals = _parse_quartiles(quartiles)
+    if not target_vals:
+        return qs
+
+    q_total = Q()
+    for v in target_vals:
+        q_val = (
+            Q(metrics__quartile_value=v) |
+            Q(metrics__quartile__iexact=f"Q{v}") |
+            Q(metrics__quartile__iexact=f"D{v}")
+        )
+        if metric_source:
+            q_val &= Q(metrics__source=metric_source)
+        q_total |= q_val
+
+    return qs.filter(q_total).distinct()
+
+
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filter_data(request):
     year_from = request.GET.get('year_from')
@@ -180,6 +235,8 @@ def get_filter_data(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')   # canónicos
+    quartiles = request.GET.getlist('quartiles')  # e.g., ['Q1', 'Q2']
+    metric_source = request.GET.get('metric_source')  # optional: 'wos'|'scopus'|'dimensions'
     author = request.GET.get('author')
 
     base_query = Publication.objects.all()
@@ -198,6 +255,8 @@ def get_filter_data(request):
         query_with_all_filters = query_with_all_filters.filter(institutions__name__in=institutions)
     if types:
         query_with_all_filters = _apply_type_filter(query_with_all_filters, types)
+    if quartiles:
+        query_with_all_filters = _apply_quartile_filter(query_with_all_filters, quartiles, metric_source)
 
     years = (
         query_with_all_filters
@@ -212,6 +271,8 @@ def get_filter_data(request):
         areas_query = areas_query.filter(institutions__name__in=institutions)
     if types:
         areas_query = _apply_type_filter(areas_query, types)
+    if quartiles:
+        areas_query = _apply_quartile_filter(areas_query, quartiles, metric_source)
 
     areas_with_counts = (
         areas_query.values('thematic_areas__name')
@@ -226,6 +287,8 @@ def get_filter_data(request):
         institutions_query = institutions_query.filter(thematic_areas__name__in=areas)
     if types:
         institutions_query = _apply_type_filter(institutions_query, types)
+    if quartiles:
+        institutions_query = _apply_quartile_filter(institutions_query, quartiles, metric_source)
 
     institutions_with_counts = (
         institutions_query.values('institutions__name')
@@ -270,11 +333,33 @@ def get_filter_data(request):
     # Si prefieres como antes (por count desc y luego alfabético), deja esta:
     types_with_counts.sort(key=lambda x: (-x['count'], x['publication_type']))
 
+    # ---- Quartiles with counts (Q1..Q4). Mostrar TODOS, ignorando filtro de cuartiles
+    publications_for_quartile_counting = base_query
+    if areas:
+        publications_for_quartile_counting = publications_for_quartile_counting.filter(thematic_areas__name__in=areas)
+    if institutions:
+        publications_for_quartile_counting = publications_for_quartile_counting.filter(institutions__name__in=institutions)
+    if types:
+        publications_for_quartile_counting = _apply_type_filter(publications_for_quartile_counting, types)
+
+    quartiles_with_counts = []
+    for v in (1, 2, 3, 4):
+        q = (
+            Q(metrics__quartile_value=v) |
+            Q(metrics__quartile__iexact=f"Q{v}") |
+            Q(metrics__quartile__iexact=f"D{v}")
+        )
+        if metric_source:
+            q &= Q(metrics__source=metric_source)
+        count = publications_for_quartile_counting.filter(q).distinct().count()
+        quartiles_with_counts.append({'quartile': f'Q{v}', 'count': count})
+
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),
         'institutions': list(institutions_with_counts),
-        'publication_types': types_with_counts
+        'publication_types': types_with_counts,
+        'quartiles': quartiles_with_counts
     })
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
@@ -285,6 +370,8 @@ def get_filtered_data(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
     view_type = request.GET.get('view_type', 'yearly')
     author = request.GET.get('author')
     include_predicted_areas = request.GET.get('include_predicted_areas') == 'true'
@@ -303,6 +390,8 @@ def get_filtered_data(request):
         query = query.filter(institutions__name__in=institutions)
     if types:
         query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
@@ -567,6 +656,8 @@ def get_publications_data(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
     try:
@@ -593,6 +684,8 @@ def get_publications_data(request):
         query = query.filter(institutions__name__in=institutions)
     if types:
         query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
@@ -957,6 +1050,8 @@ def export_report(request):
     areas = data.getlist('areas') if hasattr(data, 'getlist') else []
     institutions = data.getlist('institutions') if hasattr(data, 'getlist') else []
     types = data.getlist('types') if hasattr(data, 'getlist') else []
+    quartiles = data.getlist('quartiles') if hasattr(data, 'getlist') else []
+    metric_source = data.get('metric_source')
     author = data.get('author')
     format_ = data.get('format', 'pdf')
 
@@ -969,6 +1064,8 @@ def export_report(request):
     default_areas = _('Todas las áreas')
     default_institutions = _('Todas las instituciones')
     default_types = _('Todos los tipos')
+    default_quartiles = _('Todos los cuartiles')
+    default_source = _('Cualquier fuente')
 
     buffer = BytesIO()
     doc_title = 'Bibliometría IPBLN: Informe'
@@ -1011,6 +1108,8 @@ def export_report(request):
         [label(_('Áreas temáticas')), safe_value(areas, default_areas)],
         [label(_('Instituciones')), safe_value(institutions, default_institutions)],
         [label(_('Tipos de publicación')), safe_value(types, default_types)],
+        [label(_('Fuente de métrica')), safe_value(metric_source, default_source)],
+        [label(_('Cuartiles')), safe_value(quartiles, default_quartiles)],
     ]
     if author:
         filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
@@ -1145,6 +1244,8 @@ def export_report(request):
         for t in types:
             type_query |= Q(publication_type__icontains=t)
         pubs_query = pubs_query.filter(type_query)
+    if quartiles:
+        pubs_query = _apply_quartile_filter(pubs_query, quartiles, metric_source)
     if author:
         pubs_query = pubs_query.filter(authors__name=author)
     pubs = pubs_query.distinct().order_by('-year', '-publication_date')
@@ -1203,6 +1304,8 @@ def get_worldmap_counts(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
     author = request.GET.get('author')
 
     query = Publication.objects.all()
@@ -1216,6 +1319,8 @@ def get_worldmap_counts(request):
         query = query.filter(institutions__name__in=institutions)
     if types:
         query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
@@ -1262,8 +1367,11 @@ def get_spainmap_counts(request):
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
     author = request.GET.get('author')
 
+    count_mode = request.GET.get('count', 'occurrences')  # 'occurrences' or 'publications'
     query = Publication.objects.all()
     if year_from:
         query = query.filter(year__gte=year_from)
@@ -1275,6 +1383,8 @@ def get_spainmap_counts(request):
         query = query.filter(institutions__name__in=institutions)
     if types:
         query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
@@ -1292,28 +1402,73 @@ def get_spainmap_counts(request):
 
     ccaa_counts, prov_counts = {}, {}
 
-    for ccaas, provinces in query.values_list('ccaas', 'provinces'):
-        try:
-            per_pub_ccaa = set()
-            for n in (ccaas or []):
-                key = normalize_key(n)
-                if key:
-                    per_pub_ccaa.add(key)
-            for key in per_pub_ccaa:
-                ccaa_counts[key] = ccaa_counts.get(key, 0) + 1
+    # Extrae primero los IDs de publicaciones filtradas para evitar duplicados por joins M2M
+    pub_ids = list(query.values_list('id', flat=True).distinct())
 
-            per_pub_prov = set()
-            for n in (provinces or []):
-                key = normalize_key(n)
-                if key:
-                    per_pub_prov.add(key)
-            for key in per_pub_prov:
-                prov_counts[key] = prov_counts.get(key, 0) + 1
-        except Exception:
-            continue
+    # Itera únicamente sobre esas publicaciones (una vez por publicación)
+    rows = Publication.objects.filter(id__in=pub_ids).values_list('id', 'ccaas', 'provinces')
 
+    if count_mode == 'publications':
+        # Cuenta cada CCAA/provincia como máximo 1 vez por publicación
+        for _pid, ccaas, provinces in rows:
+            try:
+                per_pub_ccaa = set()
+                per_pub_prov = set()
+
+                if isinstance(ccaas, (list, tuple)):
+                    for n in ccaas:
+                        k = normalize_key(n)
+                        if k:
+                            per_pub_ccaa.add(k)
+                elif isinstance(ccaas, str):
+                    k = normalize_key(ccaas)
+                    if k:
+                        per_pub_ccaa.add(k)
+
+                if isinstance(provinces, (list, tuple)):
+                    for n in provinces:
+                        k = normalize_key(n)
+                        if k:
+                            per_pub_prov.add(k)
+                elif isinstance(provinces, str):
+                    k = normalize_key(provinces)
+                    if k:
+                        per_pub_prov.add(k)
+
+                for k in per_pub_ccaa:
+                    ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+                for k in per_pub_prov:
+                    prov_counts[k] = prov_counts.get(k, 0) + 1
+            except Exception:
+                continue
+    else:
+        # occurrences (por defecto): suma todas las apariciones de CCAA/provincia en las afiliaciones
+        for _pid, ccaas, provinces in rows:
+            try:
+                if isinstance(ccaas, (list, tuple)):
+                    for n in ccaas:
+                        k = normalize_key(n)
+                        if k:
+                            ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+                elif isinstance(ccaas, str):
+                    k = normalize_key(ccaas)
+                    if k:
+                        ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+
+                if isinstance(provinces, (list, tuple)):
+                    for n in provinces:
+                        k = normalize_key(n)
+                        if k:
+                            prov_counts[k] = prov_counts.get(k, 0) + 1
+                elif isinstance(provinces, str):
+                    k = normalize_key(provinces)
+                    if k:
+                        prov_counts[k] = prov_counts.get(k, 0) + 1
+            except Exception:
+                continue
     return JsonResponse({
         'ccaa': ccaa_counts,
         'provinces': prov_counts,
-        'total_publications': query.count(),
+        'total_publications': len(pub_ids),
+        'count_mode': count_mode,
     })

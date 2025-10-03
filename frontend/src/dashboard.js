@@ -5,7 +5,7 @@ import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
 import { initWorldMap, setWorldMapActiveCountries, setWorldMapLoading } from './worldmap.js';
-import { initSpainMap, setSpainMapCounts, showSpainLevel, setSpainMapLoading } from './spainmap.js';
+import { initSpainMap, setSpainMapCounts, showSpainLevel, setSpainMapLoading, setSpainMapVisible } from './spainmap.js';
 
 export function initFiltersAndSearch() {
 
@@ -15,10 +15,13 @@ export function initFiltersAndSearch() {
     const areaFilter = document.getElementById('areaFilter');
     const institutionFilter = document.getElementById('institutionFilter');
     const typeFilter = document.getElementById('typeFilter');
+    const metricSourceFilter = document.getElementById('metricSourceFilter');
+    const quartileFilter = document.getElementById('quartileFilter');
     const clearFiltersBtn = document.getElementById('clearFilters');
     const selectedAreas = document.getElementById('selectedAreas');
     const selectedInstitutions = document.getElementById('selectedInstitutions');
     const selectedTypes = document.getElementById('selectedTypes');
+    const selectedQuartiles = document.getElementById('selectedQuartiles');
     const standardSearch = document.getElementById('standardSearch');
     const standardSearchBtn = document.getElementById('standardSearchBtn');
     const searchSuggestions = document.getElementById('searchSuggestions');
@@ -260,12 +263,16 @@ export function initFiltersAndSearch() {
     let selectedAreasList = new Set();
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
+    let selectedQuartilesList = new Set();
+    let selectedMetricSource = '';
     let selectedAuthorName = null;
 
     // Exponer en window para export_report.js
     window.selectedAreasList = selectedAreasList;
     window.selectedInstitutionsList = selectedInstitutionsList;
     window.selectedTypesList = selectedTypesList;
+    window.selectedQuartilesList = selectedQuartilesList;
+    window.selectedMetricSource = selectedMetricSource;
     window.selectedAuthorName = selectedAuthorName;
 
     // Variables para el autocompletado
@@ -837,6 +844,21 @@ export function initFiltersAndSearch() {
                     typeFilter.appendChild(option);
                 });
 
+                // Llenar el filtro de cuartil (Q1..Q4) con conteos
+                if (quartileFilter && Array.isArray(data.quartiles)) {
+                    quartileFilter.innerHTML = '';
+                    const anyOpt = document.createElement('option');
+                    anyOpt.value = '';
+                    anyOpt.textContent = (lang === 'es') ? 'Todos los cuartiles' : 'All quartiles';
+                    quartileFilter.appendChild(anyOpt);
+                    data.quartiles.forEach(q => {
+                        const option = document.createElement('option');
+                        option.value = q.quartile;
+                        option.textContent = `${q.quartile} (${q.count})`;
+                        quartileFilter.appendChild(option);
+                    });
+                }
+
                 // Cargar datos iniciales
                 updateVisualizations();
             })
@@ -862,6 +884,7 @@ export function initFiltersAndSearch() {
             if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
             if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
             if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
+            if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
             updateVisualizations();
         });
         container.appendChild(badge);
@@ -869,6 +892,7 @@ export function initFiltersAndSearch() {
         if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
         if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
         if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
+        if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
     }
 
     // Función para limpiar todos los filtros
@@ -878,9 +902,14 @@ export function initFiltersAndSearch() {
         selectedAreasList.clear();
         selectedInstitutionsList.clear();
         selectedTypesList.clear();
+        selectedQuartilesList.clear();
+        selectedMetricSource = '';
         selectedAreas.innerHTML = '';
         selectedInstitutions.innerHTML = '';
         selectedTypes.innerHTML = '';
+        selectedQuartiles.innerHTML = '';
+        if (metricSourceFilter) metricSourceFilter.value = '';
+        if (quartileFilter) quartileFilter.value = '';
         updateFilters();
     }
 
@@ -928,7 +957,9 @@ export function initFiltersAndSearch() {
             year_to: yearTo.value,
             areas: Array.from(selectedAreasList),
             institutions: Array.from(selectedInstitutionsList),
-            types: Array.from(selectedTypesList)
+            types: Array.from(selectedTypesList),
+            quartiles: Array.from(selectedQuartilesList),
+            metric_source: selectedMetricSource
         };
 
         // Determinar si se puede usar la vista mensual
@@ -955,6 +986,8 @@ export function initFiltersAndSearch() {
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
+    filters.quartiles.forEach(q => params.append('quartiles', q));
+    if (filters.metric_source) params.append('metric_source', filters.metric_source);
         params.append('view_type', filters.view_type);
         if (includePredictedAreas) params.append('include_predicted_areas', 'true');
         
@@ -1006,6 +1039,8 @@ export function initFiltersAndSearch() {
                 // Actualizar mapa (Mundo/España) con agregación en servidor
                 try {
                     const paramsAll = new URLSearchParams(params);
+                    // Count mode for Spain map: 'occurrences' (sum of all affiliations) by default
+                    paramsAll.set('count', 'occurrences');
                     if (window.currentMapView === 'spain') {
                         setSpainMapLoading(true);
                         fetch(`/BiblioMetrics/${lang}/api/dashboard/spainmap-counts/?${paramsAll.toString()}`)
@@ -1110,6 +1145,8 @@ export function initFiltersAndSearch() {
             areas: Array.from(selectedAreasList),
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
+            quartiles: Array.from(selectedQuartilesList),
+            metric_source: selectedMetricSource,
             page: page
         };
 
@@ -1120,6 +1157,8 @@ export function initFiltersAndSearch() {
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
+        filters.quartiles.forEach(q => params.append('quartiles', q));
+        if (filters.metric_source) params.append('metric_source', filters.metric_source);
         params.append('page', filters.page);
         
         // Añadir el autor seleccionado si existe
@@ -2569,6 +2608,8 @@ export function initFiltersAndSearch() {
         
         // Añadir filtros de tipo
         selectedTypesList.forEach(type => params.append('types', type));
+    selectedQuartilesList.forEach(q => params.append('quartiles', q));
+    if (selectedMetricSource) params.append('metric_source', selectedMetricSource);
 
         // Añadir autor seleccionado si existe
         if (selectedAuthorName) {
@@ -2616,6 +2657,18 @@ export function initFiltersAndSearch() {
                     option.textContent = `${type.publication_type} (${type.count})`;
                     typeFilter.appendChild(option);
                 });
+
+                // Actualizar cuartiles
+                if (quartileFilter) {
+                    const allQuartiles = currentLang === 'es' ? 'Todos los cuartiles' : 'All quartiles';
+                    quartileFilter.innerHTML = `<option value="">${allQuartiles}</option>`;
+                    (data.quartiles || []).forEach(q => {
+                        const option = document.createElement('option');
+                        option.value = q.quartile;
+                        option.textContent = `${q.quartile} (${q.count})`;
+                        quartileFilter.appendChild(option);
+                    });
+                }
             })
             .catch(error => {
                 console.error('Error updating filters:', error);
@@ -2640,6 +2693,26 @@ export function initFiltersAndSearch() {
 
         // Actualizar visualizaciones
         updateVisualizations();
+    }
+
+    // Listeners para Source y Quartile
+    if (metricSourceFilter) {
+        metricSourceFilter.addEventListener('change', () => {
+            selectedMetricSource = metricSourceFilter.value || '';
+            window.selectedMetricSource = selectedMetricSource;
+            updateFilters();
+        });
+    }
+    if (quartileFilter) {
+        quartileFilter.addEventListener('change', () => {
+            const val = quartileFilter.value;
+            if (val && !selectedQuartilesList.has(val)) {
+                selectedQuartilesList.add(val);
+                createBadge(val, selectedQuartiles, selectedQuartilesList);
+            }
+            quartileFilter.value = '';
+            updateFilters();
+        });
     }
 
     // Añadir el manejador del botón de red completa
@@ -2889,7 +2962,7 @@ export function initFiltersAndSearch() {
         if (overlay) overlay.style.display = 'none';
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', () => {
         // Map initialization: default to world
         window.currentMapView = 'world'; // 'world' | 'spain'
         initWorldMap('worldmap-container');
@@ -2911,8 +2984,13 @@ export function initFiltersAndSearch() {
                 if (view === 'spain') {
                     spainGroup?.classList.remove('d-none');
                     ensureSpainMap();
+                        // Show Spain overlay and refresh sizes
+                        setSpainMapVisible(true);
+                        // Optionally hide world map tooltips/overlays if needed
                 } else {
                     spainGroup?.classList.add('d-none');
+                        // Hide Spain overlay when switching back to world
+                        setSpainMapVisible(false);
                 }
                 window.currentMapView = view;
                 // Refresh visualizations to load the right counts for the selected view

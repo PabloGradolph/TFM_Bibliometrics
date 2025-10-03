@@ -251,8 +251,9 @@ export function initWorldMap(containerId, activeCountries = []) {
         if (!container.style.height || container.style.height === '0px') {
             container.style.height = '360px';
         }
-        // Baseline z-index so that other explicitly positioned elements (e.g. headers, overlays) can sit above if needed
-        container.style.zIndex = '0';
+    // Baseline z-index (kept low); attach a helper class to easily toggle visibility when Spain overlay is active
+    container.style.zIndex = '1';
+    container.classList.add('worldmap-root');
         // Create loading overlay
         const overlay = document.createElement('div');
         overlay.className = 'worldmap-loading-overlay';

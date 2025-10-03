@@ -175,6 +175,12 @@ export function setupExportReportButton() {
             if (window.selectedAuthorName) {
                 author = window.selectedAuthorName;
             }
+            // Nuevos filtros: cuartiles y fuente
+            let quartiles = [];
+            if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) {
+                quartiles = Array.from(window.selectedQuartilesList);
+            }
+            const metric_source = window.selectedMetricSource || '';
 
             // Recoger los SVG de los gráficos
             const timelineSVG = document.querySelector('#timelineChart svg');
@@ -229,6 +235,8 @@ export function setupExportReportButton() {
                     institutions.forEach(inst => formData.append('institutions', inst));
                     types.forEach(type => formData.append('types', type));
                     if (author) formData.append('author', author);
+                    quartiles.forEach(q => formData.append('quartiles', q));
+                    if (metric_source) formData.append('metric_source', metric_source);
                     formData.append('format', 'pdf');
                     formData.append('areas_view', areas_view);
                     if (images.timeline) formData.append('timeline_img', images.timeline);

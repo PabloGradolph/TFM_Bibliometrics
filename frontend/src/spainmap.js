@@ -47,8 +47,14 @@ const registry = {
   layerProv: null,
   countsCCAA: {},
   countsProv: {},
+  countsCCAACanonical: {},
+  countsProvCanonical: {},
   maxCount: 0,
+  // Parent container id (e.g., 'worldmap-container')
   containerId: null,
+  // Child container element where the Spain Leaflet map is mounted
+  containerEl: null,
+  // Loading overlay specific to the Spain map
   loadingEl: null,
   activeLevel: 'ccaa', // 'ccaa' | 'prov'
 };
@@ -60,9 +66,16 @@ function normKey(s) {
   return ascii.replace(/[‐‑‒–—―\-_/]+/g,' ').replace(/[^A-Za-zÀ-ÿ ]+/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
 }
 
+function canonicalKey(s) {
+  const base = normKey(s);
+  if (!base) return '';
+  const tokens = base.split(' ').filter(Boolean).sort();
+  return tokens.join(' ');
+}
+
 function styleFor(name, level) {
-  const key = normKey(name);
-  const count = level === 'ccaa' ? (registry.countsCCAA[key] || 0) : (registry.countsProv[key] || 0);
+  const key = canonicalKey(name);
+  const count = level === 'ccaa' ? (registry.countsCCAACanonical[key] || 0) : (registry.countsProvCanonical[key] || 0);
   const maxCount = registry.maxCount || 1;
   const isActive = count > 0;
   let normalized = 0;
@@ -84,8 +97,10 @@ function styleFor(name, level) {
   const fillColor = isActive ? pickFill(normalized) : '#ffffff';
   const fillOpacity = isActive ? (0.1 + 0.85 * normalized) : 0.0;
   return {
-    color: isActive ? '#b34700' : '#bbbbbb',
-    weight: isActive ? 1.0 : 0.5,
+    stroke: true,
+    color: isActive ? '#b34700' : '#9a9a9a',
+    opacity: isActive ? 1.0 : 0.8,
+    weight: isActive ? 1.2 : 1.0,
     fillColor,
     fillOpacity,
   };
@@ -98,20 +113,44 @@ function updateLegend(ctrl) {
 
 export function initSpainMap(containerId) {
   registry.containerId = containerId;
-  const container = document.getElementById(containerId);
-  if (container) {
-    container.style.background = '#ffffff';
-    container.style.position = 'relative';
-    if (!container.style.height || container.style.height === '0px') container.style.height = '360px';
-    const overlay = document.createElement('div');
-    overlay.className = 'spainmap-loading-overlay';
-    overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.8);z-index:500;`;
-    overlay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>`;
-    container.appendChild(overlay);
-    registry.loadingEl = overlay;
-  }
+  const parent = document.getElementById(containerId);
+  if (!parent) return;
+  try { console.debug('[SpainMap] init on container', containerId); } catch (e) { /* noop */ }
+  // Ensure parent has baseline styles
+  parent.style.background = '#ffffff';
+  parent.style.position = 'relative';
+  if (!parent.style.height || parent.style.height === '0px') parent.style.height = '360px';
 
-  const map = L.map(containerId, {
+  // Create or reuse a dedicated child container to avoid clashing with the World map
+  let child = parent.querySelector(`#${containerId}-spain`);
+  if (!child) {
+    child = document.createElement('div');
+    child.id = `${containerId}-spain`;
+    // Absolute overlay so it sits above the world map without replacing it
+    child.style.position = 'absolute';
+    child.style.top = '0';
+    child.style.left = '0';
+    child.style.width = '100%';
+    child.style.height = '100%';
+    // Use a high z-index to stay above any Leaflet popups/tooltips from the world map (popup=700, tooltip=650)
+    child.style.zIndex = '1000';
+    child.style.background = '#ffffff';
+    // Start hidden; dashboard controls visibility via setSpainMapVisible
+    child.style.display = 'none';
+    parent.appendChild(child);
+  }
+  registry.containerEl = child;
+
+  // Loading overlay inside the Spain map container
+  const overlay = document.createElement('div');
+  overlay.className = 'spainmap-loading-overlay';
+  overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.8);z-index:700;`;
+  overlay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>`;
+  child.appendChild(overlay);
+  registry.loadingEl = overlay;
+
+  // Initialize Leaflet on the child container (unique id), avoiding the already initialized parent
+  const map = L.map(child.id, {
     center: [40.0, -3.7],
     zoom: 5,
     minZoom: 4,
@@ -133,31 +172,64 @@ export function initSpainMap(containerId) {
   };
   legend.addTo(map);
 
-  // Load CCAA and Provinces GeoJSON from public URLs (can be replaced with local files)
+  // Helper: try multiple URLs until one succeeds
+  async function fetchJsonWithFallback(urls) {
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        lastErr = e;
+        // eslint-disable-next-line no-console
+        console.warn('[SpainMap] Failed to fetch', url, e);
+      }
+    }
+    throw lastErr || new Error('All sources failed');
+  }
+
+  // Load CCAA and Provinces GeoJSON from local static paths or raw GitHub fallbacks (CORS-friendly)
   Promise.all([
-    fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/spain-autonomous-communities.geojson').then(r=>r.json()),
-    fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/spain-provinces.geojson').then(r=>r.json())
+    fetchJsonWithFallback([
+      '/static/js/data/spain-communities.geojson',
+      '/static/data/spain-communities.geojson',
+      '/data/spain-communities.geojson',
+      'https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/spain-communities.geojson'
+    ]),
+    fetchJsonWithFallback([
+      '/static/js/data/spain-provinces.geojson',
+      '/static/data/spain-provinces.geojson',
+      '/data/spain-provinces.geojson',
+      'https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/spain-provinces.geojson'
+    ])
   ]).then(([ccaa, prov]) => {
+    try {
+      console.debug('[SpainMap] GeoJSON loaded:', {
+        ccaaFeatures: Array.isArray(ccaa?.features) ? ccaa.features.length : 'N/A',
+        provFeatures: Array.isArray(prov?.features) ? prov.features.length : 'N/A'
+      });
+    } catch (e) { /* noop */ }
     const layerCCAA = L.geoJSON(ccaa, {
       style: f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'ccaa'),
       onEachFeature: (f, lyr) => {
         const name = (f.properties && (f.properties.name || f.properties.NAME)) || 'Unknown';
         lyr.bindTooltip(() => {
-          const key = normKey(name);
-          const count = registry.countsCCAA[key] || 0;
+          const key = canonicalKey(name);
+          const count = registry.countsCCAACanonical[key] || 0;
           const pubsLabel = 'publicaciones';
           return count > 0 ? `${name}: ${count} ${pubsLabel}` : `${name}`;
         }, { sticky: true });
       }
-    }).addTo(map);
+  }).addTo(map);
 
-    const layerProv = L.geoJSON(prov, {
+  const layerProv = L.geoJSON(prov, {
       style: f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'prov'),
       onEachFeature: (f, lyr) => {
         const name = (f.properties && (f.properties.name || f.properties.NAME)) || 'Unknown';
         lyr.bindTooltip(() => {
-          const key = normKey(name);
-          const count = registry.countsProv[key] || 0;
+          const key = canonicalKey(name);
+          const count = registry.countsProvCanonical[key] || 0;
           const pubsLabel = 'publicaciones';
           return count > 0 ? `${name}: ${count} ${pubsLabel}` : `${name}`;
         }, { sticky: true });
@@ -169,7 +241,14 @@ export function initSpainMap(containerId) {
     registry.layerProv = layerProv;
     registry.map = map;
 
-    try { map.fitBounds(layerCCAA.getBounds(), { padding: [10, 10] }); } catch (e) { map.setView([40.0,-3.7], 5); }
+  // Ensure layout is updated after layers attach
+  try {
+    setTimeout(() => {
+      try { map.invalidateSize(); } catch (e) { /* noop */ }
+      try { map.fitBounds(layerCCAA.getBounds(), { padding: [10, 10] }); } catch (e) { map.setView([40.0,-3.7], 5); }
+    }, 50);
+  } catch (e) { /* noop */ }
+  try { console.debug('[SpainMap] CCAA layer added and fitted.'); } catch (e) { /* noop */ }
 
     if (registry.loadingEl) registry.loadingEl.style.display = 'none';
   }).catch(err => {
@@ -187,10 +266,23 @@ export function setSpainMapCounts({ ccaa = {}, provinces = {} }) {
   if (registry.loadingEl) registry.loadingEl.style.display = 'flex';
   registry.countsCCAA = ccaa || {};
   registry.countsProv = provinces || {};
+  // Build canonical maps so lookup is insensitive to word order/diacritics
+  registry.countsCCAACanonical = {};
+  Object.entries(registry.countsCCAA).forEach(([k,v]) => {
+    const ck = canonicalKey(k);
+    if (!ck) return;
+    registry.countsCCAACanonical[ck] = (typeof v === 'number' && isFinite(v) ? v : 0);
+  });
+  registry.countsProvCanonical = {};
+  Object.entries(registry.countsProv).forEach(([k,v]) => {
+    const ck = canonicalKey(k);
+    if (!ck) return;
+    registry.countsProvCanonical[ck] = (typeof v === 'number' && isFinite(v) ? v : 0);
+  });
   // compute maxCount across both
   registry.maxCount = 0;
-  for (const v of Object.values(registry.countsCCAA)) if (typeof v === 'number' && v > registry.maxCount) registry.maxCount = v;
-  for (const v of Object.values(registry.countsProv)) if (typeof v === 'number' && v > registry.maxCount) registry.maxCount = v;
+  for (const v of Object.values(registry.countsCCAACanonical)) if (typeof v === 'number' && v > registry.maxCount) registry.maxCount = v;
+  for (const v of Object.values(registry.countsProvCanonical)) if (typeof v === 'number' && v > registry.maxCount) registry.maxCount = v;
   if (registry.layerCCAA) registry.layerCCAA.setStyle(f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'ccaa'));
   if (registry.layerProv) registry.layerProv.setStyle(f => styleFor(f.properties && (f.properties.name || f.properties.NAME || ''), 'prov'));
   if (registry.legend) updateLegend(registry.legend);
@@ -204,9 +296,59 @@ export function showSpainLevel(level) {
   if (registry.layerCCAA && registry.map.hasLayer(registry.layerCCAA)) registry.map.removeLayer(registry.layerCCAA);
   if (registry.layerProv && registry.map.hasLayer(registry.layerProv)) registry.map.removeLayer(registry.layerProv);
   const layer = registry.activeLevel === 'ccaa' ? registry.layerCCAA : registry.layerProv;
-  if (layer) layer.addTo(registry.map);
+  if (layer) {
+    layer.addTo(registry.map);
+    // On first switch, ensure view fits the layer bounds
+    try { registry.map.fitBounds(layer.getBounds(), { padding: [10, 10] }); } catch (e) { /* noop */ }
+  }
+  if (registry.legend) updateLegend(registry.legend);
 }
 
 export function setSpainMapLoading(visible) {
   if (registry.loadingEl) registry.loadingEl.style.display = visible ? 'flex' : 'none';
+}
+
+/**
+ * Show or hide the Spain map overlay container.
+ * This avoids re-initializing Leaflet maps on the same DOM element.
+ * @param {boolean} visible - true to show, false to hide
+ */
+export function setSpainMapVisible(visible) {
+  try { console.debug('[SpainMap] set visible:', visible); } catch (e) { /* noop */ }
+  if (registry.containerEl) {
+    registry.containerEl.style.display = visible ? 'block' : 'none';
+    if (visible) {
+      // Force explicit pixel height/width to avoid percentage sizing issues
+      const parent = registry.containerEl.parentElement;
+      if (parent) {
+        const w = parent.clientWidth || parent.offsetWidth;
+        const h = parent.clientHeight || parent.offsetHeight || 360;
+        if (w > 0) registry.containerEl.style.width = w + 'px';
+        if (h > 0) registry.containerEl.style.height = h + 'px';
+      }
+    }
+    // Additionally hide/show the world map's Leaflet layers and controls
+    const parent = registry.containerEl.parentElement;
+    if (parent) {
+      const worldChildren = Array.from(parent.children);
+      worldChildren.forEach(el => {
+        if (el === registry.containerEl) return; // skip Spain overlay itself
+        const cls = el.classList || { contains: () => false };
+        const isLeafletWorld = cls.contains('leaflet-pane') || cls.contains('leaflet-control-container') || cls.contains('leaflet-overlay-pane') || cls.contains('leaflet-marker-pane');
+        if (isLeafletWorld) {
+          el.style.visibility = visible ? 'hidden' : '';
+        }
+      });
+      // Also hide any lingering Leaflet popups/tooltips from world map
+      const popup = parent.querySelector('.leaflet-popup-pane');
+      const tooltip = parent.querySelector('.leaflet-tooltip-pane');
+      if (popup) popup.style.visibility = visible ? 'hidden' : '';
+      if (tooltip) tooltip.style.visibility = visible ? 'hidden' : '';
+    }
+    // Invalidate size to ensure proper rendering when becoming visible
+    if (visible && registry.map) {
+      try { registry.map.invalidateSize(); } catch (e) { /* noop */ }
+      try { setTimeout(() => registry.map && registry.map.invalidateSize(), 50); } catch (e) { /* noop */ }
+    }
+  }
 }

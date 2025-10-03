@@ -189,6 +189,30 @@
                         </div>
                     </div>
                 </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="metricSourceFilter" class="form-label">{% trans "Metric Source" %}</label>
+                            <select class="form-select" id="metricSourceFilter">
+                                <option value="">{% trans "Any source" %}</option>
+                                <option value="wos">WoS</option>
+                                <option value="scopus">Scopus</option>
+                                <option value="dimensions">Dimensions</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="quartileFilter" class="form-label">{% trans "Quartile" %}</label>
+                            <select class="form-select" id="quartileFilter">
+                                <option value="">{% trans "All quartiles" %}</option>
+                            </select>
+                            <div id="selectedQuartiles" class="mt-2">
+                                <!-- Selected quartiles will be added here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -430,6 +454,8 @@
                         background: transparent !important;
                     }
                     #worldmap-container .leaflet-pane { background: transparent !important; }
+                    /* Ensure any child overlays (like Spain) can stack above comfortably */
+                    #worldmap-container { position: relative; z-index: 1; }
                     /* IMPORTANTE: Antes ocultábamos todos los controles. Se elimina para que aparezcan la leyenda (bottom-left) y la tabla Top10 (bottom-right). */
                     /* Ajustes opcionales de tamaño/z-index */
                     #worldmap-container .leaflet-control { font-size: 0.72rem; }
