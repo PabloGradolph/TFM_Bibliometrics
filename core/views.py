@@ -204,11 +204,12 @@ def _parse_quartiles(selected):
 
 
 def _apply_quartile_filter(qs, quartiles, metric_source=None):
-    """Filter publications having any related metric in the given quartiles.
+    """Filter publications by WoS JCR – JIF quartiles only.
 
-    - quartiles: iterable like ['Q1', 'Q2'] or [1, 2].
-    - metric_source: optional ('wos' | 'scopus' | 'dimensions'). If provided,
-      only metrics from that source will be considered.
+    Business rule (2025-10): Only Journal Impact Factor (metric_type='jif') from WoS is considered.
+    Any provided metric_source is ignored (forced 'wos').
+    Quartile labels in data may appear as Q1..Q4 or D1..D4; both are treated equivalently.
+    Accepted inputs: 'Q1'..'Q4', 'D1'..'D4', 1..4 (numeric), case-insensitive.
     """
     target_vals = _parse_quartiles(quartiles)
     if not target_vals:
@@ -216,13 +217,12 @@ def _apply_quartile_filter(qs, quartiles, metric_source=None):
 
     q_total = Q()
     for v in target_vals:
+        # Accept exact numeric match OR strings that start with Qv / Dv, e.g. "Q1", "Q1 [2017]", "D1", "D1 [2018]"
         q_val = (
-            Q(metrics__quartile_value=v) |
-            Q(metrics__quartile__iexact=f"Q{v}") |
-            Q(metrics__quartile__iexact=f"D{v}")
+            Q(metrics__quartile_value=v, metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"Q{v}", metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"D{v}", metrics__source='wos', metrics__metric_type='jif')
         )
-        if metric_source:
-            q_val &= Q(metrics__source=metric_source)
         q_total |= q_val
 
     return qs.filter(q_total).distinct()
@@ -236,7 +236,8 @@ def get_filter_data(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')   # canónicos
     quartiles = request.GET.getlist('quartiles')  # e.g., ['Q1', 'Q2']
-    metric_source = request.GET.get('metric_source')  # optional: 'wos'|'scopus'|'dimensions'
+    # Business rule: ignore provided metric_source, always use WoS
+    metric_source = 'wos'
     author = request.GET.get('author')
 
     base_query = Publication.objects.all()
@@ -303,6 +304,10 @@ def get_filter_data(request):
         publications_for_type_counting = publications_for_type_counting.filter(thematic_areas__name__in=areas)
     if institutions:
         publications_for_type_counting = publications_for_type_counting.filter(institutions__name__in=institutions)
+    # A partir de ahora también aplicamos cuartiles para que los conteos de tipos
+    # reflejen el subconjunto filtrado por Q (manteniendo todos los tipos posibles con 0 si no aparecen)
+    if quartiles:
+        publications_for_type_counting = _apply_quartile_filter(publications_for_type_counting, quartiles, metric_source)
     # Nota: normalmente aquí NO aplicamos 'types' para mostrar el universo completo disponible
     # según el resto de filtros. Si lo quieres aplicar, descomenta la siguiente línea:
     # if types: publications_for_type_counting = _apply_type_filter(publications_for_type_counting, types)
@@ -310,15 +315,18 @@ def get_filter_data(request):
     # 1) Inicializa todos los canónicos a 0
     type_counts = {t: 0 for t in CANON_TYPES}
 
-    # 2) Suma según el único valor guardado en normalized_types
-    for norm in publications_for_type_counting.values_list('normalized_types', flat=True):
+    # 2) Para evitar pérdidas de filas al usar DISTINCT + join con metrics (cuartiles),
+    #    primero recuperamos los IDs únicos y luego consultamos normalized_types sin el join.
+    pub_ids_for_types = list(
+        publications_for_type_counting.values_list('id', flat=True).distinct()
+    )
+    for norm in Publication.objects.filter(id__in=pub_ids_for_types).values_list('normalized_types', flat=True):
         if isinstance(norm, list) and norm:
             key = (norm[0] or '').strip() or 'otro'
         elif isinstance(norm, str) and norm:
             key = norm.strip()
         else:
             key = 'otro'
-        # Ignora claves desconocidas por seguridad
         if key in type_counts:
             type_counts[key] += 1
         else:
@@ -345,12 +353,10 @@ def get_filter_data(request):
     quartiles_with_counts = []
     for v in (1, 2, 3, 4):
         q = (
-            Q(metrics__quartile_value=v) |
-            Q(metrics__quartile__iexact=f"Q{v}") |
-            Q(metrics__quartile__iexact=f"D{v}")
+            Q(metrics__quartile_value=v, metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"Q{v}", metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"D{v}", metrics__source='wos', metrics__metric_type='jif')
         )
-        if metric_source:
-            q &= Q(metrics__source=metric_source)
         count = publications_for_quartile_counting.filter(q).distinct().count()
         quartiles_with_counts.append({'quartile': f'Q{v}', 'count': count})
 
@@ -371,7 +377,7 @@ def get_filtered_data(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
     quartiles = request.GET.getlist('quartiles')
-    metric_source = request.GET.get('metric_source')
+    metric_source = 'wos'
     view_type = request.GET.get('view_type', 'yearly')
     author = request.GET.get('author')
     include_predicted_areas = request.GET.get('include_predicted_areas') == 'true'
@@ -657,7 +663,7 @@ def get_publications_data(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
     quartiles = request.GET.getlist('quartiles')
-    metric_source = request.GET.get('metric_source')
+    metric_source = 'wos'
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
     try:
@@ -1051,7 +1057,7 @@ def export_report(request):
     institutions = data.getlist('institutions') if hasattr(data, 'getlist') else []
     types = data.getlist('types') if hasattr(data, 'getlist') else []
     quartiles = data.getlist('quartiles') if hasattr(data, 'getlist') else []
-    metric_source = data.get('metric_source')
+    metric_source = 'wos'  # enforced business rule
     author = data.get('author')
     format_ = data.get('format', 'pdf')
 
@@ -1065,7 +1071,7 @@ def export_report(request):
     default_institutions = _('Todas las instituciones')
     default_types = _('Todos los tipos')
     default_quartiles = _('Todos los cuartiles')
-    default_source = _('Cualquier fuente')
+    # metric source fixed to WoS; no generic default needed
 
     buffer = BytesIO()
     doc_title = 'Bibliometría IPBLN: Informe'
@@ -1108,7 +1114,7 @@ def export_report(request):
         [label(_('Áreas temáticas')), safe_value(areas, default_areas)],
         [label(_('Instituciones')), safe_value(institutions, default_institutions)],
         [label(_('Tipos de publicación')), safe_value(types, default_types)],
-        [label(_('Fuente de métrica')), safe_value(metric_source, default_source)],
+    # Metric source row removed (always WoS JCR - JIF)
         [label(_('Cuartiles')), safe_value(quartiles, default_quartiles)],
     ]
     if author:

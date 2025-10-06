@@ -15,7 +15,7 @@ export function initFiltersAndSearch() {
     const areaFilter = document.getElementById('areaFilter');
     const institutionFilter = document.getElementById('institutionFilter');
     const typeFilter = document.getElementById('typeFilter');
-    const metricSourceFilter = document.getElementById('metricSourceFilter');
+    // Metric source selector removed (WoS enforced backend)
     const quartileFilter = document.getElementById('quartileFilter');
     const clearFiltersBtn = document.getElementById('clearFilters');
     const selectedAreas = document.getElementById('selectedAreas');
@@ -264,7 +264,7 @@ export function initFiltersAndSearch() {
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
     let selectedQuartilesList = new Set();
-    let selectedMetricSource = '';
+    // metric source removed; always WoS
     let selectedAuthorName = null;
 
     // Exponer en window para export_report.js
@@ -272,7 +272,7 @@ export function initFiltersAndSearch() {
     window.selectedInstitutionsList = selectedInstitutionsList;
     window.selectedTypesList = selectedTypesList;
     window.selectedQuartilesList = selectedQuartilesList;
-    window.selectedMetricSource = selectedMetricSource;
+    window.selectedMetricSource = 'wos';
     window.selectedAuthorName = selectedAuthorName;
 
     // Variables para el autocompletado
@@ -885,7 +885,8 @@ export function initFiltersAndSearch() {
             if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
             if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
             if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
-            updateVisualizations();
+            // IMPORTANTE: recalcular combos y luego visualizaciones
+            updateFilters();
         });
         container.appendChild(badge);
         // Actualizar window para exportación
@@ -903,7 +904,7 @@ export function initFiltersAndSearch() {
         selectedInstitutionsList.clear();
         selectedTypesList.clear();
         selectedQuartilesList.clear();
-        selectedMetricSource = '';
+    // metric source fixed to WoS – nothing to clear
         selectedAreas.innerHTML = '';
         selectedInstitutions.innerHTML = '';
         selectedTypes.innerHTML = '';
@@ -959,7 +960,7 @@ export function initFiltersAndSearch() {
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
             quartiles: Array.from(selectedQuartilesList),
-            metric_source: selectedMetricSource
+            // metric_source removed (always WoS)
         };
 
         // Determinar si se puede usar la vista mensual
@@ -987,7 +988,7 @@ export function initFiltersAndSearch() {
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
     filters.quartiles.forEach(q => params.append('quartiles', q));
-    if (filters.metric_source) params.append('metric_source', filters.metric_source);
+    // metric_source removed
         params.append('view_type', filters.view_type);
         if (includePredictedAreas) params.append('include_predicted_areas', 'true');
         
@@ -1152,7 +1153,7 @@ export function initFiltersAndSearch() {
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
             quartiles: Array.from(selectedQuartilesList),
-            metric_source: selectedMetricSource,
+            // metric_source removed (always WoS)
             page: page
         };
 
@@ -1164,7 +1165,7 @@ export function initFiltersAndSearch() {
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
         filters.quartiles.forEach(q => params.append('quartiles', q));
-        if (filters.metric_source) params.append('metric_source', filters.metric_source);
+    // metric_source removed
         params.append('page', filters.page);
         
         // Añadir el autor seleccionado si existe
@@ -2615,7 +2616,7 @@ export function initFiltersAndSearch() {
         // Añadir filtros de tipo
         selectedTypesList.forEach(type => params.append('types', type));
     selectedQuartilesList.forEach(q => params.append('quartiles', q));
-    if (selectedMetricSource) params.append('metric_source', selectedMetricSource);
+    // metric_source not appended (always WoS)
 
         // Añadir autor seleccionado si existe
         if (selectedAuthorName) {
@@ -2702,13 +2703,7 @@ export function initFiltersAndSearch() {
     }
 
     // Listeners para Source y Quartile
-    if (metricSourceFilter) {
-        metricSourceFilter.addEventListener('change', () => {
-            selectedMetricSource = metricSourceFilter.value || '';
-            window.selectedMetricSource = selectedMetricSource;
-            updateFilters();
-        });
-    }
+    // metric source listener removed
     if (quartileFilter) {
         quartileFilter.addEventListener('change', () => {
             const val = quartileFilter.value;
