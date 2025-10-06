@@ -1390,6 +1390,8 @@ export function initFiltersAndSearch() {
 
         // Configuración del gráfico
         const margin = {top: 20, right: 20, bottom: 70, left: 60};
+        // Extra gap to separate the rotated Y-axis label from the tick labels / axis line
+        const yAxisLabelExtraGap = 10;  // increase if still too close
         const width = document.getElementById('timelineChart').clientWidth - margin.left - margin.right;
         const height = 300 - margin.top - margin.bottom;
 
@@ -1622,7 +1624,8 @@ export function initFiltersAndSearch() {
         // Añadir título del eje Y
         svg.append('text')
             .attr('transform', 'rotate(-90)')
-            .attr('y', 0 - margin.left + 20)
+            // Move further left (more negative) so it does not overlap the axis ticks
+            .attr('y', 0 - margin.left + yAxisLabelExtraGap)
             .attr('x', 0 - (height / 2))
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
@@ -1675,6 +1678,218 @@ export function initFiltersAndSearch() {
             });
         }
     }
+
+    // -------------------------------------------------------------
+    // Export Timeline Image (Yearly or Monthly active view)
+    // -------------------------------------------------------------
+    (function initTimelineExporter(){
+        if (typeof window === 'undefined') return;
+        const btn = document.getElementById('exportTimelineBtn');
+        if (!btn || btn.__timelineExporterBound) return;
+        btn.__timelineExporterBound = true;
+        btn.addEventListener('click', async () => {
+            try {
+                const container = document.getElementById('timelineChart');
+                if (!container) return;
+                const svgEl = container.querySelector('svg');
+                if (!svgEl) {
+                    alert('No chart to export');
+                    return;
+                }
+
+                // Clone SVG to avoid mutating original
+                const clone = svgEl.cloneNode(true);
+                // Inline styles for fonts/colors if needed (basic approach)
+                clone.querySelectorAll('*').forEach(n => {
+                    const cs = window.getComputedStyle(n);
+                    n.setAttribute('font-family', cs.fontFamily);
+                    n.setAttribute('font-size', cs.fontSize);
+                    if (cs.fill && cs.fill !== 'none') n.setAttribute('fill', cs.fill);
+                    if (cs.stroke && cs.stroke !== 'none') n.setAttribute('stroke', cs.stroke);
+                });
+
+                // Wrap in a temporary SVG with extra top margin to add title.
+                const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
+                const origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
+                const titleText = document.querySelector('[data-view].active')?.textContent || 'Timeline';
+                const exportTitle = 'Línea de tiempo de publicaciones';
+                const titleMargin = 40; // space for title
+                const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                exportSvg.setAttribute('width', String(origWidth));
+                exportSvg.setAttribute('height', String(origHeight + titleMargin));
+                exportSvg.setAttribute('viewBox', `0 0 ${origWidth} ${origHeight + titleMargin}`);
+
+                // Title element
+                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                titleEl.setAttribute('x', String(origWidth / 2));
+                titleEl.setAttribute('y', '24');
+                titleEl.setAttribute('text-anchor', 'middle');
+                titleEl.setAttribute('font-size', '18');
+                titleEl.setAttribute('font-family', 'Arial, sans-serif');
+                titleEl.setAttribute('fill', '#111');
+                titleEl.textContent = exportTitle;
+                exportSvg.appendChild(titleEl);
+
+                // Shift original group down
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(0, ${titleMargin})`);
+                // Remove existing transform nesting issues by copying children
+                Array.from(clone.childNodes).forEach(ch => g.appendChild(ch));
+                exportSvg.appendChild(g);
+
+                // Serialize
+                const serializer = new XMLSerializer();
+                const svgString = serializer.serializeToString(exportSvg);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                // Convert to PNG via canvas (using offscreen img)
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        const a = document.createElement('a');
+                        a.download = `publication_timeline_${ts}.png`;
+                        a.href = canvas.toDataURL('image/png');
+                        a.click();
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    alert('Failed to export image');
+                };
+                img.src = url;
+            } catch (err) {
+                console.error('[Timeline][Export] Failed', err);
+                alert('Failed to export image');
+            }
+        });
+    })();
+
+    // -------------------------------------------------------------
+    // Export Areas Distribution (Pie o Bar activo)
+    // -------------------------------------------------------------
+    (function initAreasExporter(){
+        if (typeof window === 'undefined') return;
+        const btn = document.getElementById('exportAreasBtn');
+        if (!btn || btn.__areasExporterBound) return;
+        btn.__areasExporterBound = true;
+        btn.addEventListener('click', () => {
+            try {
+                const container = document.getElementById('areasChart');
+                if (!container) return;
+                const svgEl = container.querySelector('svg');
+                if (!svgEl) { alert('No chart to export'); return; }
+
+                const clone = svgEl.cloneNode(true);
+                clone.querySelectorAll('*').forEach(n => {
+                    const cs = window.getComputedStyle(n);
+                    n.setAttribute('font-family', cs.fontFamily);
+                    n.setAttribute('font-size', cs.fontSize);
+                    if (cs.fill && cs.fill !== 'none') n.setAttribute('fill', cs.fill);
+                    if (cs.stroke && cs.stroke !== 'none') n.setAttribute('stroke', cs.stroke);
+                });
+
+                const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
+                let origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
+                const isBar = document.querySelector('[data-areas-view="bar"]')?.classList.contains('active');
+                const exportTitle = isBar ? 'Distribución de áreas (Barras)' : 'Distribución de áreas (Circular)';
+                const titleMargin = 40;
+                const bottomExtra = isBar ? 170 : 0;  // ligeramente menos ahora que reducimos tamaño labels
+                const leftExtra = isBar ? 90 : 0;    // reducimos un poco el margen izquierdo
+                let exportWidth = origWidth + leftExtra;
+                if (isBar) {
+                    // Mostrar y rotar etiquetas del eje X
+                    const xAxisTexts = clone.querySelectorAll('.areas-x-axis text');
+                    xAxisTexts.forEach(t => {
+                        t.style.display = 'block';
+                        t.setAttribute('transform', 'rotate(-48)');
+                        t.setAttribute('text-anchor', 'end');
+                        t.setAttribute('dx', '-0.35em');
+                        t.setAttribute('dy', '0.3em');
+                        t.setAttribute('font-size', '9px');
+                    });
+                    // Reposicionar título del eje X debajo de las etiquetas rotadas
+                    const xAxisTitle = clone.querySelector('.x-axis-title');
+                    if (xAxisTitle) {
+                        const match = /translate\([^,]+,\s*([^\)]+)\)/.exec(xAxisTitle.getAttribute('transform') || '');
+                        let baseY = match ? parseFloat(match[1]) : (origHeight - 10);
+                        baseY += 100; // ajuste tras reducir labels
+                        xAxisTitle.setAttribute('transform', `translate(${leftExtra + origWidth/2}, ${baseY})`);
+                    }
+                    // Ajustar título eje Y más afuera y más abajo (coordenadas ya rotadas)
+                    const yAxisTitle = clone.querySelector('.y-axis-title');
+                    if (yAxisTitle) {
+                        const curY = parseFloat(yAxisTitle.getAttribute('y')) || 0;
+                        yAxisTitle.setAttribute('y', (curY - 20)); // menos separación externa ahora
+                        const curX = parseFloat(yAxisTitle.getAttribute('x')) || 0;
+                        yAxisTitle.setAttribute('x', (curX + 25)); // ajuste vertical suave
+                    }
+                    origHeight += bottomExtra;
+                }
+                const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                exportSvg.setAttribute('width', String(exportWidth));
+                exportSvg.setAttribute('height', String(origHeight + titleMargin));
+                exportSvg.setAttribute('viewBox', `0 0 ${exportWidth} ${origHeight + titleMargin}`);
+
+                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                titleEl.setAttribute('x', String(leftExtra + origWidth / 2));
+                titleEl.setAttribute('y', '24');
+                titleEl.setAttribute('text-anchor', 'middle');
+                titleEl.setAttribute('font-size', '18');
+                titleEl.setAttribute('font-family', 'Arial, sans-serif');
+                titleEl.setAttribute('fill', '#111');
+                titleEl.textContent = exportTitle;
+                exportSvg.appendChild(titleEl);
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${leftExtra}, ${titleMargin})`);
+                Array.from(clone.childNodes).forEach(ch => g.appendChild(ch));
+                exportSvg.appendChild(g);
+
+                const serializer = new XMLSerializer();
+                const svgString = serializer.serializeToString(exportSvg);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        const a = document.createElement('a');
+                        a.download = isBar ? `areas_distribution_bar_${ts}.png` : `areas_distribution_pie_${ts}.png`;
+                        a.href = canvas.toDataURL('image/png');
+                        a.click();
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); alert('Failed to export image'); };
+                img.src = url;
+            } catch (err) {
+                console.error('[Areas][Export] Failed', err);
+                alert('Failed to export image');
+            }
+        });
+    })();
 
     function updateAreasChart(data) {
         // Filtrar valores nulos
@@ -1855,10 +2070,14 @@ export function initFiltersAndSearch() {
             .nice()
             .range([height, 0]);
     
-        svg.append('g')
+        // Eje X con etiquetas (se ocultan para vista en pantalla, se mostrarán en exportación)
+        const xAxisGroup = svg.append('g')
             .attr('transform', `translate(0,${height})`)
-            // Quitamos las etiquetas del eje X
-            .call(d3.axisBottom(x).tickFormat(''));
+            .attr('class', 'areas-x-axis')
+            .call(d3.axisBottom(x));
+        xAxisGroup.selectAll('text')
+            .style('display', 'none')
+            .style('font-size', '9px');
     
         svg.append('g')
             .call(d3.axisLeft(y).ticks(height / 40));
@@ -1938,9 +2157,12 @@ export function initFiltersAndSearch() {
         });
     
         // Títulos
+        // Título eje Y con más separación respecto al eje
         svg.append('text')
+            .attr('class', 'y-axis-title')
             .attr('transform', 'rotate(-90)')
-            .attr('y', -margin.left + 20)
+            // Ajuste más cercano al eje (menos negativo)
+            .attr('y', -margin.left - 2)
             .attr('x', -height / 2)
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
@@ -1949,6 +2171,7 @@ export function initFiltersAndSearch() {
     
         // Añadir título del eje X
         svg.append('text')
+            .attr('class', 'x-axis-title')
             .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 20})`)
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
