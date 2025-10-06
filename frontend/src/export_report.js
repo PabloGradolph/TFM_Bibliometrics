@@ -144,6 +144,8 @@ export function setupExportReportButton() {
             // Recoger filtros actuales del dashboard
             const yearFrom = document.getElementById('yearFrom')?.value;
             const yearTo = document.getElementById('yearTo')?.value;
+            const citationsFrom = document.getElementById('citationsFrom')?.value;
+            const citationsTo = document.getElementById('citationsTo')?.value;
             let areas = [];
             if (window.selectedAreasList && window.selectedAreasList.size > 0) {
                 areas = Array.from(window.selectedAreasList);
@@ -231,6 +233,8 @@ export function setupExportReportButton() {
                     const formData = new FormData();
                     if (yearFrom) formData.append('year_from', yearFrom);
                     if (yearTo) formData.append('year_to', yearTo);
+                    if (citationsFrom) formData.append('citations_from', citationsFrom);
+                    if (citationsTo) formData.append('citations_to', citationsTo);
                     areas.forEach(area => formData.append('areas', area));
                     institutions.forEach(inst => formData.append('institutions', inst));
                     types.forEach(type => formData.append('types', type));

@@ -12,6 +12,8 @@ export function initFiltersAndSearch() {
     // Referencias a los elementos del DOM
     const yearFrom = document.getElementById('yearFrom');
     const yearTo = document.getElementById('yearTo');
+    const citationsFrom = document.getElementById('citationsFrom');
+    const citationsTo = document.getElementById('citationsTo');
     const areaFilter = document.getElementById('areaFilter');
     const institutionFilter = document.getElementById('institutionFilter');
     const typeFilter = document.getElementById('typeFilter');
@@ -859,6 +861,18 @@ export function initFiltersAndSearch() {
                     });
                 }
 
+                // Actualizar rango de citas disponible inicial
+                if (data.citations_range) {
+                    const help = document.getElementById('citationsRangeHelp');
+                    if (help) {
+                        const minC = data.citations_range.min || 0;
+                        const maxC = data.citations_range.max || 0;
+                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                        if (citationsFrom) citationsFrom.placeholder = minC;
+                        if (citationsTo) citationsTo.placeholder = maxC;
+                    }
+                }
+
                 // Cargar datos iniciales
                 updateVisualizations();
             })
@@ -900,6 +914,8 @@ export function initFiltersAndSearch() {
     function clearFilters() {
         yearFrom.value = '';
         yearTo.value = '';
+        if (citationsFrom) citationsFrom.value = '';
+        if (citationsTo) citationsTo.value = '';
         selectedAreasList.clear();
         selectedInstitutionsList.clear();
         selectedTypesList.clear();
@@ -960,6 +976,8 @@ export function initFiltersAndSearch() {
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
             quartiles: Array.from(selectedQuartilesList),
+            citations_from: citationsFrom ? citationsFrom.value : '',
+            citations_to: citationsTo ? citationsTo.value : '',
             // metric_source removed (always WoS)
         };
 
@@ -983,7 +1001,9 @@ export function initFiltersAndSearch() {
         // Construir la URL con los parámetros de filtrado
         const params = new URLSearchParams();
         if (filters.year_from) params.append('year_from', filters.year_from);
-        if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.citations_from) params.append('citations_from', filters.citations_from);
+    if (filters.citations_to) params.append('citations_to', filters.citations_to);
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
@@ -1153,6 +1173,8 @@ export function initFiltersAndSearch() {
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
             quartiles: Array.from(selectedQuartilesList),
+            citations_from: citationsFrom ? citationsFrom.value : '',
+            citations_to: citationsTo ? citationsTo.value : '',
             // metric_source removed (always WoS)
             page: page
         };
@@ -1160,7 +1182,9 @@ export function initFiltersAndSearch() {
         // Construir la URL con los parámetros de filtrado
         const params = new URLSearchParams();
         if (filters.year_from) params.append('year_from', filters.year_from);
-        if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.citations_from) params.append('citations_from', filters.citations_from);
+    if (filters.citations_to) params.append('citations_to', filters.citations_to);
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
@@ -2606,6 +2630,8 @@ export function initFiltersAndSearch() {
         // Añadir filtros de año
         if (yearFrom.value) params.append('year_from', yearFrom.value);
         if (yearTo.value) params.append('year_to', yearTo.value);
+    if (citationsFrom && citationsFrom.value) params.append('citations_from', citationsFrom.value);
+    if (citationsTo && citationsTo.value) params.append('citations_to', citationsTo.value);
         
         // Añadir filtros de área
         selectedAreasList.forEach(area => params.append('areas', area));
@@ -2676,6 +2702,15 @@ export function initFiltersAndSearch() {
                         quartileFilter.appendChild(option);
                     });
                 }
+                // Rango de citas actualizado
+                if (data.citations_range) {
+                    const help = document.getElementById('citationsRangeHelp');
+                    if (help) {
+                        const minC = data.citations_range.min || 0;
+                        const maxC = data.citations_range.max || 0;
+                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                    }
+                }
             })
             .catch(error => {
                 console.error('Error updating filters:', error);
@@ -2715,6 +2750,17 @@ export function initFiltersAndSearch() {
             updateFilters();
         });
     }
+
+    // Listeners rango citas
+    if (citationsFrom) citationsFrom.addEventListener('change', () => {
+        // Normalizar valores negativos
+        if (citationsFrom.value !== '' && parseInt(citationsFrom.value, 10) < 0) citationsFrom.value = 0;
+        updateFilters();
+    });
+    if (citationsTo) citationsTo.addEventListener('change', () => {
+        if (citationsTo.value !== '' && parseInt(citationsTo.value, 10) < 0) citationsTo.value = 0;
+        updateFilters();
+    });
 
     // Añadir el manejador del botón de red completa
     document.getElementById('toggleFullNetworkBtn').addEventListener('click', function() {

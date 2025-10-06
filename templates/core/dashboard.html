@@ -192,6 +192,16 @@
                 <div class="row g-3 mt-1">
                     <div class="col-md-3">
                         <div class="form-group">
+                            <label for="citationsFrom" class="form-label">{% trans "Citations" %}</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="citationsFrom" placeholder="{% trans 'From' %}">
+                                <input type="number" class="form-control" id="citationsTo" placeholder="{% trans 'To' %}">
+                            </div>
+                            <div class="form-text" id="citationsRangeHelp" style="font-size: 0.75rem;"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
                             <label for="quartileFilter" class="form-label">Q (WoS JCR - JIF)</label>
                             <select class="form-select" id="quartileFilter">
                                 <option value="">{% trans "All quartiles" %}</option>

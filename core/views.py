@@ -232,6 +232,8 @@ def _apply_quartile_filter(qs, quartiles, metric_source=None):
 def get_filter_data(request):
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')   # canónicos
@@ -245,6 +247,17 @@ def get_filter_data(request):
         base_query = base_query.filter(year__gte=year_from)
     if year_to:
         base_query = base_query.filter(year__lte=year_to)
+    # Filtro de citas totales (campo Publication.citations)
+    if citations_from is not None and citations_from != '':
+        try:
+            base_query = base_query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            base_query = base_query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if author:
         base_query = base_query.filter(authors__name=author)
 
@@ -360,12 +373,19 @@ def get_filter_data(request):
         count = publications_for_quartile_counting.filter(q).distinct().count()
         quartiles_with_counts.append({'quartile': f'Q{v}', 'count': count})
 
+    # Calcular rango de citas sobre el subconjunto base (sin aplicar filtro de tipos ni quartiles para mostrar universo según otros filtros)
+    citations_query = base_query
+    citations_stats = citations_query.aggregate(min_c=Min('citations'), max_c=Max('citations'))
+    min_cit = citations_stats['min_c'] if citations_stats['min_c'] is not None else 0
+    max_cit = citations_stats['max_c'] if citations_stats['max_c'] is not None else 0
+
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),
         'institutions': list(institutions_with_counts),
         'publication_types': types_with_counts,
-        'quartiles': quartiles_with_counts
+        'quartiles': quartiles_with_counts,
+        'citations_range': {'min': min_cit, 'max': max_cit}
     })
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
@@ -373,6 +393,8 @@ def get_filtered_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
@@ -390,6 +412,16 @@ def get_filtered_data(request):
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
@@ -663,6 +695,8 @@ def get_publications_data(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
     quartiles = request.GET.getlist('quartiles')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     metric_source = 'wos'
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
@@ -684,6 +718,16 @@ def get_publications_data(request):
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
@@ -1053,6 +1097,8 @@ def export_report(request):
 
     year_from = data.get('year_from')
     year_to = data.get('year_to')
+    citations_from = data.get('citations_from')
+    citations_to = data.get('citations_to')
     areas = data.getlist('areas') if hasattr(data, 'getlist') else []
     institutions = data.getlist('institutions') if hasattr(data, 'getlist') else []
     types = data.getlist('types') if hasattr(data, 'getlist') else []
@@ -1071,6 +1117,7 @@ def export_report(request):
     default_institutions = _('Todas las instituciones')
     default_types = _('Todos los tipos')
     default_quartiles = _('Todos los cuartiles')
+    default_citations = _('Todas (0 - máx)')
     # metric source fixed to WoS; no generic default needed
 
     buffer = BytesIO()
@@ -1116,6 +1163,10 @@ def export_report(request):
         [label(_('Tipos de publicación')), safe_value(types, default_types)],
     # Metric source row removed (always WoS JCR - JIF)
         [label(_('Cuartiles')), safe_value(quartiles, default_quartiles)],
+        [label(_('Citas (mín - máx)')), safe_value(
+            f"{citations_from or '0'} - {citations_to or _('máx')}" if (citations_from or citations_to) else None,
+            default_citations
+        )],
     ]
     if author:
         filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
@@ -1307,6 +1358,8 @@ def export_report(request):
 def get_worldmap_counts(request):
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
@@ -1319,6 +1372,16 @@ def get_worldmap_counts(request):
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
@@ -1370,6 +1433,8 @@ def get_spainmap_counts(request):
 
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
@@ -1383,6 +1448,16 @@ def get_spainmap_counts(request):
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
