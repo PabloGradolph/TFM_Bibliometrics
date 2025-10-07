@@ -1716,9 +1716,13 @@ export function initFiltersAndSearch() {
                 const titleMargin = 40; // space for title
                 const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                exportSvg.setAttribute('width', String(origWidth));
-                exportSvg.setAttribute('height', String(origHeight + titleMargin));
+                // High quality scaling (2x) for sharper PNG
+                const scaleFactor = 2;
+                exportSvg.setAttribute('width', String(origWidth * scaleFactor));
+                exportSvg.setAttribute('height', String((origHeight + titleMargin) * scaleFactor));
                 exportSvg.setAttribute('viewBox', `0 0 ${origWidth} ${origHeight + titleMargin}`);
+                exportSvg.setAttribute('shape-rendering', 'geometricPrecision');
+                exportSvg.setAttribute('text-rendering', 'geometricPrecision');
 
                 // Title element
                 const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1752,6 +1756,10 @@ export function initFiltersAndSearch() {
                         canvas.width = img.width;
                         canvas.height = img.height;
                         const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                        }
                         ctx.fillStyle = '#ffffff';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                         ctx.drawImage(img, 0, 0);
@@ -1805,8 +1813,9 @@ export function initFiltersAndSearch() {
                 const isBar = document.querySelector('[data-areas-view="bar"]')?.classList.contains('active');
                 const exportTitle = isBar ? 'Distribución de áreas (Barras)' : 'Distribución de áreas (Circular)';
                 const titleMargin = 40;
-                const bottomExtra = isBar ? 170 : 0;  // ligeramente menos ahora que reducimos tamaño labels
-                const leftExtra = isBar ? 90 : 0;    // reducimos un poco el margen izquierdo
+                // Reduced extra margins (user request: "algo menos")
+                const bottomExtra = isBar ? 130 : 0;  // was 170
+                const leftExtra = isBar ? 70 : 0;     // was 90
                 let exportWidth = origWidth + leftExtra;
                 if (isBar) {
                     // Mostrar y rotar etiquetas del eje X
@@ -1824,8 +1833,29 @@ export function initFiltersAndSearch() {
                     if (xAxisTitle) {
                         const match = /translate\([^,]+,\s*([^\)]+)\)/.exec(xAxisTitle.getAttribute('transform') || '');
                         let baseY = match ? parseFloat(match[1]) : (origHeight - 10);
-                        baseY += 100; // ajuste tras reducir labels
-                        xAxisTitle.setAttribute('transform', `translate(${leftExtra + origWidth/2}, ${baseY})`);
+                        baseY += 85; // slightly less due to reduced bottomExtra
+                        // Recalcular centrado usando extensión real de las barras del clon
+                        let calculatedCenter = origWidth / 2;
+                        try {
+                            const bars = clone.querySelectorAll('.bar');
+                            if (bars.length > 0) {
+                                let minX = Infinity; let maxX = -Infinity;
+                                bars.forEach(b => {
+                                    const xVal = parseFloat(b.getAttribute('x')) || 0;
+                                    const wVal = parseFloat(b.getAttribute('width')) || 0;
+                                    if (xVal < minX) minX = xVal;
+                                    if (xVal + wVal > maxX) maxX = xVal + wVal;
+                                });
+                                if (isFinite(minX) && isFinite(maxX)) {
+                                    calculatedCenter = (minX + maxX) / 2;
+                                }
+                            }
+                        } catch (e) {
+                            // eslint-disable-next-line no-console
+                            console.warn('[Areas][Export][Bar] No se pudo recalcular centro X para título:', e);
+                        }
+                        // Nota: no sumar leftExtra aquí porque el grupo externo ya aplica esa traslación
+                        xAxisTitle.setAttribute('transform', `translate(${calculatedCenter}, ${baseY})`);
                     }
                     // Ajustar título eje Y más afuera y más abajo (coordenadas ya rotadas)
                     const yAxisTitle = clone.querySelector('.y-axis-title');
@@ -1839,9 +1869,13 @@ export function initFiltersAndSearch() {
                 }
                 const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                exportSvg.setAttribute('width', String(exportWidth));
-                exportSvg.setAttribute('height', String(origHeight + titleMargin));
+                // Improve quality: upscale exported SVG (will rasterize sharper)
+                const scaleFactor = 2; // 2x resolution
+                exportSvg.setAttribute('width', String(exportWidth * scaleFactor));
+                exportSvg.setAttribute('height', String((origHeight + titleMargin) * scaleFactor));
                 exportSvg.setAttribute('viewBox', `0 0 ${exportWidth} ${origHeight + titleMargin}`);
+                exportSvg.setAttribute('shape-rendering', 'geometricPrecision');
+                exportSvg.setAttribute('text-rendering', 'geometricPrecision');
 
                 const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 titleEl.setAttribute('x', String(leftExtra + origWidth / 2));
@@ -1870,6 +1904,10 @@ export function initFiltersAndSearch() {
                         canvas.width = img.width;
                         canvas.height = img.height;
                         const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                        }
                         ctx.fillStyle = '#ffffff';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                         ctx.drawImage(img, 0, 0);
@@ -2177,6 +2215,29 @@ export function initFiltersAndSearch() {
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
             .text('Áreas temáticas');
+
+        // Recentrar el título del eje X según las barras reales (por si visualmente parece corrido)
+        try {
+            const bars = svg.selectAll('.bar').nodes();
+            if (bars.length > 0) {
+                let minX = Infinity; let maxX = -Infinity; let barWidthRef = 0;
+                bars.forEach(b => {
+                    const xVal = parseFloat(b.getAttribute('x')) || 0;
+                    const wVal = parseFloat(b.getAttribute('width')) || 0;
+                    if (xVal < minX) minX = xVal;
+                    if (xVal + wVal > maxX) maxX = xVal + wVal;
+                    barWidthRef = wVal; // última referencia (no crítico)
+                });
+                if (isFinite(minX) && isFinite(maxX)) {
+                    const centerBars = (minX + maxX) / 2;
+                    svg.select('.x-axis-title')
+                        .attr('transform', `translate(${centerBars}, ${height + margin.bottom - 20})`);
+                }
+            }
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[Areas][BarChart] No se pudo recalcular el centrado del título X:', e);
+        }
     }  
 
     // --- LÍNEA TEMPORAL: LÓGICA DE BOTONES ---
