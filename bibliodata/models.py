@@ -7,7 +7,8 @@ class Publication(models.Model):
     doi = models.JSONField("DOI(s)", blank=True, null=True)
     year = models.IntegerField("Year")
     publication_date = models.CharField("Publication date (yyyy-mm-dd)", max_length=20, blank=True, null=True)
-    publication_type = models.JSONField("Normalized type(s)", blank=True,  null=True)
+    publication_type = models.JSONField("Publication type(s)", blank=True,  null=True)
+    normalized_types = models.JSONField("Normalized type(s)", null=True, blank=True)
     source = models.CharField("Source", max_length=255, blank=True, null=True)
     source_link = models.URLField("Source link", blank=True, null=True)
     source_id = models.CharField("Source ID", max_length=100, blank=True, null=True)
@@ -47,6 +48,11 @@ class Publication(models.Model):
     other_authors = models.JSONField("Non-IPBLN authors (raw names)", blank=True, null=True)
     affiliations = models.JSONField("Full affiliation strings", blank=True, null=True)
     institutions = models.ManyToManyField("Institution", related_name="publications", blank=True)
+
+    # Countries derived from the API field "paises" (list of numeric IDs)
+    countries_ids = models.JSONField("Countries IDs (from API)", blank=True, null=True)
+    countries = models.JSONField("Countries (names)", blank=True, null=True)
+    countries_iso2 = models.JSONField("Countries ISO A2", blank=True, null=True)
 
     def __str__(self):
         return f"{self.title[:80]}..."
@@ -339,3 +345,24 @@ class ThematicArea(models.Model):
 
     def __str__(self):
         return self.name
+    
+    
+class PublicationEmbedding(models.Model):
+    """
+    Stores the embedding vector and relevant metadata for a publication to enable semantic search.
+
+    Fields:
+        - publication: ForeignKey to Publication
+        - embedding: TextField (serialized vector, e.g. JSON or comma-separated string)
+        - created_at: DateTime of embedding creation
+        - updated_at: DateTime of last update
+        - source_fields: JSONField with the fields used to generate the embedding (title, abstract, keywords, etc.)
+    """
+    publication = models.OneToOneField("Publication", on_delete=models.CASCADE, related_name="embedding")
+    embedding = models.TextField("Embedding vector (JSON or string)")
+    source_fields = models.JSONField("Fields used for embedding", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Embedding for: {self.publication.title[:60]}..."

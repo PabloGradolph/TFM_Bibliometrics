@@ -4,20 +4,26 @@ import Graph from 'graphology';
 import Sigma from 'sigma';
 import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
-
+import { initWorldMap, setWorldMapActiveCountries, setWorldMapLoading } from './worldmap.js';
+import { initSpainMap, setSpainMapCounts, showSpainLevel, setSpainMapLoading, setSpainMapVisible } from './spainmap.js';
 
 export function initFiltersAndSearch() {
 
     // Referencias a los elementos del DOM
     const yearFrom = document.getElementById('yearFrom');
     const yearTo = document.getElementById('yearTo');
+    const citationsFrom = document.getElementById('citationsFrom');
+    const citationsTo = document.getElementById('citationsTo');
     const areaFilter = document.getElementById('areaFilter');
     const institutionFilter = document.getElementById('institutionFilter');
     const typeFilter = document.getElementById('typeFilter');
+    // Metric source selector removed (WoS enforced backend)
+    const quartileFilter = document.getElementById('quartileFilter');
     const clearFiltersBtn = document.getElementById('clearFilters');
     const selectedAreas = document.getElementById('selectedAreas');
     const selectedInstitutions = document.getElementById('selectedInstitutions');
     const selectedTypes = document.getElementById('selectedTypes');
+    const selectedQuartiles = document.getElementById('selectedQuartiles');
     const standardSearch = document.getElementById('standardSearch');
     const standardSearchBtn = document.getElementById('standardSearchBtn');
     const searchSuggestions = document.getElementById('searchSuggestions');
@@ -42,6 +48,8 @@ export function initFiltersAndSearch() {
     const modelAutoMode = document.getElementById('modelAutoMode');
     const manualConfigContainer = document.getElementById('manualConfigContainer');
     const lovainaOptions = document.getElementById('lovainaOptions');
+
+    const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
 
     // Descripciones de los modelos en español
     const spanishModelDescriptions = {
@@ -257,12 +265,16 @@ export function initFiltersAndSearch() {
     let selectedAreasList = new Set();
     let selectedInstitutionsList = new Set();
     let selectedTypesList = new Set();
+    let selectedQuartilesList = new Set();
+    // metric source removed; always WoS
     let selectedAuthorName = null;
 
     // Exponer en window para export_report.js
     window.selectedAreasList = selectedAreasList;
     window.selectedInstitutionsList = selectedInstitutionsList;
     window.selectedTypesList = selectedTypesList;
+    window.selectedQuartilesList = selectedQuartilesList;
+    window.selectedMetricSource = 'wos';
     window.selectedAuthorName = selectedAuthorName;
 
     // Variables para el autocompletado
@@ -289,7 +301,7 @@ export function initFiltersAndSearch() {
             return;
         }
 
-        fetch(`/api/search/authors/?q=${encodeURIComponent(query)}`)
+        fetch(`/BiblioMetrics/${lang}/api/search/authors/?q=${encodeURIComponent(query)}`)
             .then(response => response.json())
             .then(data => {
                 const suggestionsList = searchSuggestions.querySelector('.list-group');
@@ -416,7 +428,7 @@ export function initFiltersAndSearch() {
         }
 
         // Obtener las métricas del autor
-        fetch(`/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
+        fetch(`/BiblioMetrics/${lang}/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -494,16 +506,23 @@ export function initFiltersAndSearch() {
         } else {
             params.append('q', standardSearch.value.trim());
         }
+        // Recoger el parámetro del selector de número de resultados IA
+        const topKSelect = document.getElementById('semanticTopK');
+        let top_k = 50;
+        if (topKSelect) {
+            top_k = parseInt(topKSelect.value) || 50;
+        }
+        params.append('top_k', top_k);
 
         // Realizar la búsqueda
-        fetch(`/api/search/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/search/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 // Restaurar el botón
                 standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
 
-                // Crear y mostrar el modal de resultados
-                showSearchResults(data.results);
+                // Crear y mostrar el modal de resultados (máximo top_k)
+                showSearchResults((data.results || []).slice(0, top_k));
             })
             .catch(error => {
                 console.error('Error performing search:', error);
@@ -545,7 +564,12 @@ export function initFiltersAndSearch() {
         if (results.length === 0) {
             resultsList.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
         } else {
-            resultsList.innerHTML = results.map(result => `
+            resultsList.innerHTML = results.map(result => {
+                const authors = Array.isArray(result.authors) ? result.authors.join(', ') : (result.authors || '');
+                const otherAuthors = Array.isArray(result.other_authors) && result.other_authors.length > 0
+                    ? ` <span class="text-muted">(${result.other_authors.join(', ')})</span>`
+                    : '';
+                return `
                 <div class="card mb-3">
                     <div class="card-body" data-publication-id="${result.id}" style="cursor: pointer;">
                         <h5 class="card-title">${result.title}</h5>
@@ -553,14 +577,15 @@ export function initFiltersAndSearch() {
                             ${result.year} - ${result.publication_type}
                         </h6>
                         <p class="card-text">
-                            <strong>Autores:</strong> ${result.authors.join(', ')}<br>
+                            <strong>Autores:</strong> ${authors}${otherAuthors}<br>
                             <strong>Instituciones:</strong> ${result.institutions.join(', ')}<br>
                             <strong>Áreas:</strong> ${result.areas.join(', ')}
                         </p>
                         ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">Ver publicación</a>` : ''}
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // Añadir evento de clic a cada tarjeta de resultado
@@ -569,13 +594,134 @@ export function initFiltersAndSearch() {
                 const publicationId = this.dataset.publicationId;
                 if (publicationId) {
                     // Redirigir a la página de detalle de publicación
-                    window.location.href = `/publication/${publicationId}/`;
+                    window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
                 }
             });
         });
 
         // Mostrar el modal
         const modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
+
+    /**
+     * Show semantic search results in a modal, ordered by similarity.
+     * @param {Array<Object>} results - Array of publication objects returned by the semantic search API.
+     */
+    function showSemanticResults(results) {
+        const currentLang = window.location.pathname.split('/')[1];
+        const titleText = currentLang === 'es' ? 'Resultados IA' : 'AI Search Results';
+
+        // Defensive: ensure we have an array
+        if (!Array.isArray(results)) results = [];
+
+        // Sort by similarity desc if similarity field exists
+        results = results.slice().sort((a, b) => {
+            const sa = (typeof a.similarity === 'number') ? a.similarity : 0;
+            const sb = (typeof b.similarity === 'number') ? b.similarity : 0;
+            return sb - sa;
+        });
+
+        // Create modal if not present
+        let modal = document.getElementById('semanticResultsModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'semanticResultsModal';
+            modal.className = 'modal fade';
+            modal.setAttribute('tabindex', '-1');
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${titleText}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="semanticResultsList"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            // update title language
+            const hdr = modal.querySelector('.modal-title');
+            if (hdr) hdr.textContent = titleText;
+        }
+
+        const list = document.getElementById('semanticResultsList');
+        if (!list) return;
+
+        function renderSemanticResults(res) {
+            if (res.length === 0) {
+                list.innerHTML = '<p class="text-center">' + (currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.') + '</p>';
+            } else {
+                list.innerHTML = res.map(r => {
+                    const simText = (typeof r.similarity === 'number') ? `<div class="text-end text-muted" style="font-size:0.9rem">${(r.similarity*100).toFixed(1)}% similar</div>` : '';
+                    const authors = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
+                    const otherAuthors = Array.isArray(r.other_authors) && r.other_authors.length > 0
+                        ? ` <span class="text-muted">(${r.other_authors.join(', ')})</span>`
+                        : '';
+                    const areas = Array.isArray(r.areas) ? r.areas.join(', ') : (r.areas || '');
+                    const pubType = r.publication_type || '';
+                    const year = r.year || '';
+                    const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
+
+                    return `
+                        <div class="card mb-3">
+                            <div class="card-body" data-publication-id="${r.id}" style="cursor: pointer;">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h5 class="card-title mb-1">${r.title}</h5>
+                                        <h6 class="card-subtitle mb-2 text-muted">${year} ${pubType ? '- ' + pubType : ''}</h6>
+                                    </div>
+                                    ${simText}
+                                </div>
+                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}${otherAuthors}</p>
+                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Áreas' : 'Areas'}:</strong> ${areas}</p>
+                                <div>${urlLink}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                // Attach click handlers
+                const container = document.getElementById('semanticResultsList');
+                container.querySelectorAll('.card-body').forEach(cardBody => {
+                    cardBody.addEventListener('click', function() {
+                        const publicationId = this.dataset.publicationId;
+                        if (publicationId) {
+                            window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
+                        }
+                    });
+                });
+            }
+        }
+
+        renderSemanticResults(results);
+
+        // Añadir evento al selector para cambiar el número de resultados
+        const topKSelect = document.getElementById('semanticTopK');
+        if (topKSelect) {
+            topKSelect.addEventListener('change', function() {
+                const topK = parseInt(this.value);
+                // Aquí deberías volver a hacer la petición al backend con el nuevo top_k
+                // Puedes guardar el último query en una variable global si lo necesitas
+                if (window.lastSemanticQuery) {
+                    fetch(`/BiblioMetrics/${currentLang}/semantic_search/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: window.lastSemanticQuery, top_k: topK })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        renderSemanticResults(data.results || []);
+                    });
+                }
+            });
+        }
+
+        // Show modal
+        const modalInstance = new bootstrap.Modal(document.getElementById('semanticResultsModal'));
         modalInstance.show();
     }
 
@@ -610,6 +756,51 @@ export function initFiltersAndSearch() {
         }
     });
 
+    // AI Semantic search elements (connect to semantic_search endpoint and show modal)
+    const aiSearch = document.getElementById('aiSearch');
+    const aiSearchBtn = document.getElementById('aiSearchBtn');
+
+    function handleAISearch() {
+        const query = aiSearch ? aiSearch.value.trim() : '';
+        if (!query) return;
+
+        // Show spinner on button
+        if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        // Guardar el último query para el selector de top_k
+        window.lastSemanticQuery = query;
+        const topKSelect = document.getElementById('semanticTopK');
+        let top_k = 50;
+        if (topKSelect) {
+            top_k = parseInt(topKSelect.value) || 50;
+        }
+        const payload = { query, top_k };
+        fetch(`/BiblioMetrics/${lang}/semantic_search/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            // Restore button icon
+            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
+
+            // Backend returns list in data.results or data
+            const results = data.results || data;
+            showSemanticResults(results);
+        })
+        .catch(error => {
+            console.error('Error performing semantic search:', error);
+            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
+            alert('Error performing AI search.');
+        });
+    }
+
+    if (aiSearchBtn) aiSearchBtn.addEventListener('click', handleAISearch);
+    if (aiSearch) aiSearch.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') handleAISearch();
+    });
+
     // Inicializar estado del botón al cargar la página
     updateSearchButton();
 
@@ -621,7 +812,7 @@ export function initFiltersAndSearch() {
 
     // Función para cargar los datos de los filtros
     function loadFilterData() {
-        fetch('/api/dashboard/filters/')
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/filters/`)
             .then(response => response.json())
             .then(data => {
                 // Establecer el rango de años disponible
@@ -655,6 +846,33 @@ export function initFiltersAndSearch() {
                     typeFilter.appendChild(option);
                 });
 
+                // Llenar el filtro de cuartil (Q1..Q4) con conteos
+                if (quartileFilter && Array.isArray(data.quartiles)) {
+                    quartileFilter.innerHTML = '';
+                    const anyOpt = document.createElement('option');
+                    anyOpt.value = '';
+                    anyOpt.textContent = (lang === 'es') ? 'Todos los cuartiles' : 'All quartiles';
+                    quartileFilter.appendChild(anyOpt);
+                    data.quartiles.forEach(q => {
+                        const option = document.createElement('option');
+                        option.value = q.quartile;
+                        option.textContent = `${q.quartile} (${q.count})`;
+                        quartileFilter.appendChild(option);
+                    });
+                }
+
+                // Actualizar rango de citas disponible inicial
+                if (data.citations_range) {
+                    const help = document.getElementById('citationsRangeHelp');
+                    if (help) {
+                        const minC = data.citations_range.min || 0;
+                        const maxC = data.citations_range.max || 0;
+                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                        if (citationsFrom) citationsFrom.placeholder = minC;
+                        if (citationsTo) citationsTo.placeholder = maxC;
+                    }
+                }
+
                 // Cargar datos iniciales
                 updateVisualizations();
             })
@@ -680,25 +898,35 @@ export function initFiltersAndSearch() {
             if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
             if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
             if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
-            updateVisualizations();
+            if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
+            // IMPORTANTE: recalcular combos y luego visualizaciones
+            updateFilters();
         });
         container.appendChild(badge);
         // Actualizar window para exportación
         if (set === selectedAreasList) window.selectedAreasList = selectedAreasList;
         if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
         if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
+        if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
     }
 
     // Función para limpiar todos los filtros
     function clearFilters() {
         yearFrom.value = '';
         yearTo.value = '';
+        if (citationsFrom) citationsFrom.value = '';
+        if (citationsTo) citationsTo.value = '';
         selectedAreasList.clear();
         selectedInstitutionsList.clear();
         selectedTypesList.clear();
+        selectedQuartilesList.clear();
+    // metric source fixed to WoS – nothing to clear
         selectedAreas.innerHTML = '';
         selectedInstitutions.innerHTML = '';
         selectedTypes.innerHTML = '';
+        selectedQuartiles.innerHTML = '';
+        if (metricSourceFilter) metricSourceFilter.value = '';
+        if (quartileFilter) quartileFilter.value = '';
         updateFilters();
     }
 
@@ -746,7 +974,11 @@ export function initFiltersAndSearch() {
             year_to: yearTo.value,
             areas: Array.from(selectedAreasList),
             institutions: Array.from(selectedInstitutionsList),
-            types: Array.from(selectedTypesList)
+            types: Array.from(selectedTypesList),
+            quartiles: Array.from(selectedQuartilesList),
+            citations_from: citationsFrom ? citationsFrom.value : '',
+            citations_to: citationsTo ? citationsTo.value : '',
+            // metric_source removed (always WoS)
         };
 
         // Determinar si se puede usar la vista mensual
@@ -769,10 +1001,14 @@ export function initFiltersAndSearch() {
         // Construir la URL con los parámetros de filtrado
         const params = new URLSearchParams();
         if (filters.year_from) params.append('year_from', filters.year_from);
-        if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.citations_from) params.append('citations_from', filters.citations_from);
+    if (filters.citations_to) params.append('citations_to', filters.citations_to);
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
+    filters.quartiles.forEach(q => params.append('quartiles', q));
+    // metric_source removed
         params.append('view_type', filters.view_type);
         if (includePredictedAreas) params.append('include_predicted_areas', 'true');
         
@@ -782,7 +1018,7 @@ export function initFiltersAndSearch() {
         }
 
         // Obtener los datos filtrados
-        fetch(`/api/dashboard/data/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/data/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
 
@@ -790,7 +1026,7 @@ export function initFiltersAndSearch() {
                 const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
                 networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
 
-                fetch(`/api/dashboard/collaboration-network/?${networkParams.toString()}`)
+                fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${networkParams.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     updateCollaborationNetwork(data);
@@ -820,6 +1056,67 @@ export function initFiltersAndSearch() {
                 // Actualizar la tabla de publicaciones
                 updatePublicationsTable(1).then(() => {
                 });
+
+                // Actualizar mapa (Mundo/España) con agregación en servidor
+                try {
+                    const paramsAll = new URLSearchParams(params);
+                    // Count mode for Spain map: 'occurrences' (sum of all affiliations) by default
+                    paramsAll.set('count', 'occurrences');
+                    if (window.currentMapView === 'spain') {
+                        setSpainMapLoading(true);
+                        fetch(`/BiblioMetrics/${lang}/api/dashboard/spainmap-counts/?${paramsAll.toString()}`)
+                            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to fetch spainmap counts')))
+                            .then(countsData => {
+                                const ccaa = (countsData && countsData.ccaa) || {};
+                                const provinces = (countsData && countsData.provinces) || {};
+                                setSpainMapCounts({ ccaa, provinces });
+                                // eslint-disable-next-line no-console
+                                console.log('[SpainMap] Counts:', { ccaa, provinces });
+                                // Guardar total de publicaciones filtradas para Top10 de España
+                                if (countsData && typeof countsData.total_publications === 'number') {
+                                    window.spainMapFilteredTotal = countsData.total_publications;
+                                } else {
+                                    window.spainMapFilteredTotal = null;
+                                }
+                                setSpainMapLoading(false);
+                            })
+                            .catch(err => {
+                                // eslint-disable-next-line no-console
+                                console.error('Error fetching spainmap counts:', err);
+                                setSpainMapLoading(false);
+                            });
+                    } else {
+                        setWorldMapLoading(true);
+                        // Limpiar listado Top 10 mientras se cargan nuevos datos
+                        const top10El = document.getElementById('worldmap-top10');
+                        if (top10El) top10El.innerHTML = '';
+                        fetch(`/BiblioMetrics/${lang}/api/dashboard/worldmap-counts/?${paramsAll.toString()}`)
+                            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to fetch worldmap counts')))
+                            .then(countsData => {
+                                const countsByIso = countsData && countsData.counts ? countsData.counts : {};
+                                // Guardar total de publicaciones filtradas para cálculo de porcentajes en Top10
+                                if (countsData && typeof countsData.total_publications === 'number') {
+                                    window.worldMapFilteredTotal = countsData.total_publications;
+                                } else {
+                                    window.worldMapFilteredTotal = null;
+                                }
+                                setWorldMapActiveCountries(countsByIso);
+                                // eslint-disable-next-line no-console
+                                console.log('[WorldMap] Counts by ISO (server-side aggregation):', countsByIso);
+                                setWorldMapLoading(false);
+                            })
+                            .catch(err => {
+                                // eslint-disable-next-line no-console
+                                console.error('Error fetching worldmap counts:', err);
+                                setWorldMapLoading(false);
+                            });
+                    }
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.error('Unexpected error updating map counts:', e);
+                    setWorldMapLoading(false);
+                    setSpainMapLoading(false);
+                }
             })
             .catch(error => console.error('Error updating visualizations:', error));
     }
@@ -875,16 +1172,24 @@ export function initFiltersAndSearch() {
             areas: Array.from(selectedAreasList),
             institutions: Array.from(selectedInstitutionsList),
             types: Array.from(selectedTypesList),
+            quartiles: Array.from(selectedQuartilesList),
+            citations_from: citationsFrom ? citationsFrom.value : '',
+            citations_to: citationsTo ? citationsTo.value : '',
+            // metric_source removed (always WoS)
             page: page
         };
 
         // Construir la URL con los parámetros de filtrado
         const params = new URLSearchParams();
         if (filters.year_from) params.append('year_from', filters.year_from);
-        if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.year_to) params.append('year_to', filters.year_to);
+    if (filters.citations_from) params.append('citations_from', filters.citations_from);
+    if (filters.citations_to) params.append('citations_to', filters.citations_to);
         filters.areas.forEach(area => params.append('areas', area));
         filters.institutions.forEach(institution => params.append('institutions', institution));
         filters.types.forEach(type => params.append('types', type));
+        filters.quartiles.forEach(q => params.append('quartiles', q));
+    // metric_source removed
         params.append('page', filters.page);
         
         // Añadir el autor seleccionado si existe
@@ -899,7 +1204,7 @@ export function initFiltersAndSearch() {
         }
 
         // Retornar la promesa de fetch
-        return fetch(`/api/dashboard/publications/?${params.toString()}`)
+        return fetch(`/BiblioMetrics/${lang}/api/dashboard/publications/?${params.toString()}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -992,7 +1297,7 @@ export function initFiltersAndSearch() {
                         row.addEventListener('click', function() {
                             const publicationId = this.dataset.publicationId;
                             if (publicationId) {
-                                window.location.href = `/publication/${publicationId}/`;
+                                window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
                             }
                         });
                     });
@@ -1085,6 +1390,8 @@ export function initFiltersAndSearch() {
 
         // Configuración del gráfico
         const margin = {top: 20, right: 20, bottom: 70, left: 60};
+        // Extra gap to separate the rotated Y-axis label from the tick labels / axis line
+        const yAxisLabelExtraGap = 10;  // increase if still too close
         const width = document.getElementById('timelineChart').clientWidth - margin.left - margin.right;
         const height = 300 - margin.top - margin.bottom;
 
@@ -1317,7 +1624,8 @@ export function initFiltersAndSearch() {
         // Añadir título del eje Y
         svg.append('text')
             .attr('transform', 'rotate(-90)')
-            .attr('y', 0 - margin.left + 20)
+            // Move further left (more negative) so it does not overlap the axis ticks
+            .attr('y', 0 - margin.left + yAxisLabelExtraGap)
             .attr('x', 0 - (height / 2))
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
@@ -1370,6 +1678,256 @@ export function initFiltersAndSearch() {
             });
         }
     }
+
+    // -------------------------------------------------------------
+    // Export Timeline Image (Yearly or Monthly active view)
+    // -------------------------------------------------------------
+    (function initTimelineExporter(){
+        if (typeof window === 'undefined') return;
+        const btn = document.getElementById('exportTimelineBtn');
+        if (!btn || btn.__timelineExporterBound) return;
+        btn.__timelineExporterBound = true;
+        btn.addEventListener('click', async () => {
+            try {
+                const container = document.getElementById('timelineChart');
+                if (!container) return;
+                const svgEl = container.querySelector('svg');
+                if (!svgEl) {
+                    alert('No chart to export');
+                    return;
+                }
+
+                // Clone SVG to avoid mutating original
+                const clone = svgEl.cloneNode(true);
+                // Inline styles for fonts/colors if needed (basic approach)
+                clone.querySelectorAll('*').forEach(n => {
+                    const cs = window.getComputedStyle(n);
+                    n.setAttribute('font-family', cs.fontFamily);
+                    n.setAttribute('font-size', cs.fontSize);
+                    if (cs.fill && cs.fill !== 'none') n.setAttribute('fill', cs.fill);
+                    if (cs.stroke && cs.stroke !== 'none') n.setAttribute('stroke', cs.stroke);
+                });
+
+                // Wrap in a temporary SVG with extra top margin to add title.
+                const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
+                const origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
+                const titleText = document.querySelector('[data-view].active')?.textContent || 'Timeline';
+                const exportTitle = 'Línea de tiempo de publicaciones';
+                const titleMargin = 40; // space for title
+                const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                // High quality scaling (2x) for sharper PNG
+                const scaleFactor = 2;
+                exportSvg.setAttribute('width', String(origWidth * scaleFactor));
+                exportSvg.setAttribute('height', String((origHeight + titleMargin) * scaleFactor));
+                exportSvg.setAttribute('viewBox', `0 0 ${origWidth} ${origHeight + titleMargin}`);
+                exportSvg.setAttribute('shape-rendering', 'geometricPrecision');
+                exportSvg.setAttribute('text-rendering', 'geometricPrecision');
+
+                // Title element
+                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                titleEl.setAttribute('x', String(origWidth / 2));
+                titleEl.setAttribute('y', '24');
+                titleEl.setAttribute('text-anchor', 'middle');
+                titleEl.setAttribute('font-size', '18');
+                titleEl.setAttribute('font-family', 'Arial, sans-serif');
+                titleEl.setAttribute('fill', '#111');
+                titleEl.textContent = exportTitle;
+                exportSvg.appendChild(titleEl);
+
+                // Shift original group down
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(0, ${titleMargin})`);
+                // Remove existing transform nesting issues by copying children
+                Array.from(clone.childNodes).forEach(ch => g.appendChild(ch));
+                exportSvg.appendChild(g);
+
+                // Serialize
+                const serializer = new XMLSerializer();
+                const svgString = serializer.serializeToString(exportSvg);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                // Convert to PNG via canvas (using offscreen img)
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                        }
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        const a = document.createElement('a');
+                        a.download = `publication_timeline_${ts}.png`;
+                        a.href = canvas.toDataURL('image/png');
+                        a.click();
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    alert('Failed to export image');
+                };
+                img.src = url;
+            } catch (err) {
+                console.error('[Timeline][Export] Failed', err);
+                alert('Failed to export image');
+            }
+        });
+    })();
+
+    // -------------------------------------------------------------
+    // Export Areas Distribution (Pie o Bar activo)
+    // -------------------------------------------------------------
+    (function initAreasExporter(){
+        if (typeof window === 'undefined') return;
+        const btn = document.getElementById('exportAreasBtn');
+        if (!btn || btn.__areasExporterBound) return;
+        btn.__areasExporterBound = true;
+        btn.addEventListener('click', () => {
+            try {
+                const container = document.getElementById('areasChart');
+                if (!container) return;
+                const svgEl = container.querySelector('svg');
+                if (!svgEl) { alert('No chart to export'); return; }
+
+                const clone = svgEl.cloneNode(true);
+                clone.querySelectorAll('*').forEach(n => {
+                    const cs = window.getComputedStyle(n);
+                    n.setAttribute('font-family', cs.fontFamily);
+                    n.setAttribute('font-size', cs.fontSize);
+                    if (cs.fill && cs.fill !== 'none') n.setAttribute('fill', cs.fill);
+                    if (cs.stroke && cs.stroke !== 'none') n.setAttribute('stroke', cs.stroke);
+                });
+
+                const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
+                let origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
+                const isBar = document.querySelector('[data-areas-view="bar"]')?.classList.contains('active');
+                const exportTitle = isBar ? 'Distribución de áreas (Barras)' : 'Distribución de áreas (Circular)';
+                const titleMargin = 40;
+                // Reduced extra margins (user request: "algo menos")
+                const bottomExtra = isBar ? 130 : 0;  // was 170
+                const leftExtra = isBar ? 70 : 0;     // was 90
+                let exportWidth = origWidth + leftExtra;
+                if (isBar) {
+                    // Mostrar y rotar etiquetas del eje X
+                    const xAxisTexts = clone.querySelectorAll('.areas-x-axis text');
+                    xAxisTexts.forEach(t => {
+                        t.style.display = 'block';
+                        t.setAttribute('transform', 'rotate(-48)');
+                        t.setAttribute('text-anchor', 'end');
+                        t.setAttribute('dx', '-0.35em');
+                        t.setAttribute('dy', '0.3em');
+                        t.setAttribute('font-size', '9px');
+                    });
+                    // Reposicionar título del eje X debajo de las etiquetas rotadas
+                    const xAxisTitle = clone.querySelector('.x-axis-title');
+                    if (xAxisTitle) {
+                        const match = /translate\([^,]+,\s*([^\)]+)\)/.exec(xAxisTitle.getAttribute('transform') || '');
+                        let baseY = match ? parseFloat(match[1]) : (origHeight - 10);
+                        baseY += 85; // slightly less due to reduced bottomExtra
+                        // Recalcular centrado usando extensión real de las barras del clon
+                        let calculatedCenter = origWidth / 2;
+                        try {
+                            const bars = clone.querySelectorAll('.bar');
+                            if (bars.length > 0) {
+                                let minX = Infinity; let maxX = -Infinity;
+                                bars.forEach(b => {
+                                    const xVal = parseFloat(b.getAttribute('x')) || 0;
+                                    const wVal = parseFloat(b.getAttribute('width')) || 0;
+                                    if (xVal < minX) minX = xVal;
+                                    if (xVal + wVal > maxX) maxX = xVal + wVal;
+                                });
+                                if (isFinite(minX) && isFinite(maxX)) {
+                                    calculatedCenter = (minX + maxX) / 2;
+                                }
+                            }
+                        } catch (e) {
+                            // eslint-disable-next-line no-console
+                            console.warn('[Areas][Export][Bar] No se pudo recalcular centro X para título:', e);
+                        }
+                        // Nota: no sumar leftExtra aquí porque el grupo externo ya aplica esa traslación
+                        xAxisTitle.setAttribute('transform', `translate(${calculatedCenter}, ${baseY})`);
+                    }
+                    // Ajustar título eje Y más afuera y más abajo (coordenadas ya rotadas)
+                    const yAxisTitle = clone.querySelector('.y-axis-title');
+                    if (yAxisTitle) {
+                        const curY = parseFloat(yAxisTitle.getAttribute('y')) || 0;
+                        yAxisTitle.setAttribute('y', (curY - 20)); // menos separación externa ahora
+                        const curX = parseFloat(yAxisTitle.getAttribute('x')) || 0;
+                        yAxisTitle.setAttribute('x', (curX + 25)); // ajuste vertical suave
+                    }
+                    origHeight += bottomExtra;
+                }
+                const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                // Improve quality: upscale exported SVG (will rasterize sharper)
+                const scaleFactor = 2; // 2x resolution
+                exportSvg.setAttribute('width', String(exportWidth * scaleFactor));
+                exportSvg.setAttribute('height', String((origHeight + titleMargin) * scaleFactor));
+                exportSvg.setAttribute('viewBox', `0 0 ${exportWidth} ${origHeight + titleMargin}`);
+                exportSvg.setAttribute('shape-rendering', 'geometricPrecision');
+                exportSvg.setAttribute('text-rendering', 'geometricPrecision');
+
+                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                titleEl.setAttribute('x', String(leftExtra + origWidth / 2));
+                titleEl.setAttribute('y', '24');
+                titleEl.setAttribute('text-anchor', 'middle');
+                titleEl.setAttribute('font-size', '18');
+                titleEl.setAttribute('font-family', 'Arial, sans-serif');
+                titleEl.setAttribute('fill', '#111');
+                titleEl.textContent = exportTitle;
+                exportSvg.appendChild(titleEl);
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${leftExtra}, ${titleMargin})`);
+                Array.from(clone.childNodes).forEach(ch => g.appendChild(ch));
+                exportSvg.appendChild(g);
+
+                const serializer = new XMLSerializer();
+                const svgString = serializer.serializeToString(exportSvg);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                        }
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        const a = document.createElement('a');
+                        a.download = isBar ? `areas_distribution_bar_${ts}.png` : `areas_distribution_pie_${ts}.png`;
+                        a.href = canvas.toDataURL('image/png');
+                        a.click();
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); alert('Failed to export image'); };
+                img.src = url;
+            } catch (err) {
+                console.error('[Areas][Export] Failed', err);
+                alert('Failed to export image');
+            }
+        });
+    })();
 
     function updateAreasChart(data) {
         // Filtrar valores nulos
@@ -1550,10 +2108,14 @@ export function initFiltersAndSearch() {
             .nice()
             .range([height, 0]);
     
-        svg.append('g')
+        // Eje X con etiquetas (se ocultan para vista en pantalla, se mostrarán en exportación)
+        const xAxisGroup = svg.append('g')
             .attr('transform', `translate(0,${height})`)
-            // Quitamos las etiquetas del eje X
-            .call(d3.axisBottom(x).tickFormat(''));
+            .attr('class', 'areas-x-axis')
+            .call(d3.axisBottom(x));
+        xAxisGroup.selectAll('text')
+            .style('display', 'none')
+            .style('font-size', '9px');
     
         svg.append('g')
             .call(d3.axisLeft(y).ticks(height / 40));
@@ -1633,9 +2195,12 @@ export function initFiltersAndSearch() {
         });
     
         // Títulos
+        // Título eje Y con más separación respecto al eje
         svg.append('text')
+            .attr('class', 'y-axis-title')
             .attr('transform', 'rotate(-90)')
-            .attr('y', -margin.left + 20)
+            // Ajuste más cercano al eje (menos negativo)
+            .attr('y', -margin.left - 2)
             .attr('x', -height / 2)
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
@@ -1644,11 +2209,35 @@ export function initFiltersAndSearch() {
     
         // Añadir título del eje X
         svg.append('text')
+            .attr('class', 'x-axis-title')
             .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 20})`)
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
             .text('Áreas temáticas');
+
+        // Recentrar el título del eje X según las barras reales (por si visualmente parece corrido)
+        try {
+            const bars = svg.selectAll('.bar').nodes();
+            if (bars.length > 0) {
+                let minX = Infinity; let maxX = -Infinity; let barWidthRef = 0;
+                bars.forEach(b => {
+                    const xVal = parseFloat(b.getAttribute('x')) || 0;
+                    const wVal = parseFloat(b.getAttribute('width')) || 0;
+                    if (xVal < minX) minX = xVal;
+                    if (xVal + wVal > maxX) maxX = xVal + wVal;
+                    barWidthRef = wVal; // última referencia (no crítico)
+                });
+                if (isFinite(minX) && isFinite(maxX)) {
+                    const centerBars = (minX + maxX) / 2;
+                    svg.select('.x-axis-title')
+                        .attr('transform', `translate(${centerBars}, ${height + margin.bottom - 20})`);
+                }
+            }
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[Areas][BarChart] No se pudo recalcular el centrado del título X:', e);
+        }
     }  
 
     // --- LÍNEA TEMPORAL: LÓGICA DE BOTONES ---
@@ -1712,16 +2301,25 @@ export function initFiltersAndSearch() {
     let renderer = null;
     let showAllLabels = false; // Estado para controlar la visualización de todas las etiquetas
 
-    // Event listener para el botón de mostrar/ocultar etiquetas
+    // Event listener para el botón de mostrar/ocultar etiquetas (con detección robusta de idioma)
     const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
-    const currentLang = window.location.pathname.split('/')[1];
-    const extraLabels = currentLang === 'es' ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
-    const allLabels = currentLang === 'es' ? 'Mostrar etiquetas' : 'Show All Labels';
     if (toggleLabelsBtn) {
+        // Establecer texto inicial acorde al idioma y estado
+        (function setInitialToggleLabel(){
+            const langInit = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
+            toggleLabelsBtn.textContent = (langInit === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
+        })();
+
         toggleLabelsBtn.addEventListener('click', () => {
-            if (!renderer) return; // Asegurarse de que el renderer existe
+            if (!renderer) {
+                console.warn('[LabelsToggle] Renderer no inicializado todavía');
+                return; // Asegurarse de que el renderer existe
+            }
 
             showAllLabels = !showAllLabels; // Alternar el estado
+            const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
+            const txtShow = (lang === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
+            const txtHide = (lang === 'es') ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
 
             if (showAllLabels) {
                 // Mostrar todas las etiquetas: ajustar settings para forzar renderizado
@@ -1730,19 +2328,17 @@ export function initFiltersAndSearch() {
                     labelGridCellSize: 1,
                     labelRenderedSizeThreshold: 0
                 });
-                // Actualizar texto del botón
-                toggleLabelsBtn.textContent = `${extraLabels}`;
+                toggleLabelsBtn.textContent = txtHide;
             } else {
-                // Volver al comportamiento por defecto (ocultar algunas etiquetas)
-                // Restaurar settings por defecto o los que generan el comportamiento deseado
-                 renderer.setSettings({
+                // Restaurar comportamiento por defecto
+                renderer.setSettings({
                     labelDensity: 1,
                     labelGridCellSize: 200,
                     labelRenderedSizeThreshold: 0
                 });
-                 // Actualizar texto del botón
-                toggleLabelsBtn.textContent = `${allLabels}`;
+                toggleLabelsBtn.textContent = txtShow;
             }
+            console.log('[LabelsToggle] Estado showAllLabels=', showAllLabels, 'Idioma=', lang, 'Texto=', toggleLabelsBtn.textContent);
             renderer.refresh();
         });
     }
@@ -1786,12 +2382,25 @@ export function initFiltersAndSearch() {
         });
     });
 
+    // Helper para detección robusta del idioma (evita asumir índice fijo en el path)
+    function detectLangFromPath() {
+        try {
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            const found = parts.find(p => p === 'es' || p === 'en');
+            return found || 'es';
+        } catch (e) {
+            console.warn('[LangDetection] Error detectando idioma, se usa "es" por defecto:', e);
+            return 'es';
+        }
+    }
+
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
     
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
-        const currentLang = window.location.pathname.split('/')[1];
+        const currentLang = detectLangFromPath();
+        console.log('[Network] Actualizando red. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         const toggleButton = document.getElementById('toggleFullNetworkBtn');
     
         if (data.is_author_view) {
@@ -2061,7 +2670,11 @@ export function initFiltersAndSearch() {
                 title.textContent = currentLang === 'es'
                     ? `Comunidades (${k})`
                     : `Communities (${k})`;
+            } else {
+                // Fallback genérico
+                title.textContent = currentLang === 'es' ? 'Comunidades' : 'Communities';
             }
+            console.log('[Network][Legend] Título leyenda:', title.textContent, 'Idioma=', currentLang);
         
             legend.appendChild(title);
 
@@ -2124,7 +2737,7 @@ export function initFiltersAndSearch() {
         
                     const label = document.createElement('span');
                     if (comm === -1 || isNaN(comm)) {
-                        label.textContent = currentLang === 'es' ? 'Outlier' : 'Outlier';
+                        label.textContent = currentLang === 'es' ? 'Atípico' : 'Outlier';
                     } else {
                         const num = (window.currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
                         const word = currentLang === 'es' ? 'Comunidad' : 'Community';
@@ -2134,6 +2747,7 @@ export function initFiltersAndSearch() {
                     item.appendChild(colorBox);
                     item.appendChild(label);
                     legend.appendChild(item);
+                    console.log('[Network][Legend] Añadida entrada leyenda:', label.textContent, 'Comm ID=', comm);
                 });
             }
         
@@ -2258,7 +2872,7 @@ export function initFiltersAndSearch() {
         });
     
         // === HACER LA PETICIÓN AL BACKEND ===
-        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -2289,35 +2903,45 @@ export function initFiltersAndSearch() {
     
     function updateCommunityDropdownText(model = null, nClusters = null) {
         const dropdownButton = document.getElementById('communityViewDropdown');
-        const currentLang = window.location.pathname.split('/')[1];
+        if (!dropdownButton) {
+            console.warn('[CommunityDropdown] Botón no encontrado');
+            return;
+        }
+        const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
         let text = '';
+        console.log('[CommunityDropdown] Vista actual=', window.currentCommunityView, 'FullNetwork=', isFullNetwork, 'Lang=', currentLang);
 
         if (window.currentCommunityView === 'department') {
             text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
         } else if (window.currentCommunityView === 'modularity-7') {
-            text = currentLang === 'es' 
-                ? (isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)')
-                : (isFullNetwork ? 'Louvain' : 'Louvain (7 communities)');
+            if (currentLang === 'es') {
+                text = isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)';
+            } else {
+                text = isFullNetwork ? 'Louvain' : 'Louvain (7 communities)';
+            }
         } else if (window.currentCommunityView === 'modularity-5') {
-            text = currentLang === 'es' 
-                ? (isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)')
-                : (isFullNetwork ? 'Leiden' : 'Leiden (5 communities)');
+            if (currentLang === 'es') {
+                text = isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)';
+            } else {
+                text = isFullNetwork ? 'Leiden' : 'Leiden (5 communities)';
+            }
         } else if (window.currentCommunityView === 'keywords') {
             const modelName = model || window.currentClusteringModel;
             const nClustersValue = nClusters || window.currentNClusters;
             if (modelName && nClustersValue) {
-                text = currentLang === 'es'
-                    ? `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`
-                    : `By keywords (${modelName}, ${nClustersValue} clusters)`;
+                if (currentLang === 'es') {
+                    text = `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`;
+                } else {
+                    text = `By keywords (${modelName}, ${nClustersValue} clusters)`;
+                }
             } else {
                 text = currentLang === 'es' ? 'Por palabras clave' : 'By keywords';
             }
         }
 
         dropdownButton.textContent = text;
+        console.log('[CommunityDropdown] Texto aplicado=', text);
     }
-    
-    
     
     function updateFilters() {
         const params = new URLSearchParams();
@@ -2325,6 +2949,8 @@ export function initFiltersAndSearch() {
         // Añadir filtros de año
         if (yearFrom.value) params.append('year_from', yearFrom.value);
         if (yearTo.value) params.append('year_to', yearTo.value);
+    if (citationsFrom && citationsFrom.value) params.append('citations_from', citationsFrom.value);
+    if (citationsTo && citationsTo.value) params.append('citations_to', citationsTo.value);
         
         // Añadir filtros de área
         selectedAreasList.forEach(area => params.append('areas', area));
@@ -2334,6 +2960,8 @@ export function initFiltersAndSearch() {
         
         // Añadir filtros de tipo
         selectedTypesList.forEach(type => params.append('types', type));
+    selectedQuartilesList.forEach(q => params.append('quartiles', q));
+    // metric_source not appended (always WoS)
 
         // Añadir autor seleccionado si existe
         if (selectedAuthorName) {
@@ -2347,7 +2975,7 @@ export function initFiltersAndSearch() {
         const allTypes = currentLang === 'es' ? 'Todos los tipos' : 'All types';
 
         // Obtener datos actualizados de los filtros
-        fetch(`/api/dashboard/filters/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/filters/?${params.toString()}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -2381,6 +3009,27 @@ export function initFiltersAndSearch() {
                     option.textContent = `${type.publication_type} (${type.count})`;
                     typeFilter.appendChild(option);
                 });
+
+                // Actualizar cuartiles
+                if (quartileFilter) {
+                    const allQuartiles = currentLang === 'es' ? 'Todos los cuartiles' : 'All quartiles';
+                    quartileFilter.innerHTML = `<option value="">${allQuartiles}</option>`;
+                    (data.quartiles || []).forEach(q => {
+                        const option = document.createElement('option');
+                        option.value = q.quartile;
+                        option.textContent = `${q.quartile} (${q.count})`;
+                        quartileFilter.appendChild(option);
+                    });
+                }
+                // Rango de citas actualizado
+                if (data.citations_range) {
+                    const help = document.getElementById('citationsRangeHelp');
+                    if (help) {
+                        const minC = data.citations_range.min || 0;
+                        const maxC = data.citations_range.max || 0;
+                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                    }
+                }
             })
             .catch(error => {
                 console.error('Error updating filters:', error);
@@ -2407,11 +3056,37 @@ export function initFiltersAndSearch() {
         updateVisualizations();
     }
 
+    // Listeners para Source y Quartile
+    // metric source listener removed
+    if (quartileFilter) {
+        quartileFilter.addEventListener('change', () => {
+            const val = quartileFilter.value;
+            if (val && !selectedQuartilesList.has(val)) {
+                selectedQuartilesList.add(val);
+                createBadge(val, selectedQuartiles, selectedQuartilesList);
+            }
+            quartileFilter.value = '';
+            updateFilters();
+        });
+    }
+
+    // Listeners rango citas
+    if (citationsFrom) citationsFrom.addEventListener('change', () => {
+        // Normalizar valores negativos
+        if (citationsFrom.value !== '' && parseInt(citationsFrom.value, 10) < 0) citationsFrom.value = 0;
+        updateFilters();
+    });
+    if (citationsTo) citationsTo.addEventListener('change', () => {
+        if (citationsTo.value !== '' && parseInt(citationsTo.value, 10) < 0) citationsTo.value = 0;
+        updateFilters();
+    });
+
     // Añadir el manejador del botón de red completa
     document.getElementById('toggleFullNetworkBtn').addEventListener('click', function() {
         const button = this;
         const container = document.getElementById('collaborationNetwork');
-        const currentLang = window.location.pathname.split('/')[1];
+        const currentLang = detectLangFromPath();
+        console.log('[Network][ToggleFull] Click. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         
         // Deshabilitar el botón y mostrar spinner
         button.disabled = true;
@@ -2453,6 +3128,7 @@ export function initFiltersAndSearch() {
         cardTitle.textContent = currentLang === 'es'
             ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
             : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
+        console.log('[Network][ToggleFull] Nuevo título card:', cardTitle.textContent);
         
         // Actualizar la red con el nuevo modo
         const params = new URLSearchParams({
@@ -2476,7 +3152,7 @@ export function initFiltersAndSearch() {
             item.style.opacity = '1';
         });
 
-        fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -2584,7 +3260,7 @@ export function initFiltersAndSearch() {
                 params.append('globalMode', 'true');
             }
 
-            fetch(`/api/dashboard/collaboration-network/?${params.toString()}`)
+            fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -2654,7 +3330,56 @@ export function initFiltersAndSearch() {
         if (overlay) overlay.style.display = 'none';
     }
 
-    window.addEventListener('DOMContentLoaded', function() {
+        window.addEventListener('DOMContentLoaded', () => {
+        // Map initialization: default to world
+        window.currentMapView = 'world'; // 'world' | 'spain'
+        initWorldMap('worldmap-container');
+        let spainInitialized = false;
+        const ensureSpainMap = () => {
+            if (!spainInitialized) {
+                initSpainMap('worldmap-container');
+                spainInitialized = true;
+            }
+        };
+        // Map view toggle buttons
+        document.querySelectorAll('[data-map-view]')?.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const view = btn.getAttribute('data-map-view');
+                if (view === window.currentMapView) return;
+                document.querySelectorAll('[data-map-view]')?.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const spainGroup = document.getElementById('spainLevelGroup');
+                // Update collaborations card title based on view and language
+                const titleEl = document.getElementById('collabCardTitleText');
+                const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es') ? 'es' : 'en';
+                if (view === 'spain') {
+                    spainGroup?.classList.remove('d-none');
+                    ensureSpainMap();
+                        // Show Spain overlay and refresh sizes
+                        setSpainMapVisible(true);
+                        // Optionally hide world map tooltips/overlays if needed
+                        if (titleEl) titleEl.textContent = 'National Collaborations';
+                } else {
+                    spainGroup?.classList.add('d-none');
+                        // Hide Spain overlay when switching back to world
+                        setSpainMapVisible(false);
+                        if (titleEl) titleEl.textContent = 'International Collaborations';
+                }
+                window.currentMapView = view;
+                // Refresh visualizations to load the right counts for the selected view
+                updateVisualizations();
+            });
+        });
+        // Spain level toggle (CCAA/Provinces)
+        document.querySelectorAll('[data-spain-level]')?.forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('[data-spain-level]')?.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const level = btn.getAttribute('data-spain-level');
+                showSpainLevel(level);
+            });
+        });
+
         const btn = document.getElementById('togglePredictedAreasBtn');
         if (btn) {
             btn.addEventListener('click', function() {

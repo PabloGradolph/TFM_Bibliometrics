@@ -144,6 +144,8 @@ export function setupExportReportButton() {
             // Recoger filtros actuales del dashboard
             const yearFrom = document.getElementById('yearFrom')?.value;
             const yearTo = document.getElementById('yearTo')?.value;
+            const citationsFrom = document.getElementById('citationsFrom')?.value;
+            const citationsTo = document.getElementById('citationsTo')?.value;
             let areas = [];
             if (window.selectedAreasList && window.selectedAreasList.size > 0) {
                 areas = Array.from(window.selectedAreasList);
@@ -175,6 +177,12 @@ export function setupExportReportButton() {
             if (window.selectedAuthorName) {
                 author = window.selectedAuthorName;
             }
+            // Nuevos filtros: cuartiles y fuente
+            let quartiles = [];
+            if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) {
+                quartiles = Array.from(window.selectedQuartilesList);
+            }
+            const metric_source = window.selectedMetricSource || '';
 
             // Recoger los SVG de los gráficos
             const timelineSVG = document.querySelector('#timelineChart svg');
@@ -212,7 +220,7 @@ export function setupExportReportButton() {
             }
 
             // Detectar el idioma de la URL para la API
-            const apiExportUrl = `/${lang}/api/export/report/`;
+            const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
 
             // Convertir SVGs a PNG base64 (async)
             let imagesReady = 0;
@@ -225,10 +233,14 @@ export function setupExportReportButton() {
                     const formData = new FormData();
                     if (yearFrom) formData.append('year_from', yearFrom);
                     if (yearTo) formData.append('year_to', yearTo);
+                    if (citationsFrom) formData.append('citations_from', citationsFrom);
+                    if (citationsTo) formData.append('citations_to', citationsTo);
                     areas.forEach(area => formData.append('areas', area));
                     institutions.forEach(inst => formData.append('institutions', inst));
                     types.forEach(type => formData.append('types', type));
                     if (author) formData.append('author', author);
+                    quartiles.forEach(q => formData.append('quartiles', q));
+                    if (metric_source) formData.append('metric_source', metric_source);
                     formData.append('format', 'pdf');
                     formData.append('areas_view', areas_view);
                     if (images.timeline) formData.append('timeline_img', images.timeline);

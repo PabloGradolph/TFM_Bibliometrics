@@ -24,7 +24,7 @@ BASE_API_URL = f'https://apps.csic.es/gesbib/rest/{TOKEN}/1/autores/id/'
 
 # HTTP headers for requests
 HEADERS = {
-    "Accept": "application/json"
+    "Accept": "application/json; charset=utf-8"
 }
 
 # Input and output file paths

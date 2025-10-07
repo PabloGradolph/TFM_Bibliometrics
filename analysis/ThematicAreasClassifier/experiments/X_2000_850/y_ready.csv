@@ -1,9 +1,9 @@
 gb_id,label
-446561,"Historia de América Latina;Historiografía, Bibliografía y Biografía"
-445391,"Historia de América Latina;Historiografía, Bibliografía y Biografía"
-447926,"Historia de América Latina;Historiografía, Bibliografía y Biografía"
-439166,"Historia de América Latina;Historiografía, Bibliografía y Biografía"
-447018,"Historia de América Latina;Historiografía, Bibliografía y Biografía"
+446561,"Historia de América Latina;Historiografía, Bibliografía y Biografía;Historia de Am�rica Latina;Historiograf�a, Bibliograf�a y Biograf�a"
+445391,"Historia de América Latina;Historiografía, Bibliografía y Biografía;Historia de Am�rica Latina;Historiograf�a, Bibliograf�a y Biograf�a"
+447926,"Historia de América Latina;Historiografía, Bibliografía y Biografía;Historia de Am�rica Latina;Historiograf�a, Bibliograf�a y Biograf�a"
+439166,"Historia de América Latina;Historiografía, Bibliografía y Biografía;Historia de Am�rica Latina;Historiograf�a, Bibliograf�a y Biograf�a"
+447018,"Historia de América Latina;Historiografía, Bibliografía y Biografía;Historia de Am�rica Latina;Historiograf�a, Bibliograf�a y Biograf�a"
 356687,History
 436773,History
 448472,"Literature, Romance"
@@ -52,9 +52,9 @@ gb_id,label
 500264,Immunology
 348453,Pharmacology & Pharmacy
 542370,Parasitology
-463109,Farmacología
-311060,Patología
-406201,Patología
+463109,Farmacología;Farmacolog�a
+311060,Patología;Patolog�a
+406201,Patología;Patolog�a
 439350,Enfermedades infecciosas
 437810,Enfermedades infecciosas
 398520,Plant Sciences
@@ -76,7 +76,7 @@ gb_id,label
 39501,Genetics & Heredity
 39396,Cell Biology
 39272,Cell Biology
-39262,Biochemistry & Molecular Biology
+39262,"Biochemistry & Molecular Biology;Chemistry, Multidisciplinary"
 39535,Microbiology;Pharmacology & Pharmacy;Infectious Diseases
 39271,Parasitology
 39287,Parasitology;Tropical Medicine
@@ -498,7 +498,7 @@ gb_id,label
 177033,"Chemistry, Multidisciplinary"
 39650,Rheumatology
 39626,Rheumatology
-39681,Biochemistry & Molecular Biology
+39681,Biochemistry & Molecular Biology;Neurosciences
 177021,Endocrinology & Metabolism
 39616,Rheumatology
 39640,Dermatology
@@ -605,102 +605,102 @@ gb_id,label
 278172,Rheumatology
 534738,Rheumatology
 548810,Rheumatology
-451147,Parasitología animal
-464360,Parasitología animal
+451147,Parasitología animal;Parasitolog�a animal
+464360,Parasitología animal;Parasitolog�a animal
 393078,Immunology;Genetics & Heredity
 393071,Immunology;Genetics & Heredity
 393081,Immunology;Genetics & Heredity
 807991,Infectious Diseases
-450229,Parasitología animal
-448739,Parasitología animal
-450724,Parasitología
-454447,Parasitología
-448741,Parasitología animal
+450229,Parasitología animal;Parasitolog�a animal
+448739,Parasitología animal;Parasitolog�a animal
+450724,Parasitología;Parasitolog�a
+454447,Parasitología;Parasitolog�a
+448741,Parasitología animal;Parasitolog�a animal
 451153,Invertebrados
-454824,Parasitología
+454824,Parasitología;Parasitolog�a
 451557,Invertebrados
-460323,Nemátodos
-451688,Parasitología
-450228,Parasitología animal
-450728,Parasitología
-450233,Parasitología animal
-460546,Parasitología animal
-448727,Parasitología animal
-448744,Parasitología animal
-466834,Parasitología animal
+460323,Nemátodos;Nem�todos
+451688,Parasitología;Parasitolog�a
+450228,Parasitología animal;Parasitolog�a animal
+450728,Parasitología;Parasitolog�a
+450233,Parasitología animal;Parasitolog�a animal
+460546,Parasitología animal;Parasitolog�a animal
+448727,Parasitología animal;Parasitolog�a animal
+448744,Parasitología animal;Parasitolog�a animal
+466834,Parasitología animal;Parasitolog�a animal
 437292,Enfermedades infecciosas
-452479,Parasitología
-459905,Parasitología
+452479,Parasitología;Parasitolog�a
+459905,Parasitología;Parasitolog�a
 451564,Protistas
-456286,Parasitología animal
-456216,Parasitología
-460029,Parasitología animal
-455764,Plaguicidas;Análisis cromatográfico
+456286,Parasitología animal;Parasitolog�a animal
+456216,Parasitología;Parasitolog�a
+460029,Parasitología animal;Parasitolog�a animal
+455764,Plaguicidas;Análisis cromatográfico;An�lisis cromatogr�fico
 545958,Rheumatology
-450755,Patología
-455811,Parasitología
-454815,Parasitología
-452172,Parasitología
-453750,Parasitología animal
-451262,Plaguicidas;Análisis cromatográfico
-455942,Parasitología animal
-448751,Parasitología animal
-450725,Parasitología
-450549,Parasitología animal
+450755,Patología;Patolog�a
+455811,Parasitología;Parasitolog�a
+454815,Parasitología;Parasitolog�a
+452172,Parasitología;Parasitolog�a
+453750,Parasitología animal;Parasitolog�a animal
+451262,Plaguicidas;Análisis cromatográfico;An�lisis cromatogr�fico
+455942,Parasitología animal;Parasitolog�a animal
+448751,Parasitología animal;Parasitolog�a animal
+450725,Parasitología;Parasitolog�a
+450549,Parasitología animal;Parasitolog�a animal
 540721,Microbiology;Pharmacology & Pharmacy
 412802,"Chemistry, Multidisciplinary"
-450231,Parasitología animal
-448726,Parasitología animal
+450231,Parasitología animal;Parasitolog�a animal
+448726,Parasitología animal;Parasitolog�a animal
 326634,Infectious Diseases
-463620,Farmacología
-461440,Farmacología
-453726,Parasitología animal
+463620,Farmacología;Farmacolog�a
+461440,Farmacología;Farmacolog�a
+453726,Parasitología animal;Parasitolog�a animal
 545518,Infectious Diseases
-450757,Parasitología
-450230,Parasitología animal
+450757,Parasitología;Parasitolog�a
+450230,Parasitología animal;Parasitolog�a animal
 418677,Enfermedades infecciosas
-460447,Parasitología animal
-460610,Parasitología animal
+460447,Parasitología animal;Parasitolog�a animal
+460610,Parasitología animal;Parasitolog�a animal
 450563,Protistas
-450227,Parasitología animal
-448747,Parasitología animal
-448743,Parasitología animal
-454278,Parasitología
-453164,Parasitología animal
-460051,Nemátodos
-450756,Patología
+450227,Parasitología animal;Parasitolog�a animal
+448747,Parasitología animal;Parasitolog�a animal
+448743,Parasitología animal;Parasitolog�a animal
+454278,Parasitología;Parasitolog�a
+453164,Parasitología animal;Parasitolog�a animal
+460051,Nemátodos;Nem�todos
+450756,Patología;Patolog�a
 451151,Invertebrados
 451152,Invertebrados
-463851,Parasitología animal
+463851,Parasitología animal;Parasitolog�a animal
 453267,Protistas
 532831,Multidisciplinary Sciences
-454220,Parasitología
+454220,Parasitología;Parasitolog�a
 622266,Infectious Diseases
-461001,Parasitología animal
-450721,Parasitología
-450232,Parasitología animal
-450722,Parasitología
-450727,Parasitología
-450723,Parasitología
-452171,Parasitología
-450234,Parasitología animal
-450726,Parasitología
-464616,Parasitología animal
-448742,Parasitología animal
-452480,Parasitología
-452653,Parasitología
+461001,Parasitología animal;Parasitolog�a animal
+450721,Parasitología;Parasitolog�a
+450232,Parasitología animal;Parasitolog�a animal
+450722,Parasitología;Parasitolog�a
+450727,Parasitología;Parasitolog�a
+450723,Parasitología;Parasitolog�a
+452171,Parasitología;Parasitolog�a
+450234,Parasitología animal;Parasitolog�a animal
+450726,Parasitología;Parasitolog�a
+464616,Parasitología animal;Parasitolog�a animal
+448742,Parasitología animal;Parasitolog�a animal
+452480,Parasitología;Parasitolog�a
+452653,Parasitología;Parasitolog�a
 452489,Invertebrados
 453939,Invertebrados
-461162,Parasitología animal
+461162,Parasitología animal;Parasitolog�a animal
 453985,Invertebrados
-451660,Plaguicidas;Análisis cromatográfico
-463636,Parasitología animal
-463529,Parasitología animal
-454562,Nemátodos
-454838,Nemátodos
-454156,Parasitología
-464147,Parasitología animal
-453577,Parasitología
+451660,Plaguicidas;Análisis cromatográfico;An�lisis cromatogr�fico
+463636,Parasitología animal;Parasitolog�a animal
+463529,Parasitología animal;Parasitolog�a animal
+454562,Nemátodos;Nem�todos
+454838,Nemátodos;Nem�todos
+454156,Parasitología;Parasitolog�a
+464147,Parasitología animal;Parasitolog�a animal
+453577,Parasitología;Parasitolog�a
 267465,Rheumatology
 267439,Rheumatology
 267437,Rheumatology
@@ -716,15 +716,19 @@ gb_id,label
 319231,Obstetrics & Gynecology;Reproductive Biology
 337084,Rheumatology
 374878,Microbiology
+973080,Immunology;Pathology;Cell Biology
+973069,Cell Biology
+973090,"Medicine, General & Internal"
+973077,Rheumatology
 986668,"Biochemistry & Molecular Biology;Chemistry, Multidisciplinary"
 461515,Invertebrados
 461691,Invertebrados
-461205,Farmacología
+461205,Farmacología;Farmacolog�a
 606839,Biochemistry & Molecular Biology;Cell Biology;Genetics & Heredity;Oncology
 437482,Enfermedades infecciosas
 439293,Enfermedades infecciosas
-451261,Plaguicidas;Análisis cromatográfico
-452488,Parasitología
+451261,Plaguicidas;Análisis cromatográfico;An�lisis cromatogr�fico
+452488,Parasitología;Parasitolog�a
 207644,Biochemistry & Molecular Biology
 230959,Virology
 215801,"Biochemistry & Molecular Biology;Chemistry, Multidisciplinary"
@@ -924,6 +928,7 @@ gb_id,label
 39331,Immunology
 39329,Immunology;Genetics & Heredity
 39222,Rheumatology
+39576,Immunology;Neurosciences;Psychiatry
 39546,Biochemistry & Molecular Biology
 845196,"Pharmacology & Pharmacy;Chemistry, Medicinal"
 39543,Biochemistry & Molecular Biology;Genetics & Heredity
@@ -1016,6 +1021,7 @@ gb_id,label
 98908,Biochemistry & Molecular Biology;Genetics & Heredity
 98899,Gastroenterology & Hepatology
 98917,Biochemistry & Molecular Biology
+157066,Immunology;Neurosciences;Psychiatry
 98989,Multidisciplinary Sciences
 98949,Microbiology;Pharmacology & Pharmacy
 98943,"Chemistry, Medicinal"
@@ -1046,7 +1052,7 @@ gb_id,label
 966527,Parasitology;Biochemistry & Molecular Biology
 966526,Parasitology
 966523,Immunology;Transplantation;Surgery
-464739,Parasitología animal
+464739,Parasitología animal;Parasitolog�a animal
 381268,Immunology;Microbiology;Infectious Diseases
 369656,Biochemistry & Molecular Biology
 337086,Biochemistry & Molecular Biology
@@ -1137,7 +1143,7 @@ gb_id,label
 39496,Multidisciplinary Sciences
 39499,Rheumatology
 36816,Rheumatology
-39691,Immunology
+39691,Immunology;Neurosciences;Psychiatry
 39497,Immunology;Cell Biology
 39418,Endocrinology & Metabolism
 39415,Biochemistry & Molecular Biology;Genetics & Heredity
@@ -1263,7 +1269,7 @@ gb_id,label
 21004,Genetics & Heredity
 39518,Genetics & Heredity
 39694,"Biochemistry & Molecular Biology;Chemistry, Multidisciplinary"
-39670,Cell Biology
+39670,Immunology;Cell Biology
 39614,Biochemistry & Molecular Biology;Genetics & Heredity
 39631,"Biochemistry & Molecular Biology;Chemistry, Inorganic & Nuclear"
 39609,Parasitology;Microbiology;Virology
@@ -1596,6 +1602,7 @@ gb_id,label
 98962,Biochemistry & Molecular Biology;Cell Biology
 98987,Pharmacology & Pharmacy
 98960,Cell Biology
+98996,Immunology;Neurosciences;Psychiatry
 98976,Genetics & Heredity
 807319,Genetics & Heredity
 267446,Biochemistry & Molecular Biology
@@ -2056,3 +2063,45 @@ gb_id,label
 33506,"Chemistry, Inorganic & Nuclear"
 33443,"Chemistry, Inorganic & Nuclear"
 67679,"Chemistry, Multidisciplinary"
+449159,"Literature, Romance"
+171968,History & Philosophy Of Science
+261852,History
+492999,"Literature, Romance"
+438102,History & Philosophy Of Science
+434118,History
+433706,History
+433360,History
+432641,History
+432640,History
+502471,History
+502070,History
+448159,History
+180025,History;Medieval & Renaissance Studies
+180026,History;Medieval & Renaissance Studies
+180023,History;Medieval & Renaissance Studies
+325074,Biochemistry & Molecular Biology;Cell Biology;Biology
+489564,History & Philosophy Of Science
+127667,Rheumatology
+369660,Parasitology
+221122,Genetics & Heredity;Biotechnology & Applied Microbiology
+218310,Immunology;Genetics & Heredity
+987982,Rheumatology
+998658,Rheumatology
+1010917,Rheumatology
+995047,Rheumatology
+987980,Obstetrics & Gynecology;Reproductive Biology
+987978,Obstetrics & Gynecology;Reproductive Biology
+987979,Obstetrics & Gynecology;Reproductive Biology
+998656,Rheumatology
+995045,Rheumatology
+995044,Rheumatology
+995040,Rheumatology
+995041,Rheumatology
+995043,Rheumatology
+998655,Rheumatology
+998654,Rheumatology
+987981,Microbiology
+1010557,Rheumatology
+990055,Multidisciplinary Sciences
+987983,Biochemistry & Molecular Biology;Genetics & Heredity
+342767,Hematology

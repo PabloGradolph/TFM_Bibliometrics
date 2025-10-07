@@ -31,8 +31,16 @@ SECRET_KEY = secret_key
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
+# Force Python ssl to use certifi bundle
+# Descomentar en prodcución
+# try:
+#     import os, certifi
+#     os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+#     os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+# except Exception:
+#     pass
 
 # Application definition
 
@@ -62,7 +70,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 ROOT_URLCONF = 'Bibliometrics.urls'
 
@@ -147,15 +158,25 @@ LANGUAGE_COOKIE_SAMESITE = None
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+
+# Configuración para subruta /BiblioMetrics
+FORCE_SCRIPT_NAME = '/BiblioMetrics'
+STATIC_URL = '/BiblioMetrics/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
-
-# Configuración de archivos multimedia
-MEDIA_URL = '/media/'
+MEDIA_URL = '/BiblioMetrics/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# EN PRODUCCIÓN CAMBIAR ESTO:
+# STATIC_ROOT = '/home/pgradolph/Bibliometria/static'
+# STATICFILES_DIRS = [
+#     "/home/pgradolph/Bibliometria/Bibliometrics/staticfiles",  # si tienes una carpeta de estáticos dentro del pro
+# yecto
+# ]
+# MEDIA_ROOT = '/home/pgradolph/Bibliometria/media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -181,6 +202,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
+EMAIL_USE_SSL= False
 EMAIL_HOST_USER = 'pablo.gradolph@gmail.com'
 EMAIL_HOST_PASSWORD = password
 DEFAULT_FROM_EMAIL = 'noreply@ipbln.local'

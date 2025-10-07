@@ -1,0 +1,211 @@
+id_pais,nombre,iso_alpha_2
+1543,Unión Soviética,
+702,Birmania,
+742,Somalilandia,
+730,Ciudad del Vaticano,
+1501,Lesotho,
+788,Suazilandia,
+1441,Serbia y Montenegro,
+1381,Tonga,
+1644,Santa Elena,
+1528,Tuvalu,
+1581,Aruba,
+1641,Santa Luc�a,
+1382,Haiti,
+984,Checoslovaquia,
+720,Andorra,AD
+774,Emiratos �rabes Unidos,AE
+801,Afganist�n,AF
+1038,Antigua y Barbuda,AG
+708,Albania,AL
+643,Armenia,AM
+662,Angola,AO
+1642,Ant�rtida,AQ
+610,Argentina,AR
+606,Austria,AT
+611,Australia,AU
+690,Azerbaiy�n,AZ
+783,Bosnia-Herzegovina,BA
+988,Barbados,BB
+640,Banglad�s,BD
+598,Bélgica,BE
+704,Burkina Faso,BF
+617,Bulgaria,BG
+744,Baréin,BH
+1026,Burundi,BI
+755,Ben�n,BJ
+760,Brunei,BN
+687,Bolivia,BO
+620,Brasil,BR
+749,Bahamas,BS
+1007,Bhutan,BT
+739,Botsuana,BW
+784,Bielorrusia,BY
+735,Belice,BZ
+605,Canad�,CA
+866,Rep�blica Democr�tica del Congo,CD
+1524,Rep�blica Centroafricana,CF
+758,Rep�blica del Congo,CG
+597,Suiza,CH
+677,Costa de Marfil,CI
+1018,Islas Cook,CK
+634,Chile,CL
+672,Camer�n,CM
+651,Rep�blica de China,CN
+772,China,CN
+627,Colombia,CO
+663,Costa Rica,CR
+657,Cuba,CU
+661,Cabo Verde,CV
+614,Chipre,CY
+607,Rep�blica Checa,CZ
+600,Alemania,DE
+1006,Yibuti,DJ
+626,Dinamarca,DK
+768,Dominica,DM
+695,Rep�blica Dominicana,DO
+630,Argelia,DZ
+624,Ecuador,EC
+616,Estonia,EE
+646,Egipto,EG
+1009,Eritrea,ER
+591,Espa�a,ES
+717,Etiop�a,ET
+604,Finlandia,FI
+696,Fiyi,FJ
+1019,Micronesia,FM
+596,Francia,FR
+728,Gab�n,GA
+771,Reino Unido,GB
+719,Granada,GD
+782,Georgia,GE
+675,Ghana,GH
+737,Groenlandia,GL
+759,Gambia,GM
+705,Guinea,GN
+865,Guinea Ecuatorial,GQ
+592,Grecia,GR
+664,Guatemala,GT
+1321,Guinea Bissau,GW
+678,Guyana,GY
+716,Honduras,HN
+642,Croacia,HR
+612,Hungr�a,HU
+680,Indonesia,ID
+648,Irlanda,IE
+609,Israel,IL
+633,India,IN
+698,Irak,IQ
+622,Ir�n,IR
+666,Islandia,IS
+594,Italia,IT
+709,Jamaica,JM
+684,Jordania,JO
+621,Jap�n,JP
+669,Kenia,KE
+861,Kirguist�n,KG
+729,Camboya,KH
+1037,Comoras,KM
+1526,Federaci�n de San Crist�bal y Nieves,KN
+868,Corea del Norte,KP
+632,Corea del Sur,KR
+741,Kuwait,KW
+712,Kazajist�n,KZ
+1017,Laos,LA
+711,L�bano,LB
+790,Liechtenstein,LI
+654,Sri Lanka,LK
+1002,Liberia,LR
+649,Lituania,LT
+660,Luxemburgo,LU
+655,Letonia,LV
+765,Libia,LY
+691,Marruecos,MA
+715,M�naco,MC
+701,Moldavia,MD
+745,Montenegro,ME
+703,Madagascar,MG
+1029,Islas Marshall,MH
+699,Macedonia del Norte,MK
+787,Mal�,ML
+791,Mongolia,MN
+841,Mauritania,MR
+673,Malta,MT
+667,Mauricio,MU
+999,Maldivas,MV
+726,Malaui,MW
+618,M�xico,MX
+641,Malasia,MY
+752,Mozambique,MZ
+689,Namibia,NA
+766,N�ger,NE
+685,Nigeria,NG
+603,Nicaragua,NI
+599,Pa�ses Bajos,NL
+623,Noruega,NO
+718,Nepal,NP
+628,Nueva Zelanda,NZ
+736,Om�n,OM
+658,Panam�,PA
+637,Per�,PE
+785,Pap�a Nueva Guinea,PG
+676,Filipinas,PH
+650,Pakist�n,PK
+619,Polonia,PL
+781,Puerto Rico,PR
+693,Palestina,PS
+595,Portugal,PT
+707,Palaos,PW
+694,Paraguay,PY
+656,Catar,QA
+613,Ruman�a,RO
+615,Serbia,RS
+601,Rusia,RU
+743,Ruanda,RW
+636,Arabia Saudita,SA
+1030,Islas Salom�n,SB
+997,Seychelles,SC
+722,Sud�n,SD
+625,Suecia,SE
+686,Singapur,SG
+608,Eslovenia,SI
+692,Eslovaquia,SK
+750,Sierra Leona,SL
+757,San Marino,SM
+706,Senegal,SN
+981,Somalia,SO
+683,Surinam,SR
+1561,Rep�blica de Sud�n del Sur,SS
+682,Santo Tom� y Pr�ncipe,ST
+751,El Salvador,SV
+753,Siria,SY
+763,Chad,TD
+982,Togo,TG
+652,Tailandia,TH
+822,Tayikist�n,TJ
+1023,Timor Oriental,TL
+1013,Turkmenist�n,TM
+635,T�nez,TN
+631,Turqu�a,TR
+881,Trinidad y Tobago,TT
+674,Tanzania,TZ
+653,Ucrania,UA
+724,Crimea,UA
+721,Uganda,UG
+590,Estados Unidos,US
+671,Uruguay,UY
+714,Uzbekist�n,UZ
+2561,San Vicente y las Granadinas,VC
+639,Venezuela,VE
+1039,Islas V�rgenes Brit�nicas,VG
+688,Vietnam,VN
+762,Vanuatu,VU
+986,Samoa,WS
+1015,Kosovo,XK
+767,Yemen,YE
+1301,Yugoslavia,YU
+659,Sud�frica,ZA
+754,Zambia,ZM
+748,Zimbabue,ZW
+1801,Saint Pierre and Miquelon,
+2301,Southern Ethiop,

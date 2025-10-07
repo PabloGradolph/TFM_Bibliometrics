@@ -9,9 +9,12 @@ urlpatterns = [
     path('api/dashboard/data/', views.get_filtered_data, name='get_filtered_data'),
     path('api/dashboard/publications/', views.get_publications_data, name='get_publications_data'),
     path('api/dashboard/collaboration-network/', views.get_collaboration_network, name='get_collaboration_network'),
+    path('api/dashboard/worldmap-counts/', views.get_worldmap_counts, name='get_worldmap_counts'),
+    path('api/dashboard/spainmap-counts/', views.get_spainmap_counts, name='get_spainmap_counts'),
     path('api/search/', views.search_publications, name='search_publications'),
     path('api/search/authors/', views.get_author_suggestions, name='get_author_suggestions'),
     path('api/author/metrics/', views.get_author_metrics, name='get_author_metrics'),
+    path('semantic_search/', views.semantic_search, name='semantic_search'),
     path('publication/<int:publication_id>/', views.publication_detail, name='publication_detail'),
     path('api/export/report/', views.export_report, name='export_report'),
-] 
+]

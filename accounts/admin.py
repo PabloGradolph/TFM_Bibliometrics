@@ -8,6 +8,8 @@ class CustomUserAdmin(UserAdmin):
     list_filter = ('is_active', 'is_staff')
     search_fields = ('email',)
     ordering = ('email',)
+    # Campos de solo lectura para evitar el error con date_joined (auto_now_add)
+    readonly_fields = ('last_login', 'date_joined')
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Permisos', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),

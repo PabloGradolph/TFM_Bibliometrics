@@ -1,3 +1,4 @@
+import logging
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from bibliodata.models import Publication, Author, Collaboration
@@ -5,172 +6,400 @@ from django.db.models import Count, Min, Max, Q, F
 from django.http import JsonResponse
 from bibliodata.models import Author  # Para mapear nombres
 from django.db.models import Max as DBMax, Min as DBMin
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _
 import random
 import networkx as nx
 import csv
 import random
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-import base64
-from reportlab.platypus import Image
+from reportlab.platypus import PageBreak
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.colors import blue
 import unicodedata
-from django.urls import reverse
 from pathlib import Path
+from bibliodata.models import PublicationEmbedding
 
-# Create your views here.
+# --- Optimized: Use HNSWlib index ---
+import hnswlib
+import os
+
+from sentence_transformers import SentenceTransformer, CrossEncoder
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def semantic_search(request):
+    """
+    Receives a search query, vectorizes it, computes cosine similarity with publication embeddings,
+    and returns publications with similarity > 0.5, ordered by similarity.
+    """
+    import json
+    data = json.loads(request.body.decode('utf-8'))
+    query = data.get('query', '')
+    if not query:
+        return JsonResponse({'results': [], 'error': 'No query provided.', 'received_query': query}, status=400)
+
+    # Load model (same as used for embeddings)
+    model_name = 'all-MiniLM-L6-v2'
+    model = SentenceTransformer(model_name)
+    query_emb = model.encode(query)
+
+    # Load HNSW index (path configurable)
+    index_path = r'C:\hnsw_index.bin'
+    logger = logging.getLogger("django")
+    logger.info(f"[semantic_search] Index path: {index_path}")
+    if not os.path.exists(index_path):
+        logger.error(f"[semantic_search] HNSW index not found at {index_path}")
+        return JsonResponse({'results': [], 'error': 'HNSW index not found.', 'received_query': query}, status=500)
+
+    # Load index (cache in global for efficiency)
+    if not hasattr(semantic_search, '_hnsw_index'):
+        first_emb = PublicationEmbedding.objects.first()
+        if not first_emb:
+            return JsonResponse({'results': [], 'error': 'No embeddings found.', 'received_query': query}, status=500)
+        emb_dim = len(json.loads(first_emb.embedding))
+        p = hnswlib.Index(space='cosine', dim=emb_dim)
+        p.load_index(index_path)
+        p.set_ef(100)
+        semantic_search._hnsw_index = p
+    else:
+        p = semantic_search._hnsw_index
+
+    # Permitir que el usuario defina el número de resultados (top_k)
+    try:
+        top_k = int(data.get('top_k', 50))
+        if top_k < 1 or top_k > 500:
+            top_k = 50
+    except Exception:
+        top_k = 50
+    ids, distances = p.knn_query(query_emb, k=top_k)
+    ids = ids[0]
+    distances = distances[0]
+
+    # Convert cosine distance to similarity (1 - distance)
+    candidates = []
+    emb_objs = {pe.publication_id: pe for pe in PublicationEmbedding.objects.filter(publication_id__in=ids).select_related('publication')}
+    for idx, pub_id in enumerate(ids):
+        pe = emb_objs.get(pub_id)
+        if not pe:
+            continue
+        pub = pe.publication
+        similarity = 1 - distances[idx]
+        if similarity < 0.1:
+            continue
+
+        candidates.append({
+            'id': pub.id,
+            'title': pub.title,
+            'year': pub.year,
+            'abstract': pub.abstract,
+            'similarity': round(similarity, 3),
+            'authors': [author.name for author in pub.authors.all()],
+            'other_authors': getattr(pub, 'other_authors', []),
+            'keywords': pub.keywords_all,
+            'areas': pub.areas_all,
+        })
+
+    # Reranking con cross-encoder
+    cross_encoder_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+    cross_encoder = CrossEncoder(cross_encoder_model)
+    # Prepara los pares (query, texto candidato)
+    pairs = [(query, c['title'] + ' ' + (c['abstract'] or '')) for c in candidates]
+    if pairs:
+        scores = cross_encoder.predict(pairs)
+        # Añade la puntuación de reranking
+        for i, c in enumerate(candidates):
+            c['rerank_score'] = float(scores[i])
+        # Ordena por rerank_score descendente
+        candidates.sort(key=lambda x: x['rerank_score'], reverse=True)
+    return JsonResponse({'results': candidates, 'received_query': query})
 
 def home(request):
     return render(request, 'core/home.html')
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def dashboard(request):
     return render(request, 'core/dashboard.html')
 
 def about(request):
     return render(request, 'core/about.html')
 
-@login_required(login_url='/accounts/login/')
+from bibliodata.utils_publication_types import CANON_TYPES  # <-- importa tu lista canónica
+from functools import reduce
+from operator import or_
+
+def _strip_accents_lower(s: str) -> str:
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.lower().strip()
+
+_CANON_LOOKUP = { _strip_accents_lower(c): c for c in CANON_TYPES }
+
+def _canonicalize_types(selected):
+    out = []
+    for t in (selected or []):
+        key = _strip_accents_lower(t)
+        out.append(_CANON_LOOKUP.get(key, t))
+    return out
+
+def _apply_type_filter(qs, types):
+    """
+    Filter by exact JSON equality (normalized_types == ["<canon>"]).
+    This avoids issues with Unicode escapes in SQLite JSON.
+    Also supports legacy rows where normalized_types might be a plain string.
+    """
+    canon_types = _canonicalize_types(types)
+    if not canon_types:
+        return qs
+
+    or_clauses = []
+    for t in canon_types:
+        # main: JSON list with a single canonical string
+        or_clauses.append(Q(normalized_types=[t]))
+        # legacy tolerance: if some rows were saved as a bare string
+        or_clauses.append(Q(normalized_types=t))
+
+    return qs.filter(reduce(or_, or_clauses))
+
+def _get_normalized_type_value(norm):
+    """Return the single canonical type from normalized_types JSONField."""
+    if isinstance(norm, list) and norm:
+        return (norm[0] or '').strip() or 'otro'
+    if isinstance(norm, str) and norm:
+        return norm.strip()
+    return 'otro'
+
+
+def _parse_quartiles(selected):
+    """Normalize quartile input to a set of numeric values {1,2,3,4}.
+
+    Accepted formats (case-insensitive):
+    - 'Q1'..'Q4'
+    - 'D1'..'D4' (treated like Q1..Q4)
+    - '1'..'4'
+    - 1..4
+    """
+    values = set()
+    for q in (selected or []):
+        if q is None:
+            continue
+        s = str(q).strip().upper()
+        if not s:
+            continue
+        if s.startswith('Q') or s.startswith('D'):
+            try:
+                v = int(s[1:])
+            except ValueError:
+                continue
+        else:
+            try:
+                v = int(s)
+            except ValueError:
+                continue
+        if v in (1, 2, 3, 4):
+            values.add(v)
+    return values
+
+
+def _apply_quartile_filter(qs, quartiles, metric_source=None):
+    """Filter publications by WoS JCR – JIF quartiles only.
+
+    Business rule (2025-10): Only Journal Impact Factor (metric_type='jif') from WoS is considered.
+    Any provided metric_source is ignored (forced 'wos').
+    Quartile labels in data may appear as Q1..Q4 or D1..D4; both are treated equivalently.
+    Accepted inputs: 'Q1'..'Q4', 'D1'..'D4', 1..4 (numeric), case-insensitive.
+    """
+    target_vals = _parse_quartiles(quartiles)
+    if not target_vals:
+        return qs
+
+    q_total = Q()
+    for v in target_vals:
+        # Accept exact numeric match OR strings that start with Qv / Dv, e.g. "Q1", "Q1 [2017]", "D1", "D1 [2018]"
+        q_val = (
+            Q(metrics__quartile_value=v, metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"Q{v}", metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"D{v}", metrics__source='wos', metrics__metric_type='jif')
+        )
+        q_total |= q_val
+
+    return qs.filter(q_total).distinct()
+
+
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filter_data(request):
-    # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')   # canónicos
+    quartiles = request.GET.getlist('quartiles')  # e.g., ['Q1', 'Q2']
+    # Business rule: ignore provided metric_source, always use WoS
+    metric_source = 'wos'
     author = request.GET.get('author')
 
-    # Construir el query base sin aplicar los filtros de área, institución y tipo aún
     base_query = Publication.objects.all()
-
-    # Aplicar filtros de año y autor al query base
     if year_from:
         base_query = base_query.filter(year__gte=year_from)
     if year_to:
         base_query = base_query.filter(year__lte=year_to)
+    # Filtro de citas totales (campo Publication.citations)
+    if citations_from is not None and citations_from != '':
+        try:
+            base_query = base_query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            base_query = base_query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if author:
         base_query = base_query.filter(authors__name=author)
 
-    # Obtener años disponibles con conteo de publicaciones (basado en query completamente filtrado para años)
-    # Note: Years query should still consider all filters including areas/institutions/types
-    # This part might need clarification depending on desired year filter interaction
-    # For now, let's keep it based on the final 'query' object as before for simplicity, or revisit if needed.
-    # Let's rebuild the main query to include areas/institutions/types for counting years.
+    # ---- Years (con todos los filtros, incl. tipos)
     query_with_all_filters = base_query
     if areas:
         query_with_all_filters = query_with_all_filters.filter(thematic_areas__name__in=areas)
     if institutions:
         query_with_all_filters = query_with_all_filters.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type_item in types:
-            # Para SQLite, necesitamos buscar el string dentro del JSON
-            type_query |= Q(publication_type__icontains=type_item)
-        query_with_all_filters = query_with_all_filters.filter(type_query)
+        query_with_all_filters = _apply_type_filter(query_with_all_filters, types)
+    if quartiles:
+        query_with_all_filters = _apply_quartile_filter(query_with_all_filters, quartiles, metric_source)
 
-    years = query_with_all_filters.values('year').annotate(count=Count('id', distinct=True)).order_by('year')
+    years = (
+        query_with_all_filters
+        .values('year')
+        .annotate(count=Count('id', distinct=True))
+        .order_by('year')
+    )
 
-    # --- Obtener áreas temáticas con conteo ---
-    # Count based on base_query (filtered by year/author) + other filters (institutions, types) but NOT areas
+    # ---- Áreas (sin filtrar por área; con resto de filtros)
     areas_query = base_query
     if institutions:
         areas_query = areas_query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type_item in types:
-            type_query |= Q(publication_type__icontains=type_item)
-        areas_query = areas_query.filter(type_query)
+        areas_query = _apply_type_filter(areas_query, types)
+    if quartiles:
+        areas_query = _apply_quartile_filter(areas_query, quartiles, metric_source)
 
-    # Use aggregation to get counts for areas
-    areas_with_counts = areas_query.values('thematic_areas__name')\
-        .annotate(name=F('thematic_areas__name'), count=Count('id', distinct=True))\
-        .filter(count__gt=0, thematic_areas__name__isnull=False)\
+    areas_with_counts = (
+        areas_query.values('thematic_areas__name')
+        .annotate(name=F('thematic_areas__name'), count=Count('id', distinct=True))
+        .filter(count__gt=0, thematic_areas__name__isnull=False)
         .order_by('-count', 'name')
+    )
 
-    # --- Obtener instituciones con conteo ---
-    # Count based on base_query (filtered by year/author) + other filters (areas, types) but NOT institutions
+    # ---- Instituciones (sin filtrar por institución; con resto de filtros)
     institutions_query = base_query
     if areas:
         institutions_query = institutions_query.filter(thematic_areas__name__in=areas)
     if types:
-        type_query = Q()
-        for type_item in types:
-            # Para SQLite, necesitamos buscar el string dentro del JSON
-            type_query |= Q(publication_type__icontains=type_item)
-        institutions_query = institutions_query.filter(type_query)
+        institutions_query = _apply_type_filter(institutions_query, types)
+    if quartiles:
+        institutions_query = _apply_quartile_filter(institutions_query, quartiles, metric_source)
 
-    # Use aggregation to get counts for institutions
-    institutions_with_counts = institutions_query.values('institutions__name')\
-        .annotate(name=F('institutions__name'), count=Count('id', distinct=True))\
-        .filter(count__gt=0, institutions__name__isnull=False)\
+    institutions_with_counts = (
+        institutions_query.values('institutions__name')
+        .annotate(name=F('institutions__name'), count=Count('id', distinct=True))
+        .filter(count__gt=0, institutions__name__isnull=False)
         .order_by('-count', 'name')
+    )
 
-    # --- Obtener tipos de publicación con conteo ---
-    # Contar tipos individuales de publicaciones que cumplen los filtros aplicados (excepto tipo)
+    # ---- Tipos normalizados con conteo (mostrar TODOS, aunque cuenten 0)
     publications_for_type_counting = base_query
     if areas:
         publications_for_type_counting = publications_for_type_counting.filter(thematic_areas__name__in=areas)
     if institutions:
         publications_for_type_counting = publications_for_type_counting.filter(institutions__name__in=institutions)
+    # A partir de ahora también aplicamos cuartiles para que los conteos de tipos
+    # reflejen el subconjunto filtrado por Q (manteniendo todos los tipos posibles con 0 si no aparecen)
+    if quartiles:
+        publications_for_type_counting = _apply_quartile_filter(publications_for_type_counting, quartiles, metric_source)
+    # Nota: normalmente aquí NO aplicamos 'types' para mostrar el universo completo disponible
+    # según el resto de filtros. Si lo quieres aplicar, descomenta la siguiente línea:
+    # if types: publications_for_type_counting = _apply_type_filter(publications_for_type_counting, types)
 
-    # Recopilar todos los tipos individuales y contarlos
-    type_counts = {}
-    for pub in publications_for_type_counting.only('publication_type'): # Usamos .only() para optimizar la consulta
-        if isinstance(pub.publication_type, list):
-            for pub_type in pub.publication_type:
-                if pub_type:
-                    # Normalizar un poco (ej. remover espacios extra, minúsculas)
-                    clean_type = pub_type.strip()
-                    if clean_type:
-                         type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
-        elif pub.publication_type: # Manejar caso donde no es lista pero tiene valor
-             clean_type = str(pub.publication_type).strip()
-             if clean_type:
-                  type_counts[clean_type] = type_counts.get(clean_type, 0) + 1
+    # 1) Inicializa todos los canónicos a 0
+    type_counts = {t: 0 for t in CANON_TYPES}
 
-    # Convertir el diccionario de conteos a la lista de objetos esperada por el frontend
-    types_with_counts = [{'publication_type': name, 'count': count} for name, count in type_counts.items()]
-    # Ordenar por conteo (descendente) y luego por nombre (ascendente)
+    # 2) Para evitar pérdidas de filas al usar DISTINCT + join con metrics (cuartiles),
+    #    primero recuperamos los IDs únicos y luego consultamos normalized_types sin el join.
+    pub_ids_for_types = list(
+        publications_for_type_counting.values_list('id', flat=True).distinct()
+    )
+    for norm in Publication.objects.filter(id__in=pub_ids_for_types).values_list('normalized_types', flat=True):
+        if isinstance(norm, list) and norm:
+            key = (norm[0] or '').strip() or 'otro'
+        elif isinstance(norm, str) and norm:
+            key = norm.strip()
+        else:
+            key = 'otro'
+        if key in type_counts:
+            type_counts[key] += 1
+        else:
+            type_counts['otro'] += 1
+
+    types_with_counts = [
+        {'publication_type': name, 'count': count}
+        for name, count in type_counts.items()
+    ]
+    # Si prefieres orden fijo canónico, usa esta línea:
+    # types_with_counts.sort(key=lambda x: CANON_TYPES.index(x['publication_type']))
+    # Si prefieres como antes (por count desc y luego alfabético), deja esta:
     types_with_counts.sort(key=lambda x: (-x['count'], x['publication_type']))
 
-    # --- Filtrar tipos que empiezan con "comunicación" ---
-    # Esto se hace aquí después del conteo pero antes de devolver la respuesta
-    filtered_types_with_counts = [
-        item for item in types_with_counts
-        if not item['publication_type'].lower().startswith('comunicación')
-    ]
+    # ---- Quartiles with counts (Q1..Q4). Mostrar TODOS, ignorando filtro de cuartiles
+    publications_for_quartile_counting = base_query
+    if areas:
+        publications_for_quartile_counting = publications_for_quartile_counting.filter(thematic_areas__name__in=areas)
+    if institutions:
+        publications_for_quartile_counting = publications_for_quartile_counting.filter(institutions__name__in=institutions)
+    if types:
+        publications_for_quartile_counting = _apply_type_filter(publications_for_quartile_counting, types)
 
-    filtered_types_with_counts = [
-        item for item in filtered_types_with_counts
-        if not item['publication_type'].lower().startswith('capítulo de')
-    ]
+    quartiles_with_counts = []
+    for v in (1, 2, 3, 4):
+        q = (
+            Q(metrics__quartile_value=v, metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"Q{v}", metrics__source='wos', metrics__metric_type='jif') |
+            Q(metrics__quartile__istartswith=f"D{v}", metrics__source='wos', metrics__metric_type='jif')
+        )
+        count = publications_for_quartile_counting.filter(q).distinct().count()
+        quartiles_with_counts.append({'quartile': f'Q{v}', 'count': count})
 
-    filtered_types_with_counts = [
-        item for item in filtered_types_with_counts
-        if not item['publication_type'].lower() == "artículo"
-    ]
+    # Calcular rango de citas sobre el subconjunto base (sin aplicar filtro de tipos ni quartiles para mostrar universo según otros filtros)
+    citations_query = base_query
+    citations_stats = citations_query.aggregate(min_c=Min('citations'), max_c=Max('citations'))
+    min_cit = citations_stats['min_c'] if citations_stats['min_c'] is not None else 0
+    max_cit = citations_stats['max_c'] if citations_stats['max_c'] is not None else 0
 
     return JsonResponse({
         'years': list(years),
         'areas': list(areas_with_counts),
         'institutions': list(institutions_with_counts),
-        'publication_types': filtered_types_with_counts
+        'publication_types': types_with_counts,
+        'quartiles': quartiles_with_counts,
+        'citations_range': {'min': min_cit, 'max': max_cit}
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_filtered_data(request):
     # Obtener los parámetros de filtrado
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = 'wos'
     view_type = request.GET.get('view_type', 'yearly')
     author = request.GET.get('author')
     include_predicted_areas = request.GET.get('include_predicted_areas') == 'true'
@@ -183,20 +412,24 @@ def get_filtered_data(request):
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        filtered_ids = [
-            pub.id for pub in query
-            if pub.publication_type and any(
-                t.lower() in str(pub_type).lower()
-                for pub_type in pub.publication_type
-                for t in types
-            )
-        ]
-        query = Publication.objects.filter(id__in=filtered_ids)
+        query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
@@ -338,7 +571,15 @@ def get_filtered_data(request):
             areas_data = top_15_areas + [{'thematic_areas__name': 'Otras', 'count': other_count}]
     
     institutions_data = list(query.values('institutions__name').annotate(count=Count('id', distinct=True)).order_by('-count'))
-    types_data = list(query.values('publication_type').annotate(count=Count('id', distinct=True)).order_by('-count'))
+    # Tipos (NORMALIZADOS) para el front (mantiene la misma clave 'publication_type')
+    # Contamos a partir del queryset ya filtrado (sin agrupar en SQL por ser JSONField en SQLite)
+    type_counter = {}
+    for norm in query.values_list('normalized_types', flat=True):
+        key = _get_normalized_type_value(norm)
+        type_counter[key] = type_counter.get(key, 0) + 1
+
+    types_data = [{'publication_type': k, 'count': v} for k, v in type_counter.items()]
+    types_data.sort(key=lambda x: (-x['count'], x['publication_type']))
 
     return JsonResponse({
         'timeline': timeline_data,
@@ -348,7 +589,7 @@ def get_filtered_data(request):
         'types': types_data
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_author_suggestions(request):
     query = request.GET.get('q', '').strip()
     if not query:
@@ -365,54 +606,47 @@ def get_author_suggestions(request):
         'suggestions': list(authors)
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def search_publications(request):
-    query = request.GET.get('q', '').strip()
+    q = request.GET.get('q', '').strip()
     author = request.GET.get('author', '').strip()
-    if not query and not author:
+    if not q and not author:
         return JsonResponse({'results': []})
 
-    # Construir la consulta base
     publications = Publication.objects.all()
-
-    # Si hay un autor seleccionado, filtrar por ese autor
     if author:
         publications = publications.filter(authors__name=author)
-    # Si hay una consulta de texto, buscar en títulos Y áreas temáticas
-    elif query:
+    elif q:
         publications = publications.filter(
-            Q(title__icontains=query) |
-            Q(thematic_areas__name__icontains=query)
+            Q(title__icontains=q) |
+            Q(thematic_areas__name__icontains=q)
         )
 
-    # Ordenar y limitar resultados
     publications = publications.distinct().order_by('-year', '-publication_date')[:50]
 
     results = []
     for pub in publications:
-        # Obtener los autores de la publicación
-        authors = [author.name for author in pub.authors.all()]
-        
-        # Obtener las instituciones
-        institutions = [inst.name for inst in pub.institutions.all()]
-        
-        # Obtener las áreas temáticas
-        areas = [area.name for area in pub.thematic_areas.all()]
-        
+        authors = [a.name for a in pub.authors.all()]
+        institutions = [i.name for i in pub.institutions.all()]
+        areas = [a.name for a in pub.thematic_areas.all()]
+
+        norm = _get_normalized_type_value(pub.normalized_types)
+
         results.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
-            'publication_type': pub.publication_type,
+            'publication_type': norm,  # <- now the canonical single type
             'authors': authors,
             'institutions': institutions,
             'areas': areas,
-            'url': pub.url if hasattr(pub, 'url') else None
+            'url': getattr(pub, 'url', None),
+            'other_authors': getattr(pub, 'other_authors', []),
         })
 
     return JsonResponse({'results': results})
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def publication_detail(request, publication_id):
     # Obtener la publicación por su ID, o mostrar 404 si no existe
     publication = get_object_or_404(Publication, id=publication_id)
@@ -452,111 +686,114 @@ def get_metric_value(pub, key):
     return float(metric.impact_factor) if metric and metric.impact_factor is not None else -1
 
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_publications_data(request):
-    # Obtener los parámetros de filtrado
+    # Params
     year_from = request.GET.get('year_from')
     year_to = request.GET.get('year_to')
     areas = request.GET.getlist('areas')
     institutions = request.GET.getlist('institutions')
-    types = request.GET.getlist('types')
+    types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
+    metric_source = 'wos'
     author = request.GET.get('author')
     page = int(request.GET.get('page', 1))
-    per_page = 20
+    try:
+        per_page = int(request.GET.get('per_page', 20))
+        if per_page <= 0:
+            per_page = 20
+    except (TypeError, ValueError):
+        per_page = 20
 
     sort_by = request.GET.get('sort_by')
     sort_order = request.GET.get('sort_order', 'desc')
 
-    # Construir el query base
+    # Base query
     query = Publication.objects.all()
 
-    # Aplicar filtros
+    # Filters
     if year_from:
         query = query.filter(year__gte=year_from)
     if year_to:
         query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
     if areas:
         query = query.filter(thematic_areas__name__in=areas)
     if institutions:
         query = query.filter(institutions__name__in=institutions)
     if types:
-        type_query = Q()
-        for type in types:
-            type_query |= Q(publication_type__icontains=type)
-        query = query.filter(type_query)
+        query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
     if author:
         query = query.filter(authors__name=author)
 
-    # Obtener todas las publicaciones filtradas
+    # Fetch all filtered publications
     publications = list(query)
-    
-    # Aplicar ordenación si se especifica
+
+    # Sorting
     if sort_by:
         publications.sort(key=lambda pub: get_metric_value(pub, sort_by), reverse=(sort_order == 'desc'))
     else:
-        # Ordenación por defecto por año y fecha de publicación
         publications.sort(key=lambda pub: (pub.year or 0, pub.publication_date or ''), reverse=True)
 
-    # Paginar manualmente
+    # Pagination
     total_publications = len(publications)
     total_pages = (total_publications + per_page - 1) // per_page
     start = (page - 1) * per_page
     end = start + per_page
     publications = publications[start:end]
 
-    # Preparar los datos de las publicaciones con sus métricas
+    # Build payload
     publications_data = []
     for pub in publications:
-        # Obtener las métricas específicas
         metrics = {}
-        
-        # Dimensions citations
+
         dim_citations = pub.metrics.filter(source='dimensions', metric_type='citations').order_by('-year').first()
         if dim_citations:
-            metrics['Dimensions Citations'] = {
-                'value': dim_citations.impact_factor,
-                'year': dim_citations.year
-            }
-        
-        # WoS citations
+            metrics['Dimensions Citations'] = {'value': dim_citations.impact_factor, 'year': dim_citations.year}
+
         wos_citations = pub.metrics.filter(source='wos', metric_type='citations').order_by('-year').first()
         if wos_citations:
-            metrics['WoS Citations'] = {
-                'value': wos_citations.impact_factor,
-                'year': wos_citations.year
-            }
-        
-        # Scopus citations
+            metrics['WoS Citations'] = {'value': wos_citations.impact_factor, 'year': wos_citations.year}
+
         scopus_citations = pub.metrics.filter(source='scopus', metric_type='citations').order_by('-year').first()
         if scopus_citations:
-            metrics['Scopus Citations'] = {
-                'value': scopus_citations.impact_factor,
-                'year': scopus_citations.year
-            }
-        
-        # Dimensions FCR
+            metrics['Scopus Citations'] = {'value': scopus_citations.impact_factor, 'year': scopus_citations.year}
+
         dim_fcr = pub.metrics.filter(source='dimensions', metric_type='fcr').order_by('-year').first()
         if dim_fcr:
-            metrics['FCR'] = {
-                'value': dim_fcr.impact_factor,
-                'year': dim_fcr.year
-            }
-        
-        # Dimensions RCR
+            metrics['FCR'] = {'value': dim_fcr.impact_factor, 'year': dim_fcr.year}
+
         dim_rcr = pub.metrics.filter(source='dimensions', metric_type='rcr').order_by('-year').first()
         if dim_rcr:
-            metrics['RCR'] = {
-                'value': dim_rcr.impact_factor,
-                'year': dim_rcr.year
-            }
+            metrics['RCR'] = {'value': dim_rcr.impact_factor, 'year': dim_rcr.year}
+
+        norm_type = _get_normalized_type_value(pub.normalized_types)
 
         publications_data.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
-            'publication_type': pub.publication_type[0] if isinstance(pub.publication_type, list) and pub.publication_type else pub.publication_type,
+            'publication_type': norm_type,  # <- normalized single type (keeps same key)
             'metrics': metrics,
-            'international_collab': pub.international_collab
+            'international_collab': pub.international_collab,
+            'num_countries': getattr(pub, 'num_countries', None),
+            'affiliations': getattr(pub, 'affiliations', None),
+            'countries_ids': getattr(pub, 'countries_ids', None),
+            'countries': getattr(pub, 'countries', None),
+            'countries_iso2': getattr(pub, 'countries_iso2', None),
         })
 
     return JsonResponse({
@@ -571,7 +808,7 @@ def get_publications_data(request):
         }
     })
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_collaboration_network(request):
     try:
         community_view = request.GET.get('communityView', 'department')
@@ -801,7 +1038,7 @@ def get_collaboration_network(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_author_metrics(request):
     author_name = request.GET.get('author_id')  # Ahora recibimos el nombre
     if not author_name:
@@ -834,7 +1071,7 @@ def get_author_metrics(request):
 
 @require_http_methods(["GET", "POST"])
 @csrf_exempt
-@login_required(login_url='/accounts/login/')
+@login_required(login_url='/BiblioMetrics/accounts/login/')
 def export_report(request):
     import base64
     from io import BytesIO
@@ -845,11 +1082,7 @@ def export_report(request):
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image
     from reportlab.lib.enums import TA_CENTER
     from datetime import datetime
-    from reportlab.lib.fonts import addMapping
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.lib.utils import ImageReader
-
+    
     # Permitir POST para recibir imágenes
     if request.method == 'POST':
         data = request.POST
@@ -864,9 +1097,13 @@ def export_report(request):
 
     year_from = data.get('year_from')
     year_to = data.get('year_to')
+    citations_from = data.get('citations_from')
+    citations_to = data.get('citations_to')
     areas = data.getlist('areas') if hasattr(data, 'getlist') else []
     institutions = data.getlist('institutions') if hasattr(data, 'getlist') else []
     types = data.getlist('types') if hasattr(data, 'getlist') else []
+    quartiles = data.getlist('quartiles') if hasattr(data, 'getlist') else []
+    metric_source = 'wos'  # enforced business rule
     author = data.get('author')
     format_ = data.get('format', 'pdf')
 
@@ -879,6 +1116,9 @@ def export_report(request):
     default_areas = _('Todas las áreas')
     default_institutions = _('Todas las instituciones')
     default_types = _('Todos los tipos')
+    default_quartiles = _('Todos los cuartiles')
+    default_citations = _('Todas (0 - máx)')
+    # metric source fixed to WoS; no generic default needed
 
     buffer = BytesIO()
     doc_title = 'Bibliometría IPBLN: Informe'
@@ -921,6 +1161,12 @@ def export_report(request):
         [label(_('Áreas temáticas')), safe_value(areas, default_areas)],
         [label(_('Instituciones')), safe_value(institutions, default_institutions)],
         [label(_('Tipos de publicación')), safe_value(types, default_types)],
+    # Metric source row removed (always WoS JCR - JIF)
+        [label(_('Cuartiles')), safe_value(quartiles, default_quartiles)],
+        [label(_('Citas (mín - máx)')), safe_value(
+            f"{citations_from or '0'} - {citations_to or _('máx')}" if (citations_from or citations_to) else None,
+            default_citations
+        )],
     ]
     if author:
         filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
@@ -1055,6 +1301,8 @@ def export_report(request):
         for t in types:
             type_query |= Q(publication_type__icontains=t)
         pubs_query = pubs_query.filter(type_query)
+    if quartiles:
+        pubs_query = _apply_quartile_filter(pubs_query, quartiles, metric_source)
     if author:
         pubs_query = pubs_query.filter(authors__name=author)
     pubs = pubs_query.distinct().order_by('-year', '-publication_date')
@@ -1065,7 +1313,7 @@ def export_report(request):
     # Construir la tabla
     data = [[Paragraph('<b>Título</b>', styles['Normal']), Paragraph('<b>Año</b>', styles['Normal'])]]
     for pub in pubs:
-        pub_url = request.build_absolute_uri(f"/publication/{pub.id}")
+        pub_url = request.build_absolute_uri(f"/BiblioMetrics/publication/{pub.id}")
         title_link = f'<a href="{pub_url}">{pub.title}</a>'
         data.append([Paragraph(title_link, link_style), str(pub.year) if pub.year else '-'])
     if len(data) == 1:
@@ -1104,3 +1352,204 @@ def export_report(request):
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Informe.pdf"'
     return response
+
+
+@login_required(login_url='/BiblioMetrics/accounts/login/')
+def get_worldmap_counts(request):
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
+    author = request.GET.get('author')
+
+    query = Publication.objects.all()
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
+    if author:
+        query = query.filter(authors__name=author)
+
+    query = query.distinct()
+
+    total = query.count()
+    counts = {}
+    debug_mode = request.GET.get('debug') == '1'
+    missing_spain_ids = []
+
+    for num_countries, countries_iso2, num_spanish_affils, pub_id in query.values_list(
+        'num_countries', 'countries_iso2', 'num_spanish_affils', 'id'
+    ):
+        try:
+            iso_list = countries_iso2 if isinstance(countries_iso2, list) else []
+            per_pub_iso = set()
+            for code in iso_list:
+                if isinstance(code, str):
+                    iso = code.strip().upper()
+                    if iso:
+                        per_pub_iso.add(iso)
+            if (not per_pub_iso or 'ES' not in per_pub_iso) and (num_spanish_affils or 0) > 0:
+                per_pub_iso.add('ES')
+                if debug_mode:
+                    missing_spain_ids.append(pub_id)
+            for iso in per_pub_iso:
+                counts[iso] = counts.get(iso, 0) + 1
+        except Exception:
+            continue
+
+    response = {'counts': counts, 'total_publications': total}
+    if debug_mode:
+        response['fallback_spain_added'] = len(missing_spain_ids)
+        response['sample_missing_spain_publications'] = missing_spain_ids[:50]
+    return JsonResponse(response)
+
+
+@login_required(login_url='/BiblioMetrics/accounts/login/')
+def get_spainmap_counts(request):
+    import unicodedata, re
+
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')  # canonical
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = request.GET.get('metric_source')
+    author = request.GET.get('author')
+
+    count_mode = request.GET.get('count', 'occurrences')  # 'occurrences' or 'publications'
+    query = Publication.objects.all()
+    if year_from:
+        query = query.filter(year__gte=year_from)
+    if year_to:
+        query = query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            query = query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            query = query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
+    if areas:
+        query = query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        query = query.filter(institutions__name__in=institutions)
+    if types:
+        query = _apply_type_filter(query, types)
+    if quartiles:
+        query = _apply_quartile_filter(query, quartiles, metric_source)
+    if author:
+        query = query.filter(authors__name=author)
+
+    query = query.distinct()
+
+    def normalize_key(name: str) -> str:
+        if not isinstance(name, str):
+            return ''
+        nfkd = unicodedata.normalize('NFKD', name)
+        ascii_str = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+        s = re.sub(r'[‐-‒–—―\-_/]+', ' ', ascii_str)
+        s = re.sub(r'[^A-Za-zÀ-ÿ ]+', ' ', s)
+        s = re.sub(r'\s+', ' ', s)
+        return s.strip().lower()
+
+    ccaa_counts, prov_counts = {}, {}
+
+    # Extrae primero los IDs de publicaciones filtradas para evitar duplicados por joins M2M
+    pub_ids = list(query.values_list('id', flat=True).distinct())
+
+    # Itera únicamente sobre esas publicaciones (una vez por publicación)
+    rows = Publication.objects.filter(id__in=pub_ids).values_list('id', 'ccaas', 'provinces')
+
+    if count_mode == 'publications':
+        # Cuenta cada CCAA/provincia como máximo 1 vez por publicación
+        for _pid, ccaas, provinces in rows:
+            try:
+                per_pub_ccaa = set()
+                per_pub_prov = set()
+
+                if isinstance(ccaas, (list, tuple)):
+                    for n in ccaas:
+                        k = normalize_key(n)
+                        if k:
+                            per_pub_ccaa.add(k)
+                elif isinstance(ccaas, str):
+                    k = normalize_key(ccaas)
+                    if k:
+                        per_pub_ccaa.add(k)
+
+                if isinstance(provinces, (list, tuple)):
+                    for n in provinces:
+                        k = normalize_key(n)
+                        if k:
+                            per_pub_prov.add(k)
+                elif isinstance(provinces, str):
+                    k = normalize_key(provinces)
+                    if k:
+                        per_pub_prov.add(k)
+
+                for k in per_pub_ccaa:
+                    ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+                for k in per_pub_prov:
+                    prov_counts[k] = prov_counts.get(k, 0) + 1
+            except Exception:
+                continue
+    else:
+        # occurrences (por defecto): suma todas las apariciones de CCAA/provincia en las afiliaciones
+        for _pid, ccaas, provinces in rows:
+            try:
+                if isinstance(ccaas, (list, tuple)):
+                    for n in ccaas:
+                        k = normalize_key(n)
+                        if k:
+                            ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+                elif isinstance(ccaas, str):
+                    k = normalize_key(ccaas)
+                    if k:
+                        ccaa_counts[k] = ccaa_counts.get(k, 0) + 1
+
+                if isinstance(provinces, (list, tuple)):
+                    for n in provinces:
+                        k = normalize_key(n)
+                        if k:
+                            prov_counts[k] = prov_counts.get(k, 0) + 1
+                elif isinstance(provinces, str):
+                    k = normalize_key(provinces)
+                    if k:
+                        prov_counts[k] = prov_counts.get(k, 0) + 1
+            except Exception:
+                continue
+    return JsonResponse({
+        'ccaa': ccaa_counts,
+        'provinces': prov_counts,
+        'total_publications': len(pub_ids),
+        'count_mode': count_mode,
+    })

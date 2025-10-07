@@ -4,6 +4,11 @@
 
 {% block title %}{% trans "Dashboard - Bibliometrics IPBLN" %}{% endblock %}
 
+{% block extra_css %}
+    <!-- Leaflet CSS (required for proper rendering of the map and overlays) -->
+    <link rel="stylesheet" href="{% static 'css/leaflet.css' %}">
+{% endblock %}
+
 {% block content %}
 <style>
     .dashboard-card {
@@ -96,18 +101,31 @@
                     </div>
                     <!-- AI Search -->
                     <div class="col-md-6">
-                        <div class="form-group">
-                            <label for="aiSearch" class="form-label">
-                                <i class="fas fa-robot me-1"></i>{% trans "AI-Powered Search" %}
-                                <span class="badge bg-info ms-1">{% trans "Coming Soon" %}</span>
-                            </label>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="aiSearch" 
-                                       placeholder="{% trans 'Ask anything about the publications...' %}" disabled>
-                                <button class="btn btn-secondary" id="aiSearchBtn" disabled>
+                        <div class="form-group position-relative">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label for="aiSearch" class="form-label mb-0">
+                                    <i class="fas fa-robot me-1"></i>{% trans "AI-Powered Search" %}
+                                </label>
+                                <select id="semanticTopK" class="form-select form-select-sm ms-2" style="width:48px; height:24px; font-size:0.78rem; padding:2px 4px;">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                            <div class="input-group mt-2">
+                                <input type="text" class="form-control" id="aiSearch"
+                                       placeholder="{% trans 'Ask anything about the publications...' %}">
+                                <button class="btn btn-primary" id="aiSearchBtn">
                                     <i class="fas fa-robot"></i>
                                 </button>
                             </div>
+                            <!-- Badge para filtro de búsqueda IA -->
+                            <span id="aiSearchFilter" class="badge bg-info text-dark mt-2" style="display:none;cursor:pointer;">
+                                <!-- El texto de la búsqueda IA se mostrará aquí -->
+                                <i class="fas fa-times ms-1"></i>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -171,6 +189,29 @@
                         </div>
                     </div>
                 </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="citationsFrom" class="form-label">{% trans "Citations" %}</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="citationsFrom" placeholder="{% trans 'From' %}">
+                                <input type="number" class="form-control" id="citationsTo" placeholder="{% trans 'To' %}">
+                            </div>
+                            <div class="form-text" id="citationsRangeHelp" style="font-size: 0.75rem;"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="quartileFilter" class="form-label">Q (WoS JCR - JIF)</label>
+                            <select class="form-select" id="quartileFilter">
+                                <option value="">{% trans "All quartiles" %}</option>
+                            </select>
+                            <div id="selectedQuartiles" class="mt-2">
+                                <!-- Selected quartiles will be added here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -184,9 +225,14 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Publication Timeline" %}</h5>
-                    <div class="btn-group">
-                        <button class="btn btn-outline-primary btn-sm" data-view="yearly">{% trans "Yearly" %}</button>
-                        <button class="btn btn-outline-primary btn-sm" data-view="monthly">{% trans "Monthly" %}</button>
+                    <div class="d-flex align-items-center">
+                        <div class="btn-group" role="group" aria-label="Timeline view type">
+                            <button class="btn btn-outline-primary btn-sm" data-view="yearly">{% trans "Yearly" %}</button>
+                            <button class="btn btn-outline-primary btn-sm" data-view="monthly">{% trans "Monthly" %}</button>
+                        </div>
+                        <button id="exportTimelineBtn" type="button" class="btn btn-outline-secondary btn-sm ms-2" title="{% trans 'Download image' %}" aria-label="{% trans 'Download timeline image' %}">
+                            <i class="fas fa-download"></i>
+                        </button>
                     </div>
                 </div>
                 <div id="timelineChart" style="height: 300px;"></div>
@@ -200,12 +246,17 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">{% trans "Areas Distribution" %}</h5>
-                    <div class="btn-group align-items-center" id="areasChartButtons">
+                    <div class="d-flex align-items-center" id="areasChartButtons">
                         <button class="btn btn-outline-secondary btn-xs me-2" id="togglePredictedAreasBtn" type="button" style="font-size: 0.8rem; padding: 0.15rem 0.5rem; height: 28px;">
                             {% trans "Include AI-predicted areas" %}
                         </button>
-                        <button class="btn btn-outline-primary btn-sm" data-areas-view="pie">{% trans "Pie" %}</button>
-                        <button class="btn btn-outline-primary btn-sm" data-areas-view="bar">{% trans "Bar" %}</button>
+                        <div class="btn-group" role="group" aria-label="Areas view type">
+                            <button class="btn btn-outline-primary btn-sm" data-areas-view="pie">{% trans "Pie" %}</button>
+                            <button class="btn btn-outline-primary btn-sm" data-areas-view="bar">{% trans "Bar" %}</button>
+                        </div>
+                        <button id="exportAreasBtn" type="button" class="btn btn-outline-secondary btn-sm ms-2" title="{% trans 'Download image' %}" aria-label="{% trans 'Download areas chart image' %}">
+                            <i class="fas fa-download"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="areasChart-responsive">
@@ -378,6 +429,47 @@
                         <!-- Pagination will be loaded dynamically -->
                     </ul>
                 </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card para el mapamundi colaboraciones -->
+    <div class="col-12 h-100 mt-4">
+        <div class="card dashboard-card">
+            <div class="card-body" style="position:relative;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-globe-europe me-1"></i><span id="collabCardTitleText">{% trans "International Collaborations" %}</span>
+                    </h5>
+                    <div class="d-flex align-items-center">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Map view">
+                            <button type="button" class="btn btn-outline-primary active" data-map-view="world">{% trans "World" %}</button>
+                            <button type="button" class="btn btn-outline-primary" data-map-view="spain">{% trans "Spain" %}</button>
+                        </div>
+                        <div class="btn-group btn-group-sm ms-2 d-none" id="spainLevelGroup" role="group" aria-label="Spain level">
+                            <button type="button" class="btn btn-outline-primary active" data-spain-level="ccaa">{% trans "Autonomous Communities" %}</button>
+                            <button type="button" class="btn btn-outline-primary" data-spain-level="provinces">{% trans "Provinces" %}</button>
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="exportCollabMap" title="{% trans 'Download image' %}">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- NOTE: Top 10 table now se renderiza como Leaflet control (bottom-right) dentro del mapa -->
+                <div id="worldmap-container" style="width:100%; aspect-ratio: 16/9; min-height:320px; height:auto; overflow:hidden;"></div>
+                <style>
+                    /* Ensure Leaflet fills the container and background is transparent */
+                    #worldmap-container .leaflet-container {
+                        background: transparent !important;
+                    }
+                    #worldmap-container .leaflet-pane { background: transparent !important; }
+                    /* Ensure any child overlays (like Spain) can stack above comfortably */
+                    #worldmap-container { position: relative; z-index: 1; }
+                    /* IMPORTANTE: Antes ocultábamos todos los controles. Se elimina para que aparezcan la leyenda (bottom-left) y la tabla Top10 (bottom-right). */
+                    /* Ajustes opcionales de tamaño/z-index */
+                    #worldmap-container .leaflet-control { font-size: 0.72rem; }
+                    #worldmap-container .worldmap-legend { font-size: 0.72rem; }
+                </style>
             </div>
         </div>
     </div>
