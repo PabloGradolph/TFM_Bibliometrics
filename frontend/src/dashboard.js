@@ -2301,16 +2301,25 @@ export function initFiltersAndSearch() {
     let renderer = null;
     let showAllLabels = false; // Estado para controlar la visualización de todas las etiquetas
 
-    // Event listener para el botón de mostrar/ocultar etiquetas
+    // Event listener para el botón de mostrar/ocultar etiquetas (con detección robusta de idioma)
     const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
-    const currentLang = window.location.pathname.split('/')[1];
-    const extraLabels = currentLang === 'es' ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
-    const allLabels = currentLang === 'es' ? 'Mostrar etiquetas' : 'Show All Labels';
     if (toggleLabelsBtn) {
+        // Establecer texto inicial acorde al idioma y estado
+        (function setInitialToggleLabel(){
+            const langInit = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
+            toggleLabelsBtn.textContent = (langInit === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
+        })();
+
         toggleLabelsBtn.addEventListener('click', () => {
-            if (!renderer) return; // Asegurarse de que el renderer existe
+            if (!renderer) {
+                console.warn('[LabelsToggle] Renderer no inicializado todavía');
+                return; // Asegurarse de que el renderer existe
+            }
 
             showAllLabels = !showAllLabels; // Alternar el estado
+            const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
+            const txtShow = (lang === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
+            const txtHide = (lang === 'es') ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
 
             if (showAllLabels) {
                 // Mostrar todas las etiquetas: ajustar settings para forzar renderizado
@@ -2319,19 +2328,17 @@ export function initFiltersAndSearch() {
                     labelGridCellSize: 1,
                     labelRenderedSizeThreshold: 0
                 });
-                // Actualizar texto del botón
-                toggleLabelsBtn.textContent = `${extraLabels}`;
+                toggleLabelsBtn.textContent = txtHide;
             } else {
-                // Volver al comportamiento por defecto (ocultar algunas etiquetas)
-                // Restaurar settings por defecto o los que generan el comportamiento deseado
-                 renderer.setSettings({
+                // Restaurar comportamiento por defecto
+                renderer.setSettings({
                     labelDensity: 1,
                     labelGridCellSize: 200,
                     labelRenderedSizeThreshold: 0
                 });
-                 // Actualizar texto del botón
-                toggleLabelsBtn.textContent = `${allLabels}`;
+                toggleLabelsBtn.textContent = txtShow;
             }
+            console.log('[LabelsToggle] Estado showAllLabels=', showAllLabels, 'Idioma=', lang, 'Texto=', toggleLabelsBtn.textContent);
             renderer.refresh();
         });
     }
@@ -2375,12 +2382,25 @@ export function initFiltersAndSearch() {
         });
     });
 
+    // Helper para detección robusta del idioma (evita asumir índice fijo en el path)
+    function detectLangFromPath() {
+        try {
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            const found = parts.find(p => p === 'es' || p === 'en');
+            return found || 'es';
+        } catch (e) {
+            console.warn('[LangDetection] Error detectando idioma, se usa "es" por defecto:', e);
+            return 'es';
+        }
+    }
+
     function updateCollaborationNetwork(data) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
     
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
-        const currentLang = window.location.pathname.split('/')[1];
+        const currentLang = detectLangFromPath();
+        console.log('[Network] Actualizando red. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         const toggleButton = document.getElementById('toggleFullNetworkBtn');
     
         if (data.is_author_view) {
@@ -2650,7 +2670,11 @@ export function initFiltersAndSearch() {
                 title.textContent = currentLang === 'es'
                     ? `Comunidades (${k})`
                     : `Communities (${k})`;
+            } else {
+                // Fallback genérico
+                title.textContent = currentLang === 'es' ? 'Comunidades' : 'Communities';
             }
+            console.log('[Network][Legend] Título leyenda:', title.textContent, 'Idioma=', currentLang);
         
             legend.appendChild(title);
 
@@ -2713,7 +2737,7 @@ export function initFiltersAndSearch() {
         
                     const label = document.createElement('span');
                     if (comm === -1 || isNaN(comm)) {
-                        label.textContent = currentLang === 'es' ? 'Outlier' : 'Outlier';
+                        label.textContent = currentLang === 'es' ? 'Atípico' : 'Outlier';
                     } else {
                         const num = (window.currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
                         const word = currentLang === 'es' ? 'Comunidad' : 'Community';
@@ -2723,6 +2747,7 @@ export function initFiltersAndSearch() {
                     item.appendChild(colorBox);
                     item.appendChild(label);
                     legend.appendChild(item);
+                    console.log('[Network][Legend] Añadida entrada leyenda:', label.textContent, 'Comm ID=', comm);
                 });
             }
         
@@ -2878,35 +2903,45 @@ export function initFiltersAndSearch() {
     
     function updateCommunityDropdownText(model = null, nClusters = null) {
         const dropdownButton = document.getElementById('communityViewDropdown');
-        const currentLang = window.location.pathname.split('/')[1];
+        if (!dropdownButton) {
+            console.warn('[CommunityDropdown] Botón no encontrado');
+            return;
+        }
+        const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
         let text = '';
+        console.log('[CommunityDropdown] Vista actual=', window.currentCommunityView, 'FullNetwork=', isFullNetwork, 'Lang=', currentLang);
 
         if (window.currentCommunityView === 'department') {
             text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
         } else if (window.currentCommunityView === 'modularity-7') {
-            text = currentLang === 'es' 
-                ? (isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)')
-                : (isFullNetwork ? 'Louvain' : 'Louvain (7 communities)');
+            if (currentLang === 'es') {
+                text = isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)';
+            } else {
+                text = isFullNetwork ? 'Louvain' : 'Louvain (7 communities)';
+            }
         } else if (window.currentCommunityView === 'modularity-5') {
-            text = currentLang === 'es' 
-                ? (isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)')
-                : (isFullNetwork ? 'Leiden' : 'Leiden (5 communities)');
+            if (currentLang === 'es') {
+                text = isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)';
+            } else {
+                text = isFullNetwork ? 'Leiden' : 'Leiden (5 communities)';
+            }
         } else if (window.currentCommunityView === 'keywords') {
             const modelName = model || window.currentClusteringModel;
             const nClustersValue = nClusters || window.currentNClusters;
             if (modelName && nClustersValue) {
-                text = currentLang === 'es'
-                    ? `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`
-                    : `By keywords (${modelName}, ${nClustersValue} clusters)`;
+                if (currentLang === 'es') {
+                    text = `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`;
+                } else {
+                    text = `By keywords (${modelName}, ${nClustersValue} clusters)`;
+                }
             } else {
                 text = currentLang === 'es' ? 'Por palabras clave' : 'By keywords';
             }
         }
 
         dropdownButton.textContent = text;
+        console.log('[CommunityDropdown] Texto aplicado=', text);
     }
-    
-    
     
     function updateFilters() {
         const params = new URLSearchParams();
@@ -3050,7 +3085,8 @@ export function initFiltersAndSearch() {
     document.getElementById('toggleFullNetworkBtn').addEventListener('click', function() {
         const button = this;
         const container = document.getElementById('collaborationNetwork');
-        const currentLang = window.location.pathname.split('/')[1];
+        const currentLang = detectLangFromPath();
+        console.log('[Network][ToggleFull] Click. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         
         // Deshabilitar el botón y mostrar spinner
         button.disabled = true;
@@ -3092,6 +3128,7 @@ export function initFiltersAndSearch() {
         cardTitle.textContent = currentLang === 'es'
             ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
             : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
+        console.log('[Network][ToggleFull] Nuevo título card:', cardTitle.textContent);
         
         // Actualizar la red con el nuevo modo
         const params = new URLSearchParams({
