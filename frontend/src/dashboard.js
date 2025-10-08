@@ -144,19 +144,25 @@ export function initFiltersAndSearch() {
             });
         }
 
-        // Actualizar descripción del modelo actual
-        if (clusteringModel && modelDescription) {
-            modelDescription.textContent = modelDescriptions[clusteringModel.value] || '';
-        }
+        // Actualizar descripción del modelo actual (delegado a función central)
+        updateModelDescription();
+    }
+
+    // Función central para actualizar la descripción del modelo según selección e idioma
+    function updateModelDescription() {
+        if (!clusteringModel || !modelDescription) return;
+        const langDetected = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en');
+        const modelDescriptionsDict = langDetected === 'es' ? spanishModelDescriptions : englishModelDescriptions;
+        modelDescription.textContent = modelDescriptionsDict[clusteringModel.value] || '';
     }
 
     // Event listeners para el modal de clustering
     if (clusteringModel && modelDescription) {
+        // Inicializar al cargar
+        updateModelDescription();
         clusteringModel.addEventListener('change', function() {
+            updateModelDescription();
             const selectedModel = this.value;
-            const modelDescriptions = currentLang === 'es' ? spanishModelDescriptions : englishModelDescriptions;
-            modelDescription.textContent = modelDescriptions[selectedModel] || '';
-            
             // Mostrar/ocultar opciones específicas según el modelo
             if (selectedModel === 'dbscan') {
                 rangeContainer.classList.add('d-none');
@@ -184,6 +190,11 @@ export function initFiltersAndSearch() {
 
     // Event listener para el modo de configuración global
     if (manualMode && globalBestMode && manualConfigContainer) {
+        // Estado inicial: seleccionar Mejor Configuración Global
+        globalBestMode.checked = true;
+        manualMode.checked = false;
+        manualConfigContainer.classList.add('d-none');
+
         manualMode.addEventListener('change', function() {
             if (this.checked) {
                 manualConfigContainer.classList.remove('d-none');
@@ -223,6 +234,15 @@ export function initFiltersAndSearch() {
     if (clusteringModal) {
         clusteringModal.addEventListener('show.bs.modal', function() {
             updateModalTexts();
+            // Reafirmar estado inicial cada vez que se abre el modal
+            if (globalBestMode && manualMode && manualConfigContainer) {
+                if (!globalBestMode.checked && !manualMode.checked) {
+                    globalBestMode.checked = true;
+                }
+                if (globalBestMode.checked) {
+                    manualConfigContainer.classList.add('d-none');
+                }
+            }
         });
     }
 

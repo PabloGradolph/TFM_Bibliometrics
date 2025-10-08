@@ -353,6 +353,27 @@ msgstr "Visitar Portfolio de Pablo"
 msgid "Select Clustering Model"
 msgstr "Selección del Modelo de Clustering"
 
+msgid "Global Best Configuration"
+msgstr "Mejor Configuración Global"
+
+msgid "Manual Configuration"
+msgstr "Configuración Manual"
+
+msgid "Clustering Model"
+msgstr "Modelo de Clustering"
+
+msgid "Best Configuration"
+msgstr "Mejor configuración"
+
+msgid "Number of Clusters"
+msgstr "Número de Clusters"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Apply"
+msgstr "Aplicar"
+
 msgid "Configuration Mode"
 msgstr "Modo de configuración"
 

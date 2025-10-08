@@ -3,7 +3,14 @@ export function setupExportReportButton() {
     if (!exportBtn) return;
 
     // Detectar idioma por la URL
-    const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
+    // Robust language detection (reuse global helper if present)
+    const lang = (typeof detectLangFromPath === 'function')
+        ? detectLangFromPath()
+        : (function(){
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            // Accept 'es' explicitly; default to 'en'
+            return parts.includes('es') ? 'es' : 'en';
+        })();
     const texts = {
         es: {
             title: 'Exportar informe',
