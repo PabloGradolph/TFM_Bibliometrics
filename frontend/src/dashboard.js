@@ -851,7 +851,8 @@ export function initFiltersAndSearch() {
                     quartileFilter.innerHTML = '';
                     const anyOpt = document.createElement('option');
                     anyOpt.value = '';
-                    anyOpt.textContent = (lang === 'es') ? 'Todos los cuartiles' : 'All quartiles';
+                    const qLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                    anyOpt.textContent = qLang === 'es' ? 'Todos los cuartiles' : 'All quartiles';
                     quartileFilter.appendChild(anyOpt);
                     data.quartiles.forEach(q => {
                         const option = document.createElement('option');
@@ -1218,7 +1219,7 @@ export function initFiltersAndSearch() {
 
                 const { data: publications, pagination: paginationData } = data.publications;
 
-                // Ordenar las métricas en un orden específico
+                // Ordenar las métricas en un orden específico (keys fijos para backend / ordenación)
                 const orderedMetrics = [
                     { key: 'Dimensions Citations', label: 'Dimensions Citations' },
                     { key: 'WoS Citations', label: 'WoS Citations' },
@@ -1228,14 +1229,38 @@ export function initFiltersAndSearch() {
                     { key: 'International Collaboration', label: 'International Collaboration' }
                 ];
 
-                // Crear el encabezado de la tabla con iconos de ordenación
+                // Traducciones encabezados (bilingüe)
+                const langCodeForTable = typeof detectLangFromPath === 'function' ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                const metricTranslations = {
+                    es: {
+                        title: 'Título',
+                        'Dimensions Citations': 'Citas Dimensions',
+                        'WoS Citations': 'Citas WoS',
+                        'Scopus Citations': 'Citas Scopus',
+                        'International Collaboration': 'Colaboración Internacional',
+                        FCR: 'FCR',
+                        RCR: 'RCR'
+                    },
+                    en: {
+                        title: 'Title',
+                        'Dimensions Citations': 'Dimensions Citations',
+                        'WoS Citations': 'WoS Citations',
+                        'Scopus Citations': 'Scopus Citations',
+                        'International Collaboration': 'International Collaboration',
+                        FCR: 'FCR',
+                        RCR: 'RCR'
+                    }
+                };
+                const t = (k) => (metricTranslations[langCodeForTable] && metricTranslations[langCodeForTable][k]) || k;
+
+                // Crear el encabezado de la tabla con iconos de ordenación (texto según idioma)
                 const tableHeader = document.createElement('thead');
                 tableHeader.innerHTML = `
                     <tr>
-                        <th style="max-width: 300px;">Título</th>
+                        <th style="max-width: 300px;">${t('title')}</th>
                         ${orderedMetrics.map(({ key, label }) => `
                             <th class="sortable" data-metric="${key}">
-                                ${label}
+                                ${t(key)}
                                 <i class="fas fa-sort${currentSort.metric === key ? `-${currentSort.direction === 'desc' ? 'down' : 'up'}` : ''} ms-1"></i>
                             </th>
                         `).join('')}
@@ -2680,7 +2705,10 @@ export function initFiltersAndSearch() {
 
             const counts = document.createElement('div');
             counts.style.marginBottom = '8px';
-            counts.textContent = `${data.nodes.length} nodos / ${data.edges.length} enlaces`;
+            // Bilingual counts (nodes / edges) depending on currentLang
+            const nodeWord = currentLang === 'es' ? 'nodos' : 'nodes';
+            const edgeWord = currentLang === 'es' ? 'enlaces' : 'edges';
+            counts.textContent = `${data.nodes.length} ${nodeWord} / ${data.edges.length} ${edgeWord}`;
             legend.appendChild(counts);
         
             if (window.currentCommunityView === 'department') {
@@ -3012,7 +3040,8 @@ export function initFiltersAndSearch() {
 
                 // Actualizar cuartiles
                 if (quartileFilter) {
-                    const allQuartiles = currentLang === 'es' ? 'Todos los cuartiles' : 'All quartiles';
+                    const qLang2 = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                    const allQuartiles = qLang2 === 'es' ? 'Todos los cuartiles' : 'All quartiles';
                     quartileFilter.innerHTML = `<option value="">${allQuartiles}</option>`;
                     (data.quartiles || []).forEach(q => {
                         const option = document.createElement('option');
@@ -3285,8 +3314,8 @@ export function initFiltersAndSearch() {
     // Textos para el botón (es/en)
     const predictedAreasBtnTexts = {
         es: {
-            include: 'Incluir áreas temáticas predichas por IA',
-            exclude: 'Excluir áreas temáticas predichas por IA'
+            include: 'Incluir áreas predichas por IA',
+            exclude: 'Excluir áreas predichas por IA'
         },
         en: {
             include: 'Include AI-predicted areas',
@@ -3295,10 +3324,11 @@ export function initFiltersAndSearch() {
     };
 
     function updatePredictedAreasBtnText() {
-        const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
         const btn = document.getElementById('togglePredictedAreasBtn');
         if (!btn) return;
-        btn.textContent = includePredictedAreas ? predictedAreasBtnTexts[lang].exclude : predictedAreasBtnTexts[lang].include;
+        const langCode = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : ((window.location.pathname.split('/').filter(Boolean).includes('es')) ? 'es' : 'en');
+        const dict = predictedAreasBtnTexts[langCode] || predictedAreasBtnTexts.en;
+        btn.textContent = includePredictedAreas ? dict.exclude : dict.include;
     }
 
     function showAreasLoading() {
@@ -3358,12 +3388,18 @@ export function initFiltersAndSearch() {
                         // Show Spain overlay and refresh sizes
                         setSpainMapVisible(true);
                         // Optionally hide world map tooltips/overlays if needed
-                        if (titleEl) titleEl.textContent = 'National Collaborations';
+                        if (titleEl) {
+                            const langMap = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                            titleEl.textContent = langMap === 'es' ? 'Colaboraciones Nacionales' : 'National Collaborations';
+                        }
                 } else {
                     spainGroup?.classList.add('d-none');
                         // Hide Spain overlay when switching back to world
                         setSpainMapVisible(false);
-                        if (titleEl) titleEl.textContent = 'International Collaborations';
+                        if (titleEl) {
+                            const langMap = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                            titleEl.textContent = langMap === 'es' ? 'Colaboraciones Internacionales' : 'International Collaborations';
+                        }
                 }
                 window.currentMapView = view;
                 // Refresh visualizations to load the right counts for the selected view

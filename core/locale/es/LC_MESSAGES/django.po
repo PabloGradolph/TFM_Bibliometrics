@@ -233,8 +233,8 @@ msgstr "Búsqueda inteligente (IA)"
 msgid "Coming Soon"
 msgstr "Próximamente"
 
-msgid "Ask anything about the publications..."
-msgstr "Pregunta cualquier cosa sobre las publicaciones..."
+msgid "Publications most similar to your query..."
+msgstr "Publicaciones más similares a tu consulta..."
 
 msgid "Clear Filters"
 msgstr "Limpiar filtros"
@@ -275,8 +275,32 @@ msgstr "Citas WoS"
 msgid "Scopus Citations"
 msgstr "Citas Scopus"
 
+msgid "Citations"
+msgstr "Citas"
+
+msgid "All quartiles"
+msgstr "Todos los cuartiles"
+
 msgid "International Collaboration"
 msgstr "Colaboración Internacional"
+
+msgid "International Collaborations"
+msgstr "Colaboraciones Internacionales"
+
+msgid "National Collaborations"
+msgstr "Colaboraciones Nacionales"
+
+msgid "World"
+msgstr "Mundo"
+
+msgid "Spain"
+msgstr "España"
+
+msgid "Autonomous Communities"
+msgstr "Comunidades Autónomas"
+
+msgid "Provinces"
+msgstr "Provincias"
 
 msgid "Community View"
 msgstr "Vista de Comunidades"
@@ -463,3 +487,60 @@ msgstr "Guía Técnica (PDF)"
 
 msgid "Log in to the application"
 msgstr "Inicia sesión en la aplicación"
+
+msgid "Back to Dashboard"
+msgstr "Volver al Panel de Control"
+
+msgid "View Publication Gesbib"
+msgstr "Ver la Publicación en Gesbib"
+
+msgid "Authors and Affiliations"
+msgstr "Autores y Afiliaciones"
+
+msgid "Affiliations (Raw)"
+msgstr "Lista de Afiliaciones"
+
+msgid "Identifiers and Topics"
+msgstr "Identificadores y Temas"
+
+msgid "Thematic Areas"
+msgstr "Áreas Temáticas"
+
+msgid "JCR Areas"
+msgstr "Áreas JCR"
+
+msgid "Keywords"
+msgstr "Palabras clave"
+
+msgid "External Sources"
+msgstr "Enlaces Externos"
+
+msgid "Metrics, Collaboration and Citations"
+msgstr "Métricas, Colaboraciones y Citas"
+
+msgid "Source"
+msgstr "Fuente"
+
+msgid "Type"
+msgstr "Tipo"
+
+msgid "Percentile"
+msgstr "Percentil"
+
+msgid "Position"
+msgstr "Posición"
+
+msgid "Journal"
+msgstr "Revista"
+
+msgid "Total Citations"
+msgstr "Citas Totales"
+
+msgid "Countries"
+msgstr "Países"
+
+msgid "Spanish Affils"
+msgstr "Afiliaciones Españolas"
+
+msgid "Foreign Affils"
+msgstr "Afilicaciones Extranjeras"

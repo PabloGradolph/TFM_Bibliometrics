@@ -35,12 +35,35 @@ if (typeof document !== 'undefined' && !document.getElementById('worldmap-focus-
 const WORLD_MAP_THRESHOLDS = [0.05,0.15,0.30,0.45,0.60,0.75,0.90,1.0];
 const WORLD_MAP_COLORS = ['#fff5e6','#ffe6cc','#ffcf99','#ffb566','#ff9c33','#ff8800','#f06d00','#d45500'];
 
+// Robust language detection (mirrors dashboard.js helper). Falls back to 'en' if not found.
+function detectLangFromPath() {
+    try {
+        if (typeof window === 'undefined' || !window.location) return 'en';
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        const found = parts.find(p => p === 'es' || p === 'en');
+        return found || 'en';
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        return 'en';
+    }
+}
+
+// Centralized i18n terms used in this module
+const I18N = {
+    legendTitle: { es: 'Publicaciones', en: 'Publications' },
+    noData: { es: 'Sin datos', en: 'No data' },
+    top10Title: { es: 'Top 10 países', en: 'Top 10 countries' },
+    colCountry: { es: 'País', en: 'Country' },
+    colItems: { es: 'Núm.', en: 'Items' },
+    tooltipPubs: { es: 'Publicaciones', en: 'Publications' }
+};
+const tWM = (key) => I18N[key][detectLangFromPath()] || I18N[key].en;
+
 function buildLegendHTML(maxCount) {
     if (!maxCount || maxCount < 1) {
-        return '<div style="font-size:11px;">No data</div>';
+        return `<div style="font-size:11px;">${tWM('noData')}</div>`;
     }
-    const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
-    let html = '<div class="worldmap-legend"><div style="font-weight:600;margin-bottom:4px;">' + (isES ? 'Publicaciones' : 'Publications') + '</div>';
+    let html = `<div class="worldmap-legend"><div style="font-weight:600;margin-bottom:4px;">${tWM('legendTitle')}</div>`;
     WORLD_MAP_THRESHOLDS.forEach((t,i)=>{
         const prev = i===0 ? 0 : WORLD_MAP_THRESHOLDS[i-1];
         const minCount = Math.max(1, Math.round(Math.pow(maxCount, prev||0.001)));
@@ -323,9 +346,8 @@ export function initWorldMap(containerId, activeCountries = []) {
     // Eliminamos el límite de altura para que no aparezca scroll y se vean los 10 países
     div.style.maxHeight = 'none';
     div.style.overflow = 'visible';
-        const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
-        const title = currentLang === 'es' ? 'Top 10 países' : 'Top 10 countries';
-        div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${title}</div><div style="font-size:11px;color:#666;">—</div>`;
+    const title = tWM('top10Title');
+    div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${title}</div><div style="font-size:11px;color:#666;">—</div>`;
         worldMapRegistry.top10El = div; // reutilizamos la referencia
         return div;
     };
@@ -443,8 +465,7 @@ export function initWorldMap(containerId, activeCountries = []) {
                         const count = worldMapRegistry.countsByIsoA2[iso2] || 0;
                         if (count > 0) {
                             // Determine language from pathname
-                            const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
-                            const pubsLabel = currentLang === 'es' ? 'publicaciones' : 'publications';
+                            const pubsLabel = tWM('tooltipPubs');
                             return `${name}: ${count} ${pubsLabel}`;
                         }
                         return `${name}`;
@@ -810,11 +831,11 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
                 ? window.worldMapFilteredTotal
                 : null;
             const denominator = (filteredTotal && filteredTotal > 0) ? filteredTotal : (totalAllExES > 0 ? totalAllExES : 0);
-            const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
-            const colCountry = currentLang === 'es' ? 'País' : 'Country';
-            const colItems = currentLang === 'es' ? 'Núm.' : 'Items';
-            const colPct = currentLang === 'es' ? '%' : '%';
-            const caption = currentLang === 'es' ? 'Top 10 países' : 'Top 10 countries';
+            const currentLang = detectLangFromPath();
+            const colCountry = tWM('colCountry');
+            const colItems = tWM('colItems');
+            const colPct = '%';
+            const caption = tWM('top10Title');
             if (!entries.length) {
                 worldMapRegistry.top10El.innerHTML = `<div style=\"font-weight:600;font-size:12px;margin-bottom:4px;\">${caption}</div><div style=\"font-size:11px;color:#666;\">—</div>`;
             } else {
@@ -894,8 +915,7 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
         // Refresh tooltip content
         if (typeof lyr.setTooltipContent === 'function' || (typeof lyr.getTooltip === 'function' && lyr.getTooltip())) {
             const name = resolveName(f);
-            const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1]) || 'en';
-            const pubsLabel = currentLang === 'es' ? 'publicaciones' : 'publications';
+            const pubsLabel = tWM('tooltipPubs');
             const content = count > 0 ? `${name}: ${count} ${pubsLabel}` : `${name}`;
             if (typeof lyr.setTooltipContent === 'function') {
                 lyr.setTooltipContent(content);

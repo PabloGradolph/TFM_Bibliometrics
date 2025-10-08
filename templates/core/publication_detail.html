@@ -78,10 +78,10 @@
                         </p>
                     {% endif %}
                     {% if publication.jcr_materias %}
-                        <p><strong>JCR Areas:</strong> {{ publication.jcr_materias|join:", " }}</p>
+                        <p><strong>{% trans "JCR Areas" %}:</strong> {{ publication.jcr_materias|join:", " }}</p>
                     {% endif %}
                     {% if publication.keywords_all %}
-                        <p><strong>Keywords:</strong> {{ publication.keywords_all|join:", " }}</p>
+                        <p><strong>{% trans "Keywords" %}:</strong> {{ publication.keywords_all|join:", " }}</p>
                     {% endif %}
                     {% if zipped_links %}
                         <div class="mt-3">

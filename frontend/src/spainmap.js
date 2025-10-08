@@ -29,10 +29,33 @@ if (typeof document !== 'undefined' && !document.getElementById('spainmap-focus-
 const COLORS = ['#fff5e6','#ffe6cc','#ffcf99','#ffb566','#ff9c33','#ff8800','#f06d00','#d45500'];
 const THRESH = [0.05,0.15,0.30,0.45,0.60,0.75,0.90,1.0];
 
+// --- Language & i18n helpers ---
+function detectLangFromPath() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return 'es';
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const found = parts.find(p => p === 'es' || p === 'en');
+    return found || 'es';
+  } catch (e) {
+    try { console.warn('[SpainMap][LangDetection] Error, fallback es', e); } catch (_) {/* noop */}
+    return 'es';
+  }
+}
+const I18N_SM = {
+  legendTitle: { es: 'Publicaciones', en: 'Publications' },
+  noData: { es: 'Sin datos', en: 'No data' },
+  top10Communities: { es: 'Top 10 comunidades', en: 'Top 10 communities' },
+  top10Provinces: { es: 'Top 10 provincias', en: 'Top 10 provinces' },
+  colCommunity: { es: 'Comunidad', en: 'Community' },
+  colProvince: { es: 'Provincia', en: 'Province' },
+  colItems: { es: 'Núm.', en: 'Items' },
+  pubs: { es: 'publicaciones', en: 'publications' }
+};
+const tSM = (key) => I18N_SM[key][detectLangFromPath()] || I18N_SM[key].es;
+
 function buildLegendHTML(maxCount) {
-  if (!maxCount || maxCount < 1) return '<div style="font-size:11px;">No data</div>';
-  const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
-  let html = '<div class="spainmap-legend"><div style="font-weight:600;margin-bottom:4px;">' + (isES ? 'Publicaciones' : 'Publications') + '</div>';
+  if (!maxCount || maxCount < 1) return `<div style="font-size:11px;">${tSM('noData')}</div>`;
+  let html = `<div class="spainmap-legend"><div style="font-weight:600;margin-bottom:4px;">${tSM('legendTitle')}</div>`;
   THRESH.forEach((t,i)=>{
     const prev = i===0 ? 0 : THRESH[i-1];
     const minCount = Math.max(1, Math.round(Math.pow(maxCount, prev||0.001)));
@@ -173,12 +196,12 @@ function updateLegend(ctrl) {
 function updateTop10() {
   try {
     if (!registry.top10El) return;
-    const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
-    const isCCAA = registry.activeLevel === 'ccaa';
-    const title = isES ? (isCCAA ? 'Top 10 comunidades' : 'Top 10 provincias') : (isCCAA ? 'Top 10 communities' : 'Top 10 provinces');
-    const colName = isES ? (isCCAA ? 'Comunidad' : 'Provincia') : (isCCAA ? 'Community' : 'Province');
-    const colItems = isES ? 'Núm.' : 'Items';
-    const colPct = '%';
+  const lang = detectLangFromPath();
+  const isCCAA = registry.activeLevel === 'ccaa';
+  const title = isCCAA ? tSM('top10Communities') : tSM('top10Provinces');
+  const colName = isCCAA ? tSM('colCommunity') : tSM('colProvince');
+  const colItems = tSM('colItems');
+  const colPct = '%';
 
     const counts = isCCAA ? (registry.countsCCAACanonical || {}) : (registry.countsProvCanonical || {});
     const nameMap = isCCAA ? (registry.ccaaCanonicalToDisplay || {}) : (registry.provCanonicalToDisplay || {});
@@ -285,9 +308,8 @@ export function initSpainMap(containerId) {
     div.style.maxWidth = '280px';
     div.style.maxHeight = 'none';
     div.style.overflow = 'visible';
-    const isES = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es');
-    const initialTitle = isES ? 'Top 10 comunidades' : 'Top 10 communities';
-    div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${initialTitle}</div><div style="font-size:11px;color:#666;">—</div>`;
+  const initialTitle = registry.activeLevel === 'ccaa' ? tSM('top10Communities') : tSM('top10Provinces');
+  div.innerHTML = `<div style="font-weight:600;font-size:12px;margin-bottom:4px;">${initialTitle}</div><div style="font-size:11px;color:#666;">—</div>`;
     registry.top10El = div;
     return div;
   };
@@ -361,7 +383,7 @@ export function initSpainMap(containerId) {
         lyr.bindTooltip(() => {
           const key = canonicalKey(name);
           const count = registry.countsCCAACanonical[key] || 0;
-          const pubsLabel = 'publicaciones';
+          const pubsLabel = tSM('pubs');
           return count > 0 ? `${name}: ${count} ${pubsLabel}` : `${name}`;
         }, { sticky: true });
       }
@@ -374,7 +396,7 @@ export function initSpainMap(containerId) {
         lyr.bindTooltip(() => {
           const key = canonicalKey(name);
           const count = registry.countsProvCanonical[key] || 0;
-          const pubsLabel = 'publicaciones';
+          const pubsLabel = tSM('pubs');
           return count > 0 ? `${name}: ${count} ${pubsLabel}` : `${name}`;
         }, { sticky: true });
       }
