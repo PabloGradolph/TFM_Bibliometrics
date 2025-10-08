@@ -868,7 +868,9 @@ export function initFiltersAndSearch() {
                     if (help) {
                         const minC = data.citations_range.min || 0;
                         const maxC = data.citations_range.max || 0;
-                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                        const langRange = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                        const rangeLabel = langRange === 'es' ? 'Rango disponible' : 'Available range';
+                        help.textContent = `${rangeLabel}: ${minC} - ${maxC}`;
                         if (citationsFrom) citationsFrom.placeholder = minC;
                         if (citationsTo) citationsTo.placeholder = maxC;
                     }
@@ -1555,11 +1557,26 @@ export function initFiltersAndSearch() {
                 
                 let tooltipContent;
                 if (viewType === 'monthly') {
-                    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                    tooltipContent = `<b>${months[d.month - 1]}</b><br><b>Publicaciones:</b> ${d.count}`;
+                    const months = (function(){
+                        const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                        const monthsES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                        const monthsEN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        return langTL === 'es' ? monthsES : monthsEN;
+                    })();
+                    const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    const TL_I18N_LOCAL = {
+                        publications: { es: 'Publicaciones', en: 'Publications' }
+                    };
+                    const tLoc = (k) => (TL_I18N_LOCAL[k] && TL_I18N_LOCAL[k][langTL]) || k;
+                    tooltipContent = `<b>${months[d.month - 1]}</b><br><b>${tLoc('publications')}:</b> ${d.count}`;
                 } else {
-                    tooltipContent = `<b>Año:</b> ${d.year}<br><b>Publicaciones:</b> ${d.count}`;
+                    const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    const TL_I18N_LOCAL = {
+                        year: { es: 'Año', en: 'Year' },
+                        publications: { es: 'Publicaciones', en: 'Publications' }
+                    };
+                    const tLoc = (k) => (TL_I18N_LOCAL[k] && TL_I18N_LOCAL[k][langTL]) || k;
+                    tooltipContent = `<b>${tLoc('year')}:</b> ${d.year}<br><b>${tLoc('publications')}:</b> ${d.count}`;
                 }
                 
                 tooltip.innerHTML = tooltipContent;
@@ -1606,16 +1623,29 @@ export function initFiltersAndSearch() {
                 // Mostrar el nuevo info box
                 let infoBoxContent;
                 if (viewType === 'monthly') {
-                    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                    const months = (function(){
+                        const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                        const monthsES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                        const monthsEN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        return langTL === 'es' ? monthsES : monthsEN;
+                    })();
+                    const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    const TL_I18N_LOCAL = { publications: { es: 'Publicaciones', en: 'Publications' } };
+                    const tLoc = (k) => (TL_I18N_LOCAL[k] && TL_I18N_LOCAL[k][langTL]) || k;
                     infoBoxContent = `
                         <div style="font-weight: bold; margin-bottom: 5px;">${months[d.month - 1]}</div>
-                        <div>Publicaciones: ${d.count}</div>
+                        <div>${tLoc('publications')}: ${d.count}</div>
                     `;
                 } else {
+                    const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    const TL_I18N_LOCAL = {
+                        year: { es: 'Año', en: 'Year' },
+                        publications: { es: 'Publicaciones', en: 'Publications' }
+                    };
+                    const tLoc = (k) => (TL_I18N_LOCAL[k] && TL_I18N_LOCAL[k][langTL]) || k;
                     infoBoxContent = `
-                        <div style="font-weight: bold; margin-bottom: 5px;">Año ${d.year}</div>
-                        <div>Publicaciones: ${d.count}</div>
+                        <div style="font-weight: bold; margin-bottom: 5px;">${tLoc('year')} ${d.year}</div>
+                        <div>${tLoc('publications')}: ${d.count}</div>
                     `;
                 }
                 
@@ -1646,7 +1676,18 @@ export function initFiltersAndSearch() {
             }
         });
 
-        // Añadir título del eje Y
+        // Diccionario i18n para timeline y tooltips
+        const langTL = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+        const TL_I18N = {
+            yAxis: { es: 'Número de publicaciones', en: 'Number of publications' },
+            xMonth: { es: 'Mes', en: 'Month' },
+            xYear: { es: 'Año', en: 'Year' },
+            publications: { es: 'Publicaciones', en: 'Publications' },
+            yearLabel: { es: 'Año', en: 'Year' }
+        };
+        const tTL = (k) => (TL_I18N[k] && TL_I18N[k][langTL]) || k;
+
+        // Añadir título del eje Y (bilingüe)
         svg.append('text')
             .attr('transform', 'rotate(-90)')
             // Move further left (more negative) so it does not overlap the axis ticks
@@ -1655,15 +1696,15 @@ export function initFiltersAndSearch() {
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
-            .text('Número de publicaciones');
+            .text(tTL('yAxis'));
 
-        // Añadir título del eje X
+        // Añadir título del eje X (bilingüe)
         svg.append('text')
             .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 30})`)
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
-            .text(viewType === 'monthly' ? 'Mes' : 'Año');
+            .text(viewType === 'monthly' ? tTL('xMonth') : tTL('xYear'));
 
         // Añadir mensaje informativo sobre publicaciones sin mes
         if (viewType === 'monthly' && timelineInfo && timelineInfo.no_month_count > 0) {
@@ -1688,14 +1729,21 @@ export function initFiltersAndSearch() {
             const percentage = ((timelineInfo.no_month_count / timelineInfo.total_count) * 100).toFixed(1);
             
             // Crear el contenido del mensaje
-            infoMessage.html(`
-                <div style="flex-grow: 1;">
-                    <i class="fas fa-info-circle"></i>
-                    ${timelineInfo.no_month_count} publicación(es) sin mes asignado 
-                    se han contabilizado en enero
-                </div>
-                <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
-            `);
+            (function(){
+                const langInfo = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                const I18N_MISSING_MONTH = {
+                    part1: { es: 'publicación(es) sin mes asignado', en: 'publication(s) without an assigned month' },
+                    part2: { es: 'se han contabilizado en enero', en: 'have been counted in January' }
+                };
+                const txt = `${timelineInfo.no_month_count} ${I18N_MISSING_MONTH.part1[langInfo]} ${I18N_MISSING_MONTH.part2[langInfo]}`;
+                infoMessage.html(`
+                    <div style="flex-grow: 1;">
+                        <i class="fas fa-info-circle"></i>
+                        ${txt}
+                    </div>
+                    <button type="button" class="btn-close" style="font-size: 0.7rem;" aria-label="Close"></button>
+                `);
+            })();
 
             // Añadir evento para cerrar el mensaje
             infoMessage.select('.btn-close').on('click', function() {
@@ -1737,7 +1785,10 @@ export function initFiltersAndSearch() {
                 const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
                 const origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
                 const titleText = document.querySelector('[data-view].active')?.textContent || 'Timeline';
-                const exportTitle = 'Línea de tiempo de publicaciones';
+                const exportTitle = (function(){
+                    const langExp = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    return langExp === 'es' ? 'Línea de tiempo de publicaciones' : 'Publications timeline';
+                })();
                 const titleMargin = 40; // space for title
                 const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -1836,7 +1887,11 @@ export function initFiltersAndSearch() {
                 const origWidth = parseInt(clone.getAttribute('width')) || container.clientWidth;
                 let origHeight = parseInt(clone.getAttribute('height')) || container.clientHeight;
                 const isBar = document.querySelector('[data-areas-view="bar"]')?.classList.contains('active');
-                const exportTitle = isBar ? 'Distribución de áreas (Barras)' : 'Distribución de áreas (Circular)';
+                const exportTitle = (function(){
+                    const langExp2 = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                    if (langExp2 === 'es') return isBar ? 'Distribución de áreas (Barras)' : 'Distribución de áreas (Circular)';
+                    return isBar ? 'Areas distribution (Bars)' : 'Areas distribution (Pie)';
+                })();
                 const titleMargin = 40;
                 // Reduced extra margins (user request: "algo menos")
                 const bottomExtra = isBar ? 130 : 0;  // was 170
@@ -1954,6 +2009,22 @@ export function initFiltersAndSearch() {
         });
     })();
 
+    // -------------------------------------------------------------
+    // i18n dictionary for Areas (Pie & Bar) charts
+    // -------------------------------------------------------------
+    const AREAS_I18N = {
+        publications: { es: 'Publicaciones', en: 'Publications' },
+        percentage: { es: 'Porcentaje', en: 'Percentage' },
+        pubsAbbrev: { es: 'pubs', en: 'pubs' },
+        yAxis: { es: 'Número de publicaciones', en: 'Number of publications' },
+        xAxis: { es: 'Áreas temáticas', en: 'Thematic areas' },
+        others: { es: 'Otras', en: 'Others' }
+    };
+    function tAreas(key) {
+        const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+        return (AREAS_I18N[key] && AREAS_I18N[key][lang]) || key;
+    }
+
     function updateAreasChart(data) {
         // Filtrar valores nulos
         data = data.filter(d => d.thematic_areas__name !== null);
@@ -2040,8 +2111,8 @@ export function initFiltersAndSearch() {
                 const percentage = (d.data.count / d3.sum(data, d => d.count) * 100).toFixed(1);
                 const infoBoxContent = `
                     <div style="font-weight: bold; margin-bottom: 5px;">${d.data.thematic_areas__name}</div>
-                    <div>Publicaciones: ${d.data.count}</div>
-                    <div>Porcentaje: ${percentage}%</div>
+                    <div>${tAreas('publications')}: ${d.data.count}</div>
+                    <div>${tAreas('percentage')}: ${percentage}%</div>
                 `;
                 // Cambiar el borde del info box al color del segmento
                 const borderColor = color(d.data.thematic_areas__name);
@@ -2075,7 +2146,7 @@ export function initFiltersAndSearch() {
             .text(d => {
                 const name = d.thematic_areas__name;
                 const percentage = (d.count / d3.sum(data, d => d.count) * 100).toFixed(1);
-                return `${name} (${d.count} pubs, ${percentage}%)`;
+                return `${name} (${d.count} ${tAreas('pubsAbbrev')}, ${percentage}%)`;
             });
 
         // Cerrar info box al pinchar fuera
@@ -2103,7 +2174,7 @@ export function initFiltersAndSearch() {
             const topN = sorted.slice(0, N);
             const rest = sorted.slice(N);
             const otrasCount = rest.reduce((sum, d) => sum + d.count, 0);
-            data = [...topN, {thematic_areas__name: 'Otras', count: otrasCount}];
+            data = [...topN, {thematic_areas__name: tAreas('others'), count: otrasCount}];
         }
     
         // Limpiar el contenedor
@@ -2196,8 +2267,8 @@ export function initFiltersAndSearch() {
                 const percentage = (d.count / d3.sum(data, d => d.count) * 100).toFixed(1);
                 const infoBoxContent = `
                     <div style="font-weight: bold; margin-bottom: 5px;">${d.thematic_areas__name}</div>
-                    <div>Publicaciones: ${d.count}</div>
-                    <div>Porcentaje: ${percentage}%</div>
+                    <div>${tAreas('publications')}: ${d.count}</div>
+                    <div>${tAreas('percentage')}: ${percentage}%</div>
                 `;
                 const borderColor = color(d.thematic_areas__name);
                 infoBox.html(infoBoxContent)
@@ -2230,7 +2301,7 @@ export function initFiltersAndSearch() {
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
-            .text('Número de publicaciones');
+            .text(tAreas('yAxis'));
     
         // Añadir título del eje X
         svg.append('text')
@@ -2239,7 +2310,7 @@ export function initFiltersAndSearch() {
             .attr('dy', '1em')
             .style('text-anchor', 'middle')
             .style('font-size', '12px')
-            .text('Áreas temáticas');
+            .text(tAreas('xAxis'));
 
         // Recentrar el título del eje X según las barras reales (por si visualmente parece corrido)
         try {
@@ -3056,7 +3127,9 @@ export function initFiltersAndSearch() {
                     if (help) {
                         const minC = data.citations_range.min || 0;
                         const maxC = data.citations_range.max || 0;
-                        help.textContent = (lang === 'es') ? `Rango disponible: ${minC} - ${maxC}` : `Available range: ${minC} - ${maxC}`;
+                        const langRange2 = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
+                        const rangeLabel2 = langRange2 === 'es' ? 'Rango disponible' : 'Available range';
+                        help.textContent = `${rangeLabel2}: ${minC} - ${maxC}`;
                     }
                 }
             })
