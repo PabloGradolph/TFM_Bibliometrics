@@ -29,6 +29,9 @@ export function initFiltersAndSearch() {
     const searchSuggestions = document.getElementById('searchSuggestions');
     const selectedAuthor = document.getElementById('selectedAuthor');
     const authorLimitMessage = document.getElementById('authorLimitMessage');
+    // Notice card elements ("missing publications")
+    const missingPubsNotice = document.getElementById('missingPubsNotice');
+    const missingPubsNoticeText = document.getElementById('missingPubsNoticeText');
 
     // Referencias a elementos del modal de clustering
     const clusteringModel = document.getElementById('clusteringModel');
@@ -297,6 +300,23 @@ export function initFiltersAndSearch() {
     window.selectedMetricSource = 'wos';
     window.selectedAuthorName = selectedAuthorName;
 
+    // Helper: show/hide the "missing publications" notice
+    function setMissingPubsNoticeVisible(visible) {
+        if (!missingPubsNotice || !missingPubsNoticeText) return;
+        if (visible) {
+            const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+            const concienciaURL = 'https://apps3.csic.es/contcien/';
+            const contactEmail = 'bioinformatica@ipbln.csic.es';
+            const textEs = `¿No encuentras una de tus publicaciones? Asegúrate de tenerla registrada en <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. Si ya la tienes publicada allí y sigues sin verla aquí, espera a que actualicemos nuestro sistema. Si tienes prisa, puedes contactar con la Unidad de Bioinformática del IPBLN en <a href="mailto:${contactEmail}">${contactEmail}</a> para solicitar una actualización prioritaria.`;
+            const textEn = `Can't find one of your publications? Make sure it is registered in <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. If it's already there but still not visible here, please wait for our next update. If it's urgent, contact the IPBLN Bioinformatics Unit at <a href="mailto:${contactEmail}">${contactEmail}</a> to request an earlier update.`;
+            missingPubsNoticeText.innerHTML = (lang === 'es') ? textEs : textEn;
+            missingPubsNotice.classList.remove('d-none');
+        } else {
+            missingPubsNotice.classList.add('d-none');
+            missingPubsNoticeText.innerHTML = '';
+        }
+    }
+
     // Variables para el autocompletado
     let searchTimeout = null;
 
@@ -380,6 +400,7 @@ export function initFiltersAndSearch() {
             selectedAuthorName = null;
             window.selectedAuthorName = null;
             selectedAuthor.innerHTML = '';
+            setMissingPubsNoticeVisible(false);
             standardSearch.disabled = false;
             authorLimitMessage.style.display = 'none';
             updateSearchButton();
@@ -447,6 +468,9 @@ export function initFiltersAndSearch() {
             pubsCol.className = 'col-12 mt-4';
         }
 
+        // Show notice now that an author is selected
+        setMissingPubsNoticeVisible(true);
+
         // Obtener las métricas del autor
         fetch(`/BiblioMetrics/${lang}/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
             .then(response => response.json())
@@ -507,8 +531,11 @@ export function initFiltersAndSearch() {
     // Función para actualizar el autor seleccionado
     function updateSelectedAuthor() {
         if (selectedAuthorName) {
-            // Actualizar los filtros para reflejar las publicaciones del autor
+            // Ensure the notice is visible and filters reflect the author
+            setMissingPubsNoticeVisible(true);
             updateFilters();
+        } else {
+            setMissingPubsNoticeVisible(false);
         }
     }
 
