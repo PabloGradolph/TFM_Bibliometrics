@@ -103,7 +103,11 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    },
+    "remote": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "server.sqlite3",  # copia de la DB del servidor
+    },
 }
 
 
