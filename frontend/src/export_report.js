@@ -21,7 +21,7 @@ export function setupExportReportButton() {
             loading: 'Generando informe...',
             pdf: 'PDF',
             html: 'HTML (próximamente...)',
-            csv: 'CSV (próximamente...)',
+            csv: 'CSV',
             soon: 'Próximamente...'
         },
         en: {
@@ -33,7 +33,7 @@ export function setupExportReportButton() {
             loading: 'Generating report...',
             pdf: 'PDF',
             html: 'HTML (coming soon...)',
-            csv: 'CSV (coming soon...)',
+            csv: 'CSV',
             soon: 'Coming soon...'
         }
     };
@@ -60,8 +60,8 @@ export function setupExportReportButton() {
                             <label class="btn btn-outline-primary" for="exportFormatPDF">${t.pdf}</label>
                             <input type="radio" class="btn-check" name="exportFormat" id="exportFormatHTML" value="html" autocomplete="off" disabled>
                             <label class="btn btn-outline-secondary disabled" for="exportFormatHTML">${t.html}</label>
-                            <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off" disabled>
-                            <label class="btn btn-outline-secondary disabled" for="exportFormatCSV">${t.csv}</label>
+                            <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="exportFormatCSV">${t.csv}</label>
                         </div>
                         <p>${t.prompt}</p>
                     </div>
@@ -83,8 +83,8 @@ export function setupExportReportButton() {
                 <label class="btn btn-outline-primary" for="exportFormatPDF">${t.pdf}</label>
                 <input type="radio" class="btn-check" name="exportFormat" id="exportFormatHTML" value="html" autocomplete="off" disabled>
                 <label class="btn btn-outline-secondary disabled" for="exportFormatHTML">${t.html}</label>
-                <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off" disabled>
-                <label class="btn btn-outline-secondary disabled" for="exportFormatCSV">${t.csv}</label>
+                <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off">
+                <label class="btn btn-outline-primary" for="exportFormatCSV">${t.csv}</label>
             </div>
             <p>${t.prompt}</p>
         `;
@@ -140,8 +140,86 @@ export function setupExportReportButton() {
     modal.addEventListener('click', function(e) {
         if (e.target && e.target.id === 'confirmExportReport') {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
+            if (format === 'csv') {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                modalInstance.hide();
+                loadingOverlay.style.display = 'flex';
+
+                // Recoger filtros actuales del dashboard (mismo bloque que PDF, sin imágenes)
+                const yearFrom = document.getElementById('yearFrom')?.value;
+                const yearTo = document.getElementById('yearTo')?.value;
+                const citationsFrom = document.getElementById('citationsFrom')?.value;
+                const citationsTo = document.getElementById('citationsTo')?.value;
+                let areas = [];
+                if (window.selectedAreasList && window.selectedAreasList.size > 0) {
+                    areas = Array.from(window.selectedAreasList);
+                } else {
+                    const areaFilter = document.getElementById('areaFilter');
+                    if (areaFilter) {
+                        areas = Array.from(areaFilter.selectedOptions).map(opt => opt.value).filter(v => v);
+                    }
+                }
+                let institutions = [];
+                if (window.selectedInstitutionsList && window.selectedInstitutionsList.size > 0) {
+                    institutions = Array.from(window.selectedInstitutionsList);
+                } else {
+                    const institutionFilter = document.getElementById('institutionFilter');
+                    if (institutionFilter) {
+                        institutions = Array.from(institutionFilter.selectedOptions).map(opt => opt.value).filter(v => v);
+                    }
+                }
+                let types = [];
+                if (window.selectedTypesList && window.selectedTypesList.size > 0) {
+                    types = Array.from(window.selectedTypesList);
+                } else {
+                    const typeFilter = document.getElementById('typeFilter');
+                    if (typeFilter) {
+                        types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
+                    }
+                }
+                let author = null;
+                if (window.selectedAuthorName) {
+                    author = window.selectedAuthorName;
+                }
+                let quartiles = [];
+                if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) {
+                    quartiles = Array.from(window.selectedQuartilesList);
+                }
+                const metric_source = window.selectedMetricSource || '';
+
+                const formData = new FormData();
+                if (yearFrom) formData.append('year_from', yearFrom);
+                if (yearTo) formData.append('year_to', yearTo);
+                if (citationsFrom) formData.append('citations_from', citationsFrom);
+                if (citationsTo) formData.append('citations_to', citationsTo);
+                areas.forEach(a => formData.append('areas', a));
+                institutions.forEach(i => formData.append('institutions', i));
+                types.forEach(t => formData.append('types', t));
+                if (author) formData.append('author', author);
+                quartiles.forEach(q => formData.append('quartiles', q));
+                if (metric_source) formData.append('metric_source', metric_source);
+                formData.append('format', 'csv');
+
+                const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
+                fetch(apiExportUrl, { method: 'POST', body: formData })
+                  .then(resp => { if (!resp.ok) throw new Error('CSV generation failed'); return resp.blob(); })
+                  .then(blob => {
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'Bibliometria_IPBLN_Publicaciones.csv';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      window.URL.revokeObjectURL(url);
+                  })
+                  .catch(() => {
+                      alert(lang === 'es' ? 'Error al generar el CSV' : 'Error generating CSV');
+                  })
+                  .finally(() => { loadingOverlay.style.display = 'none'; });
+                return;
+            }
             if (format !== 'pdf') {
-                // No hacer nada para HTML/CSV
                 return;
             }
             const modalInstance = bootstrap.Modal.getInstance(modal);

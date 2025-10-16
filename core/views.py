@@ -1,5 +1,6 @@
 import logging
 from django.shortcuts import render, get_object_or_404
+import json
 from django.http import JsonResponse, HttpResponse
 from bibliodata.models import Publication, Author, Collaboration
 from django.db.models import Count, Min, Max, Q, F
@@ -1106,6 +1107,89 @@ def export_report(request):
     metric_source = 'wos'  # enforced business rule
     author = data.get('author')
     format_ = data.get('format', 'pdf')
+
+    # CSV export branch (generate CSV directly from DB using current active filters)
+    if format_ == 'csv':
+        # Build queryset using same filters as dashboard (including citations range)
+        pubs_query = Publication.objects.all()
+        if year_from:
+            pubs_query = pubs_query.filter(year__gte=year_from)
+        if year_to:
+            pubs_query = pubs_query.filter(year__lte=year_to)
+        if citations_from is not None and citations_from != '':
+            try:
+                pubs_query = pubs_query.filter(citations__gte=int(citations_from))
+            except ValueError:
+                pass
+        if citations_to is not None and citations_to != '':
+            try:
+                pubs_query = pubs_query.filter(citations__lte=int(citations_to))
+            except ValueError:
+                pass
+        if areas:
+            pubs_query = pubs_query.filter(thematic_areas__name__in=areas)
+        if institutions:
+            pubs_query = pubs_query.filter(institutions__name__in=institutions)
+        if types:
+            pubs_query = _apply_type_filter(pubs_query, types)
+        if quartiles:
+            pubs_query = _apply_quartile_filter(pubs_query, quartiles, 'wos')
+        if author:
+            pubs_query = pubs_query.filter(authors__name=author)
+
+        pubs_query = (
+            pubs_query
+            .distinct()
+            .prefetch_related('authors', 'institutions', 'thematic_areas', 'predicted_thematic_areas')
+        )
+
+        # Build CSV columns from Publication model fields dynamically + M2M summaries
+        db_fieldnames = [f.name for f in Publication._meta.fields]  # includes 'id'
+        extra_fieldnames = [
+            'authors_names', 'authors_ids',
+            'institutions_names',
+            'thematic_areas_names', 'predicted_thematic_areas_names'
+        ]
+        fieldnames = db_fieldnames + extra_fieldnames
+
+        # Prepare HTTP response; write UTF-8 BOM for better Excel compatibility on Windows
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.csv"'
+        response.write('\ufeff')
+        writer = csv.DictWriter(response, fieldnames=fieldnames, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        writer.writeheader()
+
+        def _join(values):
+            vals = [str(v) for v in (values or []) if v]
+            return '; '.join(vals)
+
+        for pub in pubs_query:
+            authors = list(pub.authors.all())
+            institutions = list(pub.institutions.all())
+            areas = list(pub.thematic_areas.all())
+            pred_areas = list(pub.predicted_thematic_areas.all())
+
+            # Start with DB fields
+            row = {}
+            for fname in db_fieldnames:
+                val = getattr(pub, fname, None)
+                if isinstance(val, (list, dict)):
+                    try:
+                        row[fname] = json.dumps(val, ensure_ascii=False)
+                    except Exception:
+                        row[fname] = str(val)
+                else:
+                    row[fname] = '' if val is None else val
+
+            # Add M2M summaries
+            row['authors_names'] = _join([a.name for a in authors])
+            row['authors_ids'] = _join([a.gesbib_id for a in authors if getattr(a, 'gesbib_id', None)])
+            row['institutions_names'] = _join([i.name for i in institutions])
+            row['thematic_areas_names'] = _join([a.name for a in areas])
+            row['predicted_thematic_areas_names'] = _join([a.name for a in pred_areas])
+
+            writer.writerow(row)
+        return response
 
     if format_ != 'pdf':
         return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
