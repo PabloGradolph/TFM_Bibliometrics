@@ -426,8 +426,10 @@ export function initFiltersAndSearch() {
         authorMetricsCard.id = 'authorMetricsCard';
         authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-10 h-100';
         
-        // Extraer el idioma de la URL
-        const currentLang = window.location.pathname.split('/')[1];
+        // Extraer el idioma de forma robusta
+        const currentLang = (typeof detectLangFromPath === 'function')
+            ? detectLangFromPath()
+            : (window.location.pathname.includes('/es/') ? 'es' : 'en');
         const cardTitle = currentLang === 'es' ? 'Resumen de Métricas del Autor' : 'Author Metrics Summary';
         const metricsTitle = currentLang === 'es' ? 'Métrica' : 'Metrics';
         const valuesTitle = currentLang === 'es' ? 'Valor' : 'Value';
@@ -483,18 +485,32 @@ export function initFiltersAndSearch() {
                 const metricsTable = document.getElementById('authorMetricsTable');
                 if (!metricsTable) return;
 
-                // Mapeo de nombres de métricas a nombres más amigables
-                const metricNames = {
-                    'orcid': 'ORCID',
-                    'total_publications': 'Total Publications',
-                    'total_citations': 'Total Citations',
-                    'citations_wos': 'WoS Citations',
-                    'citations_scopus': 'Scopus Citations',
-                    'h_index': 'H-index (WoS/Scopus)',
-                    'h_index_gb': 'H-index (Gesbib)',
-                    'h_index_h5gb': 'H5-index (Gesbib)',
-                    'international_index': 'International Collaboration Index'
+                // i18n para nombres de métricas (ES/EN)
+                const metricNamesI18N = {
+                    es: {
+                        orcid: 'ORCID',
+                        total_publications: 'Publicaciones totales',
+                        total_citations: 'Citas totales',
+                        citations_wos: 'Citas WoS',
+                        citations_scopus: 'Citas Scopus',
+                        h_index: 'Índice h (WoS/Scopus)',
+                        h_index_gb: 'Índice h (Gesbib)',
+                        h_index_h5gb: 'Índice h5 (Gesbib)',
+                        international_index: 'Índice de colaboración internacional'
+                    },
+                    en: {
+                        orcid: 'ORCID',
+                        total_publications: 'Total Publications',
+                        total_citations: 'Total Citations',
+                        citations_wos: 'WoS Citations',
+                        citations_scopus: 'Scopus Citations',
+                        h_index: 'H-index (WoS/Scopus)',
+                        h_index_gb: 'H-index (Gesbib)',
+                        h_index_h5gb: 'H5-index (Gesbib)',
+                        international_index: 'International Collaboration Index'
+                    }
                 };
+                const tMetric = (k) => (metricNamesI18N[currentLang] && metricNamesI18N[currentLang][k]) || k;
 
                 // Limpiar la tabla
                 metricsTable.innerHTML = '';
@@ -507,12 +523,12 @@ export function initFiltersAndSearch() {
                         // Forzar https y generar enlace clicable
                         const url = value.replace(/^http:/, 'https:');
                         row.innerHTML = `
-                            <td>${metricNames[key]}</td>
+                            <td>${tMetric(key)}</td>
                             <td><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></td>
                         `;
                     } else {
                         row.innerHTML = `
-                            <td>${metricNames[key] || key}</td>
+                            <td>${tMetric(key) || key}</td>
                             <td>${value}</td>
                         `;
                     }
