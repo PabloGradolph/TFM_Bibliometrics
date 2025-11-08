@@ -959,7 +959,7 @@ def get_collaboration_network(request):
                                 norm_davies = (model.davies_bouldin - min_davies) / (max_davies - min_davies) if max_davies != min_davies else 0
                                 
                                 # Calcular score combinado
-                                combined_score = 0.8 * norm_silhouette + 0.1 * norm_calinski + 0.1 * norm_davies
+                                combined_score = 0.8 * norm_silhouette + 0.1 * norm_calinski + 0.1 * (1 - norm_davies)
                                 
                                 if combined_score > best_score:
                                     best_score = combined_score

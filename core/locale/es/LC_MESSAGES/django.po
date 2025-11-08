@@ -507,7 +507,7 @@ msgid "Technical Guide (PDF)"
 msgstr "Guía Técnica (PDF)"
 
 msgid "Log in to the application"
-msgstr "Inicia sesión en la aplicación"
+msgstr "Inicie sesión en la aplicación"
 
 msgid "Back to Dashboard"
 msgstr "Volver al Panel de Control"
