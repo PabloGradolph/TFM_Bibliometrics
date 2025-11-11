@@ -211,3 +211,8 @@ EMAIL_USE_SSL= False
 EMAIL_HOST_USER = 'pablo.gradolph@gmail.com'
 EMAIL_HOST_PASSWORD = password
 DEFAULT_FROM_EMAIL = 'noreply@ipbln.local'
+
+# ---- Semantic search: HNSW index path ----
+# Configure the path to the HNSWlib index file. You can override this in production
+# with an environment variable HNSW_INDEX_PATH. The default points to a file in BASE_DIR.
+HNSW_INDEX_PATH = os.environ.get('HNSW_INDEX_PATH', str(BASE_DIR / 'analysis' / 'data' / 'hnsw_index.bin'))

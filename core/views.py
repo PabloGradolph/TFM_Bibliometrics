@@ -28,6 +28,8 @@ import hnswlib
 import os
 
 from sentence_transformers import SentenceTransformer, CrossEncoder
+import tempfile
+import shutil
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -47,12 +49,9 @@ def semantic_search(request):
     model = SentenceTransformer(model_name)
     query_emb = model.encode(query)
 
-    # Load HNSW index (path configurable)
-    index_path = r'C:\hnsw_index.bin'
-    logger = logging.getLogger("django")
-    logger.info(f"[semantic_search] Index path: {index_path}")
+    # Load HNSW index (path configurable via settings.HNSW_INDEX_PATH or request override)
+    index_path = getattr(settings, 'HNSW_INDEX_PATH')
     if not os.path.exists(index_path):
-        logger.error(f"[semantic_search] HNSW index not found at {index_path}")
         return JsonResponse({'results': [], 'error': 'HNSW index not found.', 'received_query': query}, status=500)
 
     # Load index (cache in global for efficiency)
@@ -62,7 +61,29 @@ def semantic_search(request):
             return JsonResponse({'results': [], 'error': 'No embeddings found.', 'received_query': query}, status=500)
         emb_dim = len(json.loads(first_emb.embedding))
         p = hnswlib.Index(space='cosine', dim=emb_dim)
-        p.load_index(index_path)
+        try:
+            # Sanity check: Python-level readability (helps distinguish permission vs hnsw issue)
+            with open(index_path, 'rb') as _fh:
+                _fh.read(1)
+            p.load_index(index_path)
+        except RuntimeError as e:
+            # Common on Windows when path contains non-ASCII characters (e.g., á) or is too long
+            # Fallback: copy to a short, ASCII-only temp path and load from there
+            if os.name == 'nt':
+                tmp_dir = os.path.join(tempfile.gettempdir(), 'hnsw_index_cache')
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = os.path.join(tmp_dir, 'hnsw_index.bin')
+                try:
+                    # Copy only if source is newer or destination missing
+                    if not os.path.exists(tmp_path) or os.path.getmtime(index_path) > os.path.getmtime(tmp_path):
+                        shutil.copy2(index_path, tmp_path)
+                    with open(tmp_path, 'rb') as _fh:
+                        _fh.read(1)
+                    p.load_index(tmp_path)
+                except Exception as e2:  # noqa: BLE001
+                    return JsonResponse({'results': [], 'error': f'HNSW index could not be loaded: {e2}', 'received_query': query}, status=500)
+            else:
+                return JsonResponse({'results': [], 'error': f'HNSW index could not be loaded: {e}', 'received_query': query}, status=500)
         p.set_ef(100)
         semantic_search._hnsw_index = p
     else:
@@ -76,8 +97,9 @@ def semantic_search(request):
     except Exception:
         top_k = 50
     ids, distances = p.knn_query(query_emb, k=top_k)
-    ids = ids[0]
-    distances = distances[0]
+    # Ensure plain Python types to avoid JSON serialization issues later
+    ids = [int(x) for x in ids[0]]
+    distances = [float(x) for x in distances[0]]
 
     # Convert cosine distance to similarity (1 - distance)
     candidates = []
@@ -87,7 +109,7 @@ def semantic_search(request):
         if not pe:
             continue
         pub = pe.publication
-        similarity = 1 - distances[idx]
+        similarity = 1.0 - float(distances[idx])
         if similarity < 0.1:
             continue
 
@@ -96,11 +118,11 @@ def semantic_search(request):
             'title': pub.title,
             'year': pub.year,
             'abstract': pub.abstract,
-            'similarity': round(similarity, 3),
+            'similarity': float(round(similarity, 3)),
             'authors': [author.name for author in pub.authors.all()],
             'other_authors': getattr(pub, 'other_authors', []),
-            'keywords': pub.keywords_all,
-            'areas': pub.areas_all,
+            'keywords': list(pub.keywords_all or []),
+            'areas': list(pub.areas_all or []),
         })
 
     # Reranking con cross-encoder

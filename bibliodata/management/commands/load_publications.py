@@ -264,8 +264,10 @@ class Command(BaseCommand):
             if not areas:
                 areas = parse_jcr_materias(jv("jcrMaterias")) or [] # Cambiar
 
+            from bibliodata.utils_text import sanitize_text
             for area in areas:
-                area_obj, _ = ThematicArea.objects.get_or_create(name=area.strip())
+                clean_name = sanitize_text(area.strip())
+                area_obj, _ = ThematicArea.objects.get_or_create(name=clean_name)
                 obj.thematic_areas.add(area_obj)
 
             # === Countries ===
