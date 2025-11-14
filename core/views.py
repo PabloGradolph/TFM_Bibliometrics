@@ -22,6 +22,7 @@ from reportlab.lib.colors import blue
 import unicodedata
 from pathlib import Path
 from bibliodata.models import PublicationEmbedding
+from core.utils_bibtex import build_bibtex_entry
 
 # --- Optimized: Use HNSWlib index ---
 import hnswlib
@@ -1315,32 +1316,7 @@ def export_report(request):
 
     # BibTeX export
     if format_ == 'bibtex':
-        def bibtex_escape(val: str) -> str:
-            if not val:
-                return ''
-            return val.replace('{', '\\{').replace('}', '\\}').replace('"', '\"')
-        entries = []
-        for pub in pubs_query:
-            authors = ' and '.join(a.name for a in pub.authors.all())
-            year = pub.year or ''
-            doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
-            doi = doi_list[0] if doi_list else ''
-            source = pub.source or ''
-            type_ = 'article'
-            if isinstance(pub.normalized_types, list) and pub.normalized_types:
-                type_ = pub.normalized_types[0].lower()[:40]
-            key = f"pub{pub.id}"  # simple key
-            entry = (
-                f"@{type_}{{{key},\n"
-                f"  title = {{{bibtex_escape(pub.title)}}},\n"
-                f"  author = {{{bibtex_escape(authors)}}},\n"
-                f"  year = {{{year}}},\n"
-                f"  journal = {{{bibtex_escape(source)}}},\n"
-                f"  doi = {{{doi}}},\n"
-                f"  url = {{{pub.title_link or ''}}}\n"
-                f"}}\n"
-            )
-            entries.append(entry)
+        entries = [build_bibtex_entry(pub) for pub in pubs_query]
         content = ''.join(entries)
         resp = HttpResponse(content, content_type='application/x-bibtex; charset=utf-8')
         resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.bib"'
@@ -1435,20 +1411,7 @@ def export_report(request):
             zf.writestr('publicaciones.ndjson', ('\n'.join(nd_lines) + '\n').encode('utf-8'))
 
             # BibTeX
-            bib_entries = []
-            for pub in pubs_query:
-                authors = ' and '.join(a.name for a in pub.authors.all())
-                year = pub.year or ''
-                doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
-                doi = doi_list[0] if doi_list else ''
-                source = pub.source or ''
-                type_ = 'article'
-                if isinstance(pub.normalized_types, list) and pub.normalized_types:
-                    type_ = pub.normalized_types[0].lower()[:40]
-                key = f"pub{pub.id}"
-                bib_entries.append(
-                    f"@{type_}{{{key},\n  title = {{{pub.title}}},\n  author = {{{authors}}},\n  year = {{{year}}},\n  journal = {{{source}}},\n  doi = {{{doi}}},\n  url = {{{pub.title_link or ''}}}\n}}\n"
-                )
+            bib_entries = [build_bibtex_entry(pub) for pub in pubs_query]
             zf.writestr('publicaciones.bib', ''.join(bib_entries))
 
             # RIS
