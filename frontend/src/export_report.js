@@ -13,28 +13,68 @@ export function setupExportReportButton() {
         })();
     const texts = {
         es: {
-            title: 'Exportar informe',
-            message: 'Seleccione el formato de exportación:',
-            continue: 'Continuar',
+            title: 'Exportar informe / datos',
+            message: 'Seleccione formato y ordenación:',
+            continue: 'Exportar',
             cancel: 'Cancelar',
-            prompt: 'Pulse para continuar.',
-            loading: 'Generando informe...',
-            pdf: 'PDF',
-            html: 'HTML (próximamente...)',
-            csv: 'CSV',
-            soon: 'Próximamente...'
+            prompt: 'Elige un formato. ZIP genera un paquete completo.',
+            loading: 'Generando exportación...',
+            pdf: 'PDF Informe',
+            csv: 'CSV Tabla',
+            ndjson: 'NDJSON',
+            bibtex: 'BibTeX',
+            ris: 'RIS',
+            gexf: 'GEXF Red',
+            network_csv: 'CSV Red',
+            zip: 'ZIP Todo',
+            orderLabel: 'Ordenar por métricas',
+            orderField: 'Métrica',
+            orderDirection: 'Dirección',
+            asc: 'Ascendente',
+            desc: 'Descendente',
+            metricsPlaceholder: 'Selecciona métrica (opcional)',
+            metrics: {
+                year: 'Año',
+                citations: 'Citas (genérico)',
+                dimensions_citations: 'Citas Dimensions',
+                wos_citations: 'Citas WoS',
+                scopus_citations: 'Citas Scopus',
+                fcr: 'FCR',
+                rcr: 'RCR',
+                international_collab: 'Colaboración internacional'
+            }
         },
         en: {
-            title: 'Export report',
-            message: 'Select export format:',
-            continue: 'Continue',
+            title: 'Export report / data',
+            message: 'Select format and ordering:',
+            continue: 'Export',
             cancel: 'Cancel',
-            prompt: 'Click to continue.',
-            loading: 'Generating report...',
-            pdf: 'PDF',
-            html: 'HTML (coming soon...)',
-            csv: 'CSV',
-            soon: 'Coming soon...'
+            prompt: 'Choose a format. ZIP bundles everything.',
+            loading: 'Generating export...',
+            pdf: 'PDF Report',
+            csv: 'CSV Table',
+            ndjson: 'NDJSON',
+            bibtex: 'BibTeX',
+            ris: 'RIS',
+            gexf: 'GEXF Network',
+            network_csv: 'CSV Network',
+            zip: 'ZIP All',
+            orderLabel: 'Order by metrics',
+            orderField: 'Metric',
+            orderDirection: 'Direction',
+            asc: 'Ascending',
+            desc: 'Descending',
+            metricsPlaceholder: 'Select metric (optional)',
+            metrics: {
+                year: 'Year',
+                citations: 'Citations (generic)',
+                dimensions_citations: 'Dimensions citations',
+                wos_citations: 'WoS citations',
+                scopus_citations: 'Scopus citations',
+                fcr: 'FCR',
+                rcr: 'RCR',
+                international_collab: 'International collaboration'
+            }
         }
     };
     const t = texts[lang];
@@ -46,50 +86,110 @@ export function setupExportReportButton() {
         modal.id = 'exportReportModal';
         modal.className = 'modal fade';
         modal.setAttribute('tabindex', '-1');
+        // Build metric options HTML
+        const metricOptions = ['','year','citations','dimensions_citations','wos_citations','scopus_citations','fcr','rcr','international_collab']
+            .map(m => m === '' ? `<option value="">${t.metricsPlaceholder}</option>` : `<option value="${m}">${t.metrics[m]}</option>`)
+            .join('');
         modal.innerHTML = `
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">${t.title}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p>${t.message}</p>
-                        <div class="btn-group w-100 mb-3" role="group" aria-label="Export format">
-                            <input type="radio" class="btn-check" name="exportFormat" id="exportFormatPDF" value="pdf" autocomplete="off" checked>
-                            <label class="btn btn-outline-primary" for="exportFormatPDF">${t.pdf}</label>
-                            <input type="radio" class="btn-check" name="exportFormat" id="exportFormatHTML" value="html" autocomplete="off" disabled>
-                            <label class="btn btn-outline-secondary disabled" for="exportFormatHTML">${t.html}</label>
-                            <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off">
-                            <label class="btn btn-outline-primary" for="exportFormatCSV">${t.csv}</label>
+                        <p class="text-muted mb-2">${t.message}</p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-12">
+                                <div class="d-flex flex-wrap gap-2" id="exportFormatGroup">
+                                    ${[['pdf',t.pdf],['csv',t.csv],['ndjson',t.ndjson],['bibtex',t.bibtex],['ris',t.ris],['gexf',t.gexf],['network_csv',t.network_csv],['zip',t.zip]]
+                                        .map(([val,label]) => `
+                                        <div>
+                                          <input type="radio" class="btn-check" name="exportFormat" id="exportFormat_${val}" value="${val}" autocomplete="off" ${val==='pdf'?'checked':''}>
+                                          <label class="btn btn-outline-primary btn-sm" for="exportFormat_${val}">${label}</label>
+                                        </div>`).join('')}
+                                </div>
+                            </div>
                         </div>
-                        <p>${t.prompt}</p>
+                        <div class="border rounded p-2 mb-3">
+                          <div class="row g-2 align-items-end">
+                            <div class="col-md-6">
+                              <label class="form-label">${t.orderField}</label>
+                              <select class="form-select form-select-sm" id="exportSortField">${metricOptions}</select>
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label">${t.orderDirection}</label>
+                              <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="sortDirection" id="sortAsc" value="asc" autocomplete="off">
+                                <label class="btn btn-outline-secondary btn-sm" for="sortAsc">${t.asc}</label>
+                                <input type="radio" class="btn-check" name="sortDirection" id="sortDesc" value="desc" autocomplete="off" checked>
+                                <label class="btn btn-outline-secondary btn-sm" for="sortDesc">${t.desc}</label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <p class="small text-muted">${t.prompt}</p>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-primary" id="confirmExportReport">${t.continue}</button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t.cancel}</button>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
         document.body.appendChild(modal);
     } else {
-        // Si ya existe, actualiza los textos por si cambia el idioma
-        modal.querySelector('.modal-title').textContent = t.title;
-        modal.querySelector('.modal-body').innerHTML = `
-            <p>${t.message}</p>
-            <div class="btn-group w-100 mb-3" role="group" aria-label="Export format">
-                <input type="radio" class="btn-check" name="exportFormat" id="exportFormatPDF" value="pdf" autocomplete="off" checked>
-                <label class="btn btn-outline-primary" for="exportFormatPDF">${t.pdf}</label>
-                <input type="radio" class="btn-check" name="exportFormat" id="exportFormatHTML" value="html" autocomplete="off" disabled>
-                <label class="btn btn-outline-secondary disabled" for="exportFormatHTML">${t.html}</label>
-                <input type="radio" class="btn-check" name="exportFormat" id="exportFormatCSV" value="csv" autocomplete="off">
-                <label class="btn btn-outline-primary" for="exportFormatCSV">${t.csv}</label>
-            </div>
-            <p>${t.prompt}</p>
-        `;
-        modal.querySelector('#confirmExportReport').textContent = t.continue;
-        modal.querySelector('.btn-secondary').textContent = t.cancel;
+        // Rebuild body (simpler: remove then recreate for language switch)
+        const oldDialog = modal.querySelector('.modal-dialog');
+        if (oldDialog) oldDialog.remove();
+        const metricOptions = ['','year','citations','dimensions_citations','wos_citations','scopus_citations','fcr','rcr','international_collab']
+            .map(m => m === '' ? `<option value="">${t.metricsPlaceholder}</option>` : `<option value="${m}">${t.metrics[m]}</option>`)
+            .join('');
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${t.title}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted mb-2">${t.message}</p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-12">
+                                <div class="d-flex flex-wrap gap-2" id="exportFormatGroup">
+                                    ${[['pdf',t.pdf],['csv',t.csv],['ndjson',t.ndjson],['bibtex',t.bibtex],['ris',t.ris],['gexf',t.gexf],['network_csv',t.network_csv],['zip',t.zip]]
+                                        .map(([val,label]) => `
+                                        <div>
+                                          <input type="radio" class="btn-check" name="exportFormat" id="exportFormat_${val}" value="${val}" autocomplete="off" ${val==='pdf'?'checked':''}>
+                                          <label class="btn btn-outline-primary btn-sm" for="exportFormat_${val}">${label}</label>
+                                        </div>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border rounded p-2 mb-3">
+                          <div class="row g-2 align-items-end">
+                            <div class="col-md-6">
+                              <label class="form-label">${t.orderField}</label>
+                              <select class="form-select form-select-sm" id="exportSortField">${metricOptions}</select>
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label">${t.orderDirection}</label>
+                              <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="sortDirection" id="sortAsc" value="asc" autocomplete="off">
+                                <label class="btn btn-outline-secondary btn-sm" for="sortAsc">${t.asc}</label>
+                                <input type="radio" class="btn-check" name="sortDirection" id="sortDesc" value="desc" autocomplete="off" checked>
+                                <label class="btn btn-outline-secondary btn-sm" for="sortDesc">${t.desc}</label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <p class="small text-muted">${t.prompt}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="confirmExportReport">${t.continue}</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t.cancel}</button>
+                    </div>
+                </div>
+            </div>`;
     }
 
     exportBtn.addEventListener('click', function() {
@@ -140,12 +240,10 @@ export function setupExportReportButton() {
     modal.addEventListener('click', function(e) {
         if (e.target && e.target.id === 'confirmExportReport') {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
-            if (format === 'csv') {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                modalInstance.hide();
-                loadingOverlay.style.display = 'flex';
+            const sortField = document.getElementById('exportSortField')?.value || '';
+            const sortOrder = document.querySelector('input[name="sortDirection"]:checked')?.value || 'desc';
 
-                // Recoger filtros actuales del dashboard (mismo bloque que PDF, sin imágenes)
+            const collectFilters = () => {
                 const yearFrom = document.getElementById('yearFrom')?.value;
                 const yearTo = document.getElementById('yearTo')?.value;
                 const citationsFrom = document.getElementById('citationsFrom')?.value;
@@ -155,38 +253,33 @@ export function setupExportReportButton() {
                     areas = Array.from(window.selectedAreasList);
                 } else {
                     const areaFilter = document.getElementById('areaFilter');
-                    if (areaFilter) {
-                        areas = Array.from(areaFilter.selectedOptions).map(opt => opt.value).filter(v => v);
-                    }
+                    if (areaFilter) areas = Array.from(areaFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
                 let institutions = [];
                 if (window.selectedInstitutionsList && window.selectedInstitutionsList.size > 0) {
                     institutions = Array.from(window.selectedInstitutionsList);
                 } else {
                     const institutionFilter = document.getElementById('institutionFilter');
-                    if (institutionFilter) {
-                        institutions = Array.from(institutionFilter.selectedOptions).map(opt => opt.value).filter(v => v);
-                    }
+                    if (institutionFilter) institutions = Array.from(institutionFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
                 let types = [];
                 if (window.selectedTypesList && window.selectedTypesList.size > 0) {
                     types = Array.from(window.selectedTypesList);
                 } else {
                     const typeFilter = document.getElementById('typeFilter');
-                    if (typeFilter) {
-                        types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
-                    }
+                    if (typeFilter) types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
-                let author = null;
-                if (window.selectedAuthorName) {
-                    author = window.selectedAuthorName;
-                }
-                let quartiles = [];
-                if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) {
-                    quartiles = Array.from(window.selectedQuartilesList);
-                }
+                let author = null; if (window.selectedAuthorName) author = window.selectedAuthorName;
+                let quartiles = []; if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) quartiles = Array.from(window.selectedQuartilesList);
                 const metric_source = window.selectedMetricSource || '';
+                return {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, author, quartiles, metric_source};
+            };
 
+            const sendSimpleFormat = (fmt, filename) => {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                modalInstance.hide();
+                loadingOverlay.style.display = 'flex';
+                const {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, author, quartiles, metric_source} = collectFilters();
                 const formData = new FormData();
                 if (yearFrom) formData.append('year_from', yearFrom);
                 if (yearTo) formData.append('year_to', yearTo);
@@ -198,25 +291,41 @@ export function setupExportReportButton() {
                 if (author) formData.append('author', author);
                 quartiles.forEach(q => formData.append('quartiles', q));
                 if (metric_source) formData.append('metric_source', metric_source);
-                formData.append('format', 'csv');
+                if (sortField) formData.append('sort_field', sortField);
+                if (sortOrder) formData.append('sort_order', sortOrder);
+                formData.append('format', fmt);
 
                 const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
                 fetch(apiExportUrl, { method: 'POST', body: formData })
-                  .then(resp => { if (!resp.ok) throw new Error('CSV generation failed'); return resp.blob(); })
+                  .then(resp => { if (!resp.ok) throw new Error('Generation failed'); return resp.blob(); })
                   .then(blob => {
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = 'Bibliometria_IPBLN_Publicaciones.csv';
+                      a.download = filename;
                       document.body.appendChild(a);
                       a.click();
                       a.remove();
                       window.URL.revokeObjectURL(url);
                   })
                   .catch(() => {
-                      alert(lang === 'es' ? 'Error al generar el CSV' : 'Error generating CSV');
+                      alert(lang === 'es' ? 'Error en la exportación' : 'Error generating export');
                   })
                   .finally(() => { loadingOverlay.style.display = 'none'; });
+            };
+
+            // Simple formats that do not need chart images
+            if (['csv','ndjson','bibtex','ris','gexf','network_csv','zip'].includes(format)) {
+                const fnMap = {
+                    csv: 'Bibliometria_IPBLN_Publicaciones.csv',
+                    ndjson: 'Bibliometria_IPBLN_Publicaciones.ndjson',
+                    bibtex: 'Bibliometria_IPBLN_Publicaciones.bib',
+                    ris: 'Bibliometria_IPBLN_Publicaciones.ris',
+                    gexf: 'Bibliometria_IPBLN_CoauthorNetwork.gexf',
+                    network_csv: 'Bibliometria_IPBLN_CoauthorEdges.csv',
+                    zip: 'Bibliometria_IPBLN_ExportBundle.zip'
+                };
+                sendSimpleFormat(format, fnMap[format]);
                 return;
             }
             if (format !== 'pdf') {
@@ -326,6 +435,8 @@ export function setupExportReportButton() {
                     if (author) formData.append('author', author);
                     quartiles.forEach(q => formData.append('quartiles', q));
                     if (metric_source) formData.append('metric_source', metric_source);
+                    if (sortField) formData.append('sort_field', sortField);
+                    if (sortOrder) formData.append('sort_order', sortOrder);
                     formData.append('format', 'pdf');
                     formData.append('areas_view', areas_view);
                     if (images.timeline) formData.append('timeline_img', images.timeline);

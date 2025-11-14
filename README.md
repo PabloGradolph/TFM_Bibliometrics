@@ -16,7 +16,7 @@ Este proyecto forma parte del Trabajo Fin de Máster del Máster en Ciencia de D
   - Métricas de impacto (citas, cuartiles, JCR/SJR/CiteScore).
 - 🤖 Procesamiento de lenguaje natural (NLP) para detección de temas y palabras clave.
 - 🧠 Agrupamiento temático y análisis de comunidades científicas.
-- 📄 Generación automática de informes exportables (HTML, PDF, CSV).
+- 📄 Exportación avanzada de informes y datos: PDF, CSV, NDJSON, BibTeX, RIS, redes (GEXF / CSV) y paquete completo ZIP.
 
 ---
 

@@ -1168,7 +1168,6 @@ export function initFiltersAndSearch() {
                                 }
                                 setWorldMapActiveCountries(countsByIso);
                                 // eslint-disable-next-line no-console
-                                console.log('[WorldMap] Counts by ISO (server-side aggregation):', countsByIso);
                                 setWorldMapLoading(false);
                             })
                             .catch(err => {
@@ -2559,7 +2558,6 @@ export function initFiltersAndSearch() {
     
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
         const currentLang = detectLangFromPath();
-        console.log('[Network] Actualizando red. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         const toggleButton = document.getElementById('toggleFullNetworkBtn');
     
         if (data.is_author_view) {
@@ -2833,7 +2831,6 @@ export function initFiltersAndSearch() {
                 // Fallback genérico
                 title.textContent = currentLang === 'es' ? 'Comunidades' : 'Communities';
             }
-            console.log('[Network][Legend] Título leyenda:', title.textContent, 'Idioma=', currentLang);
         
             legend.appendChild(title);
 
@@ -2909,7 +2906,6 @@ export function initFiltersAndSearch() {
                     item.appendChild(colorBox);
                     item.appendChild(label);
                     legend.appendChild(item);
-                    console.log('[Network][Legend] Añadida entrada leyenda:', label.textContent, 'Comm ID=', comm);
                 });
             }
         
@@ -3066,12 +3062,10 @@ export function initFiltersAndSearch() {
     function updateCommunityDropdownText(model = null, nClusters = null) {
         const dropdownButton = document.getElementById('communityViewDropdown');
         if (!dropdownButton) {
-            console.warn('[CommunityDropdown] Botón no encontrado');
             return;
         }
         const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
         let text = '';
-        console.log('[CommunityDropdown] Vista actual=', window.currentCommunityView, 'FullNetwork=', isFullNetwork, 'Lang=', currentLang);
 
         if (window.currentCommunityView === 'department') {
             text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
@@ -3102,7 +3096,6 @@ export function initFiltersAndSearch() {
         }
 
         dropdownButton.textContent = text;
-        console.log('[CommunityDropdown] Texto aplicado=', text);
     }
     
     function updateFilters() {
@@ -3251,7 +3244,6 @@ export function initFiltersAndSearch() {
         const button = this;
         const container = document.getElementById('collaborationNetwork');
         const currentLang = detectLangFromPath();
-        console.log('[Network][ToggleFull] Click. Path=', window.location.pathname, 'Idioma detectado=', currentLang);
         
         // Deshabilitar el botón y mostrar spinner
         button.disabled = true;
@@ -3293,7 +3285,6 @@ export function initFiltersAndSearch() {
         cardTitle.textContent = currentLang === 'es'
             ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
             : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
-        console.log('[Network][ToggleFull] Nuevo título card:', cardTitle.textContent);
         
         // Actualizar la red con el nuevo modo
         const params = new URLSearchParams({

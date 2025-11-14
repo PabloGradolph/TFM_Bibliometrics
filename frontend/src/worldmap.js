@@ -404,7 +404,6 @@ export function initWorldMap(containerId, activeCountries = []) {
         .then(res => res.json())
         .then(geojson => {
             // eslint-disable-next-line no-console
-            console.log('[WorldMap] GeoJSON loaded. Features:', Array.isArray(geojson.features) ? geojson.features.length : 'N/A');
             // Filtrar Antártida (por nombre/ISO) y cualquier geometría cuya latitud máxima esté por debajo de -60
             const filteredFeatures = geojson.features.filter(f => {
                 const props = f.properties || {};
@@ -482,17 +481,10 @@ export function initWorldMap(containerId, activeCountries = []) {
                     });
                     if (!propertyKeysLogged) {
                         // eslint-disable-next-line no-console
-                        console.log('[WorldMap][Info] Example feature property keys:', Object.keys(feature.properties).slice(0, 25));
                         propertyKeysLogged = true;
                     }
                     if (!iso2 && missingIsoWarnings < MAX_MISSING_WARNINGS && !IGNORE_FEATURE_NAMES.has(name)) {
                         missingIsoWarnings += 1;
-                        // eslint-disable-next-line no-console
-                        console.warn('[WorldMap][Warn] Feature without resolvable ISO2 (sample):', { name, sampleProps: Object.fromEntries(Object.entries(feature.properties).slice(0, 10)) });
-                        if (missingIsoWarnings === MAX_MISSING_WARNINGS) {
-                            // eslint-disable-next-line no-console
-                            console.warn('[WorldMap][Warn] Reached max missing ISO warnings; further messages suppressed.');
-                        }
                     }
                 }
             }).addTo(map);
@@ -523,8 +515,6 @@ export function initWorldMap(containerId, activeCountries = []) {
             }
         })
         .catch(err => {
-            // eslint-disable-next-line no-console
-            console.error('[WorldMap] Error loading GeoJSON:', err);
             if (worldMapRegistry.loadingEl) worldMapRegistry.loadingEl.style.display = 'none';
         });
 
@@ -560,7 +550,6 @@ if (typeof document !== 'undefined') {
                     await window.__exportSpainMapImage(exportBtn);
                     return;
                 } catch (e) {
-                    console.warn('[WorldMap][Export] Delegation to Spain export failed, falling back to world export', e);
                 }
             }
 
@@ -592,10 +581,6 @@ if (typeof document !== 'undefined') {
                         return true;
                     } catch (e) { return false; }
                 })();
-
-                if (isBlank) {
-                    console.warn('[WorldMap][Export] leaflet-image devolvió un canvas vacío. Se fuerza fallback a html2canvas directo.');
-                }
 
         // Match current displayed size
         const mapRect = mapContainer.getBoundingClientRect();
@@ -736,7 +721,6 @@ if (typeof document !== 'undefined') {
 
                 if (clone.parentNode) document.body.removeChild(clone);
             } catch (err) {
-                console.error('[WorldMap][Export] Flujo principal falló, usando fallback simple html2canvas', err);
                 try {
                     const cardBody = exportBtn.closest('.card-body');
                     if (!cardBody) throw err;
@@ -773,7 +757,6 @@ if (typeof document !== 'undefined') {
                     a.href = paddedCanvas.toDataURL('image/png');
                     a.click();
                 } catch (fallbackErr) {
-                    console.error('[WorldMap][Export] Fallback html2canvas también falló', fallbackErr);
                     alert('Failed to export image');
                 }
             }
@@ -848,8 +831,6 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
             }
         }
     } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('[WorldMap] Failed to update top10 table', e);
     }
 
     // Re-style each feature and add debug markers
@@ -924,19 +905,6 @@ export function setWorldMapActiveCountries(countsByIsoA2) {
             }
         }
     });
-    // Log matches vs provided counts
-    if (worldMapRegistry.debug) {
-        try {
-            const providedISOs = Object.keys(worldMapRegistry.countsByIsoA2 || {});
-            const missing = providedISOs.filter(k => !matchedISOs.has(k));
-            // eslint-disable-next-line no-console
-            console.log(`[WorldMap][Debug] Updated features: ${updatedCount}, Missing matches for ISOs:`, missing);
-            if (missingSamples.length > 0) {
-                // eslint-disable-next-line no-console
-                console.warn('[WorldMap][Warn] Unmatched sovereign/other features (truncated):', missingSamples);
-            }
-        } catch (e) { /* noop */ }
-    }
     // Hide overlay after update
     if (worldMapRegistry.loadingEl) worldMapRegistry.loadingEl.style.display = 'none';
 }

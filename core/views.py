@@ -1096,8 +1096,27 @@ def get_author_metrics(request):
 @csrf_exempt
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def export_report(request):
+    """Export bibliometric data and report in multiple formats.
+
+    Supported formats (format param):
+        - pdf: Existing rich PDF with filters and charts.
+        - csv: Tabular CSV of publications.
+        - ndjson: One JSON object per line for easy streaming / pipelines.
+        - bibtex: Bibliographic entries for LaTeX / reference managers.
+        - ris: RIS formatted references.
+        - gexf: Collaboration network (authors) in GEXF for Gephi.
+        - network_csv: Edges list (author, collaborator, weight) as CSV.
+        - zip: Full bundle (CSV, NDJSON, BibTeX, RIS, GEXF, edges CSV, README, minimal PDF).
+
+    Optional ordering parameters:
+        - sort_field: One of [year, citations, dimensions_citations, wos_citations, scopus_citations,
+                        fcr, rcr, international_collab]
+        - sort_order: asc | desc (default desc)
+
+    Filtering parameters replicate dashboard filters.
+    """
     import base64
-    from io import BytesIO
+    from io import BytesIO, StringIO
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.lib import colors
@@ -1129,89 +1148,349 @@ def export_report(request):
     metric_source = 'wos'  # enforced business rule
     author = data.get('author')
     format_ = data.get('format', 'pdf')
+    sort_field = data.get('sort_field')
+    sort_order = data.get('sort_order', 'desc')
+
+    # Build base queryset (shared by most formats)
+    pubs_query = Publication.objects.all()
+    if year_from:
+        pubs_query = pubs_query.filter(year__gte=year_from)
+    if year_to:
+        pubs_query = pubs_query.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            pubs_query = pubs_query.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            pubs_query = pubs_query.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
+    if areas:
+        pubs_query = pubs_query.filter(thematic_areas__name__in=areas)
+    if institutions:
+        pubs_query = pubs_query.filter(institutions__name__in=institutions)
+    if types:
+        pubs_query = _apply_type_filter(pubs_query, types)
+    if quartiles:
+        pubs_query = _apply_quartile_filter(pubs_query, quartiles, 'wos')
+    if author:
+        pubs_query = pubs_query.filter(authors__name=author)
+
+    # Ordering annotations (metrics stored in PublicationMetric model)
+    from django.db.models import OuterRef, Subquery, FloatField
+    from bibliodata.models import PublicationMetric
+
+    def metric_subquery(metric_type: str, source: str):
+        return Subquery(
+            PublicationMetric.objects.filter(
+                publication=OuterRef('pk'),
+                metric_type=metric_type,
+                source=source
+            ).order_by('-year').values('impact_factor')[:1]
+        )
+
+    annotate_map = {}
+    if sort_field in {
+        'dimensions_citations', 'wos_citations', 'scopus_citations', 'fcr', 'rcr'
+    }:
+        # Add needed annotations only once
+        annotate_map['dimensions_citations'] = metric_subquery('citations', 'dimensions')
+        annotate_map['wos_citations'] = metric_subquery('citations', 'wos')
+        annotate_map['scopus_citations'] = metric_subquery('citations', 'scopus')
+        annotate_map['fcr'] = metric_subquery('fcr', 'dimensions')
+        annotate_map['rcr'] = metric_subquery('rcr', 'dimensions')
+        pubs_query = pubs_query.annotate(**annotate_map)
+
+    # Determine safe order field
+    order_field_map = {
+        'year': 'year',
+        'citations': 'citations',
+        'dimensions_citations': 'dimensions_citations',
+        'wos_citations': 'wos_citations',
+        'scopus_citations': 'scopus_citations',
+        'fcr': 'fcr',
+        'rcr': 'rcr',
+        'international_collab': 'international_collab'
+    }
+    if sort_field in order_field_map:
+        order_real = order_field_map[sort_field]
+        if sort_order == 'asc':
+            pubs_query = pubs_query.order_by(order_real)
+        else:
+            pubs_query = pubs_query.order_by(f'-{order_real}')
+
+    pubs_query = (
+        pubs_query
+        .distinct()
+        .prefetch_related('authors', 'institutions', 'thematic_areas', 'predicted_thematic_areas')
+    )
+
+    # Shared serialization helpers for CSV/JSON exports
+    db_fieldnames = [f.name for f in Publication._meta.fields]
+    extra_fieldnames = [
+        'authors_names',
+        'authors_ids',
+        'institutions_names',
+        'thematic_areas_names',
+        'predicted_thematic_areas_names',
+    ]
+    fieldnames = db_fieldnames + extra_fieldnames
+
+    def _format_list_items(values):
+        parts = []
+        for value in (values or []):
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple)):
+                nested = _format_list_items(value)
+                if nested:
+                    parts.append(nested)
+            elif isinstance(value, dict):
+                serialized = json.dumps(value, ensure_ascii=False)
+                if serialized:
+                    parts.append(serialized)
+            else:
+                text = str(value).strip()
+                if text:
+                    parts.append(text)
+        return ' | '.join(parts)
+
+    def _join(values):
+        return _format_list_items(values)
+
+    def _serialize_publication_for_tabular(pub):
+        authors = list(pub.authors.all())
+        institutions = list(pub.institutions.all())
+        areas = list(pub.thematic_areas.all())
+        pred_areas = list(pub.predicted_thematic_areas.all())
+
+        row = {}
+        for fname in db_fieldnames:
+            val = getattr(pub, fname, None)
+            if isinstance(val, list):
+                row[fname] = _format_list_items(val)
+            elif isinstance(val, dict):
+                try:
+                    row[fname] = json.dumps(val, ensure_ascii=False)
+                except Exception:
+                    row[fname] = str(val)
+            else:
+                row[fname] = '' if val is None else val
+
+        row['authors_names'] = _join([a.name for a in authors])
+        row['authors_ids'] = _join([a.gesbib_id for a in authors if getattr(a, 'gesbib_id', None)])
+        row['institutions_names'] = _join([i.name for i in institutions])
+        row['thematic_areas_names'] = _join([a.name for a in areas])
+        row['predicted_thematic_areas_names'] = _join([a.name for a in pred_areas])
+        return row
 
     # CSV export branch (generate CSV directly from DB using current active filters)
     if format_ == 'csv':
-        # Build queryset using same filters as dashboard (including citations range)
-        pubs_query = Publication.objects.all()
-        if year_from:
-            pubs_query = pubs_query.filter(year__gte=year_from)
-        if year_to:
-            pubs_query = pubs_query.filter(year__lte=year_to)
-        if citations_from is not None and citations_from != '':
-            try:
-                pubs_query = pubs_query.filter(citations__gte=int(citations_from))
-            except ValueError:
-                pass
-        if citations_to is not None and citations_to != '':
-            try:
-                pubs_query = pubs_query.filter(citations__lte=int(citations_to))
-            except ValueError:
-                pass
-        if areas:
-            pubs_query = pubs_query.filter(thematic_areas__name__in=areas)
-        if institutions:
-            pubs_query = pubs_query.filter(institutions__name__in=institutions)
-        if types:
-            pubs_query = _apply_type_filter(pubs_query, types)
-        if quartiles:
-            pubs_query = _apply_quartile_filter(pubs_query, quartiles, 'wos')
-        if author:
-            pubs_query = pubs_query.filter(authors__name=author)
-
-        pubs_query = (
-            pubs_query
-            .distinct()
-            .prefetch_related('authors', 'institutions', 'thematic_areas', 'predicted_thematic_areas')
-        )
-
-        # Build CSV columns from Publication model fields dynamically + M2M summaries
-        db_fieldnames = [f.name for f in Publication._meta.fields]  # includes 'id'
-        extra_fieldnames = [
-            'authors_names', 'authors_ids',
-            'institutions_names',
-            'thematic_areas_names', 'predicted_thematic_areas_names'
-        ]
-        fieldnames = db_fieldnames + extra_fieldnames
-
         # Prepare HTTP response; write UTF-8 BOM for better Excel compatibility on Windows
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.csv"'
         response.write('\ufeff')
         writer = csv.DictWriter(response, fieldnames=fieldnames, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         writer.writeheader()
+        for pub in pubs_query:
+            writer.writerow(_serialize_publication_for_tabular(pub))
+        return response
 
-        def _join(values):
-            vals = [str(v) for v in (values or []) if v]
-            return '; '.join(vals)
+    # NDJSON streaming export
+    if format_ == 'ndjson':
+        from django.http import StreamingHttpResponse
+        import json as _json
+        # Nota: no usar .iterator() sin chunk_size tras prefetch_related; alternativamente iterar directamente.
+        def line_iter():
+            # Iteración normal (prefetch ya ejecutado) evita el error de chunk_size.
+            for pub in pubs_query:  # Evita ValueError bajo ASGI
+                obj = _serialize_publication_for_tabular(pub)
+                # Devolver bytes para robustez en algunos servidores ASGI
+                yield (_json.dumps(obj, ensure_ascii=False) + '\n').encode('utf-8')
+        resp = StreamingHttpResponse(line_iter(), content_type='application/x-ndjson; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.ndjson"'
+        return resp
 
+    # BibTeX export
+    if format_ == 'bibtex':
+        def bibtex_escape(val: str) -> str:
+            if not val:
+                return ''
+            return val.replace('{', '\\{').replace('}', '\\}').replace('"', '\"')
+        entries = []
+        for pub in pubs_query:
+            authors = ' and '.join(a.name for a in pub.authors.all())
+            year = pub.year or ''
+            doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
+            doi = doi_list[0] if doi_list else ''
+            source = pub.source or ''
+            type_ = 'article'
+            if isinstance(pub.normalized_types, list) and pub.normalized_types:
+                type_ = pub.normalized_types[0].lower()[:40]
+            key = f"pub{pub.id}"  # simple key
+            entry = (
+                f"@{type_}{{{key},\n"
+                f"  title = {{{bibtex_escape(pub.title)}}},\n"
+                f"  author = {{{bibtex_escape(authors)}}},\n"
+                f"  year = {{{year}}},\n"
+                f"  journal = {{{bibtex_escape(source)}}},\n"
+                f"  doi = {{{doi}}},\n"
+                f"  url = {{{pub.title_link or ''}}}\n"
+                f"}}\n"
+            )
+            entries.append(entry)
+        content = ''.join(entries)
+        resp = HttpResponse(content, content_type='application/x-bibtex; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.bib"'
+        return resp
+
+    # RIS export
+    if format_ == 'ris':
+        def ris_type(pub):
+            # Map a minimal set; default to JOUR
+            return 'JOUR'
+        lines = []
+        for pub in pubs_query:
+            lines.append(f"TY  - {ris_type(pub)}")
+            lines.append(f"TI  - {pub.title}")
+            for a in pub.authors.all():
+                lines.append(f"AU  - {a.name}")
+            if pub.year:
+                lines.append(f"PY  - {pub.year}")
+            doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
+            if doi_list:
+                lines.append(f"DO  - {doi_list[0]}")
+            if pub.source:
+                lines.append(f"JO  - {pub.source}")
+            if pub.title_link:
+                lines.append(f"UR  - {pub.title_link}")
+            lines.append("ER  - ")
+        content = '\n'.join(lines) + '\n'
+        resp = HttpResponse(content, content_type='application/x-research-info-systems; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.ris"'
+        return resp
+
+    # Collaboration network (authors) GEXF export
+    if format_ == 'gexf' or format_ == 'network_csv' or format_ == 'zip':
+        import networkx as nx
+        # Build co-author network restricted to filtered publications
+        # Edge weight = number of shared publications between two authors in filtered set
+        G = nx.Graph()
+        # Collect authors per publication
         for pub in pubs_query:
             authors = list(pub.authors.all())
-            institutions = list(pub.institutions.all())
-            areas = list(pub.thematic_areas.all())
-            pred_areas = list(pub.predicted_thematic_areas.all())
+            for a in authors:
+                if not G.has_node(a.gesbib_id):
+                    G.add_node(a.gesbib_id, label=a.name)
+            # Add edges
+            for i in range(len(authors)):
+                for j in range(i + 1, len(authors)):
+                    u = authors[i].gesbib_id
+                    v = authors[j].gesbib_id
+                    if G.has_edge(u, v):
+                        G[u][v]['weight'] += 1
+                    else:
+                        G.add_edge(u, v, weight=1)
 
-            # Start with DB fields
-            row = {}
-            for fname in db_fieldnames:
-                val = getattr(pub, fname, None)
-                if isinstance(val, (list, dict)):
-                    try:
-                        row[fname] = json.dumps(val, ensure_ascii=False)
-                    except Exception:
-                        row[fname] = str(val)
-                else:
-                    row[fname] = '' if val is None else val
+        if format_ == 'gexf':
+            gexf_io = BytesIO()
+            nx.write_gexf(G, gexf_io)
+            gexf_io.seek(0)
+            resp = HttpResponse(gexf_io.read(), content_type='application/gexf+xml')
+            resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorNetwork.gexf"'
+            return resp
+        if format_ == 'network_csv':
+            import csv as _csv
+            resp = HttpResponse(content_type='text/csv; charset=utf-8')
+            resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorEdges.csv"'
+            resp.write('\ufeff')
+            writer = _csv.writer(resp)
+            writer.writerow(['author_id', 'collaborator_id', 'weight'])
+            for u, v, data in G.edges(data=True):
+                writer.writerow([u, v, data.get('weight', 1)])
+            return resp
 
-            # Add M2M summaries
-            row['authors_names'] = _join([a.name for a in authors])
-            row['authors_ids'] = _join([a.gesbib_id for a in authors if getattr(a, 'gesbib_id', None)])
-            row['institutions_names'] = _join([i.name for i in institutions])
-            row['thematic_areas_names'] = _join([a.name for a in areas])
-            row['predicted_thematic_areas_names'] = _join([a.name for a in pred_areas])
+        # ZIP bundle (processed later)
+        # Pass through to zip logic below.
 
-            writer.writerow(row)
-        return response
+    # ZIP bundle of all formats
+    if format_ == 'zip':
+        import zipfile, json as _json, csv as _csv
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # CSV
+            csv_buffer = StringIO()
+            dict_writer = _csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+            dict_writer.writeheader()
+            for pub in pubs_query:
+                dict_writer.writerow(_serialize_publication_for_tabular(pub))
+            zf.writestr('publicaciones.csv', csv_buffer.getvalue().encode('utf-8'))
+
+            # NDJSON
+            nd_lines = []
+            for pub in pubs_query:
+                nd_lines.append(_json.dumps(_serialize_publication_for_tabular(pub), ensure_ascii=False))
+            zf.writestr('publicaciones.ndjson', ('\n'.join(nd_lines) + '\n').encode('utf-8'))
+
+            # BibTeX
+            bib_entries = []
+            for pub in pubs_query:
+                authors = ' and '.join(a.name for a in pub.authors.all())
+                year = pub.year or ''
+                doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
+                doi = doi_list[0] if doi_list else ''
+                source = pub.source or ''
+                type_ = 'article'
+                if isinstance(pub.normalized_types, list) and pub.normalized_types:
+                    type_ = pub.normalized_types[0].lower()[:40]
+                key = f"pub{pub.id}"
+                bib_entries.append(
+                    f"@{type_}{{{key},\n  title = {{{pub.title}}},\n  author = {{{authors}}},\n  year = {{{year}}},\n  journal = {{{source}}},\n  doi = {{{doi}}},\n  url = {{{pub.title_link or ''}}}\n}}\n"
+                )
+            zf.writestr('publicaciones.bib', ''.join(bib_entries))
+
+            # RIS
+            ris_lines = []
+            for pub in pubs_query:
+                ris_lines.append("TY  - JOUR")
+                ris_lines.append(f"TI  - {pub.title}")
+                for a in pub.authors.all():
+                    ris_lines.append(f"AU  - {a.name}")
+                if pub.year:
+                    ris_lines.append(f"PY  - {pub.year}")
+                doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
+                if doi_list:
+                    ris_lines.append(f"DO  - {doi_list[0]}")
+                if pub.source:
+                    ris_lines.append(f"JO  - {pub.source}")
+                if pub.title_link:
+                    ris_lines.append(f"UR  - {pub.title_link}")
+                ris_lines.append("ER  - ")
+            zf.writestr('publicaciones.ris', '\n'.join(ris_lines) + '\n')
+
+            # Network GEXF and edges CSV (reusing G built earlier if present else rebuild)
+            if 'G' in locals():
+                gexf_out = BytesIO(); nx.write_gexf(G, gexf_out); zf.writestr('red_coautorias.gexf', gexf_out.getvalue())
+                edges_buffer = BytesIO(); edges_writer = _csv.writer(edges_buffer); edges_writer.writerow(['author_id','collaborator_id','weight'])
+                for u, v, data in G.edges(data=True):
+                    edges_writer.writerow([u, v, data.get('weight', 1)])
+                zf.writestr('red_coautorias_edges.csv', edges_buffer.getvalue().decode('utf-8'))
+
+            # README
+            readme = (
+                "Paquete de exportación bibliométrica IPBLN\n\n"
+                "Incluye: CSV, NDJSON, BibTeX, RIS, red de coautorías (GEXF + edges CSV).\n"
+                f"Filtros aplicados: años={year_from}-{year_to}, areas={', '.join(areas)}, instituciones={', '.join(institutions)}, tipos={', '.join(types)}, autor={author or '-'}\n"
+                f"Ordenación: campo={sort_field or '-'} orden={sort_order}\n"
+            )
+            zf.writestr('README.txt', readme)
+
+        zip_buffer.seek(0)
+        resp = HttpResponse(zip_buffer.read(), content_type='application/zip')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_ExportBundle.zip"'
+        return resp
 
     if format_ != 'pdf':
         return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
