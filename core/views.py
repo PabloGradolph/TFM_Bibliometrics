@@ -23,6 +23,7 @@ import unicodedata
 from pathlib import Path
 from bibliodata.models import PublicationEmbedding
 from core.utils_bibtex import build_bibtex_entry
+from core.utils_ris import build_ris_entry
 
 # --- Optimized: Use HNSWlib index ---
 import hnswlib
@@ -1324,26 +1325,8 @@ def export_report(request):
 
     # RIS export
     if format_ == 'ris':
-        def ris_type(pub):
-            # Map a minimal set; default to JOUR
-            return 'JOUR'
-        lines = []
-        for pub in pubs_query:
-            lines.append(f"TY  - {ris_type(pub)}")
-            lines.append(f"TI  - {pub.title}")
-            for a in pub.authors.all():
-                lines.append(f"AU  - {a.name}")
-            if pub.year:
-                lines.append(f"PY  - {pub.year}")
-            doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
-            if doi_list:
-                lines.append(f"DO  - {doi_list[0]}")
-            if pub.source:
-                lines.append(f"JO  - {pub.source}")
-            if pub.title_link:
-                lines.append(f"UR  - {pub.title_link}")
-            lines.append("ER  - ")
-        content = '\n'.join(lines) + '\n'
+        entries = [build_ris_entry(pub) for pub in pubs_query]
+        content = ''.join(entries)
         resp = HttpResponse(content, content_type='application/x-research-info-systems; charset=utf-8')
         resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.ris"'
         return resp
@@ -1415,23 +1398,8 @@ def export_report(request):
             zf.writestr('publicaciones.bib', ''.join(bib_entries))
 
             # RIS
-            ris_lines = []
-            for pub in pubs_query:
-                ris_lines.append("TY  - JOUR")
-                ris_lines.append(f"TI  - {pub.title}")
-                for a in pub.authors.all():
-                    ris_lines.append(f"AU  - {a.name}")
-                if pub.year:
-                    ris_lines.append(f"PY  - {pub.year}")
-                doi_list = pub.doi if isinstance(pub.doi, list) else ([pub.doi] if pub.doi else [])
-                if doi_list:
-                    ris_lines.append(f"DO  - {doi_list[0]}")
-                if pub.source:
-                    ris_lines.append(f"JO  - {pub.source}")
-                if pub.title_link:
-                    ris_lines.append(f"UR  - {pub.title_link}")
-                ris_lines.append("ER  - ")
-            zf.writestr('publicaciones.ris', '\n'.join(ris_lines) + '\n')
+            ris_entries = [build_ris_entry(pub) for pub in pubs_query]
+            zf.writestr('publicaciones.ris', ''.join(ris_entries))
 
             # Network GEXF and edges CSV (reusing G built earlier if present else rebuild)
             if 'G' in locals():

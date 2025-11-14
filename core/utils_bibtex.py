@@ -75,22 +75,22 @@ DEFAULT_BIBTEX_TYPE = "misc"
 def build_bibtex_entry(publication) -> str:
     """Return a BibTeX entry string for the given ``Publication`` instance."""
 
-    entry_type = _guess_bibtex_type(publication)
+    entry_type = resolve_reference_type(publication)
     key = f"pub{publication.id}"
     fields = OrderedDict()
 
-    _set_field(fields, "author", _format_author_field(publication))
+    _set_field(fields, "author", format_author_field(publication))
     _set_field(fields, "title", publication.title)
     _apply_type_specific_fields(entry_type, publication, fields)
     _set_field(fields, "year", str(publication.year) if publication.year else None)
-    _set_field(fields, "month", _extract_month(publication.publication_date))
+    _set_field(fields, "month", extract_month_number(publication.publication_date))
     _set_field(fields, "publisher", publication.editorial)
-    _set_field(fields, "doi", _first_scalar(publication.doi))
-    _set_field(fields, "url", _preferred_url(publication))
+    _set_field(fields, "doi", first_scalar(publication.doi))
+    _set_field(fields, "url", preferred_url(publication))
     _set_field(fields, "abstract", getattr(publication, "abstract", None))
-    _set_field(fields, "keywords", _format_keywords(publication.keywords_all))
-    _set_field(fields, "issn", _first_scalar(getattr(publication, "issns", None)))
-    _set_field(fields, "isbn", _first_scalar(getattr(publication, "isbn", None)))
+    _set_field(fields, "keywords", format_keywords(publication.keywords_all))
+    _set_field(fields, "issn", first_scalar(getattr(publication, "issns", None)))
+    _set_field(fields, "isbn", first_scalar(getattr(publication, "isbn", None)))
 
     lines = [f"@{entry_type}{{{key},"]
     for name, value in fields.items():
@@ -116,7 +116,7 @@ def _apply_type_specific_fields(entry_type: str, publication, fields: OrderedDic
         _set_field(fields, "booktitle", booktitle)
 
 
-def _guess_bibtex_type(publication) -> str:
+def resolve_reference_type(publication) -> str:
     """Resolve the BibTeX entry type from normalized/publication types."""
 
     normalized = publication.normalized_types
@@ -132,11 +132,11 @@ def _guess_bibtex_type(publication) -> str:
     return BIBTEX_TYPE_MAP.get(canon, DEFAULT_BIBTEX_TYPE)
 
 
-def _format_author_field(publication) -> str:
-    """Combine DB authors and ``other_authors`` into a BibTeX-ready string."""
+def collect_author_names(publication) -> List[str]:
+    """Return deduplicated author names including ``other_authors``."""
 
     names: List[str] = [a.name for a in publication.authors.all() if a.name]
-    names.extend(_normalize_other_authors(getattr(publication, "other_authors", None)))
+    names.extend(normalize_other_authors(getattr(publication, "other_authors", None)))
     unique = []
     seen = set()
     for name in names:
@@ -145,10 +145,16 @@ def _format_author_field(publication) -> str:
             continue
         unique.append(clean)
         seen.add(clean)
-    return " and ".join(unique)
+    return unique
 
 
-def _normalize_other_authors(raw) -> Iterable[str]:
+def format_author_field(publication) -> str:
+    """Combine DB authors and ``other_authors`` into a BibTeX-ready string."""
+
+    return " and ".join(collect_author_names(publication))
+
+
+def normalize_other_authors(raw) -> Iterable[str]:
     """Yield cleaned author names from ``other_authors`` regardless of format."""
 
     if not raw:
@@ -173,7 +179,7 @@ def _normalize_other_authors(raw) -> Iterable[str]:
     return [text]
 
 
-def _first_scalar(value) -> str:
+def first_scalar(value) -> str:
     """Return the first non-empty scalar string from a list/str/None input."""
 
     if not value:
@@ -188,34 +194,34 @@ def _first_scalar(value) -> str:
         if text.startswith("["):
             try:
                 parsed = json.loads(text)
-                return _first_scalar(parsed)
+                return first_scalar(parsed)
             except json.JSONDecodeError:
                 return text
         return text
     return str(value).strip()
 
 
-def _preferred_url(publication) -> str:
+def preferred_url(publication) -> str:
     """Return the best available URL for BibTeX (AA, title, DOI, extra_links)."""
 
-    aa_link = _first_scalar(getattr(publication, "aa_link", None))
+    aa_link = first_scalar(getattr(publication, "aa_link", None))
     if aa_link and not aa_link.strip().lower().startswith("item"):
         return aa_link
 
     title_link = (getattr(publication, "title_link", "") or "").strip()
     if title_link:
         if title_link.lower().startswith("item"):
-            doi_url = _doi_to_url(_first_scalar(publication.doi))
+            doi_url = _doi_to_url(first_scalar(publication.doi))
             if doi_url:
                 return doi_url
         else:
             return title_link
 
-    doi_url = _doi_to_url(_first_scalar(publication.doi))
+    doi_url = _doi_to_url(first_scalar(publication.doi))
     if doi_url:
         return doi_url
 
-    extra_url = _first_scalar(getattr(publication, "extra_links", None))
+    extra_url = first_scalar(getattr(publication, "extra_links", None))
     return extra_url or ""
 
 
@@ -236,7 +242,7 @@ def _doi_to_url(doi_value: str) -> str:
     return f"https://doi.org/{cleaned}"
 
 
-def _format_keywords(raw) -> str:
+def format_keywords(raw) -> str:
     """Join keyword sequences into a comma-separated string."""
 
     if not raw:
@@ -248,7 +254,7 @@ def _format_keywords(raw) -> str:
         if text.startswith("["):
             try:
                 parsed = json.loads(text)
-                return _format_keywords(parsed)
+                return format_keywords(parsed)
             except json.JSONDecodeError:
                 pass
         return text
@@ -258,7 +264,7 @@ def _format_keywords(raw) -> str:
     return str(raw).strip()
 
 
-def _extract_month(value) -> str:
+def extract_month_number(value) -> str:
     """Extract a BibTeX month token from ``publication_date`` values."""
 
     if not value:
