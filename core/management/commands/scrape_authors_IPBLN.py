@@ -104,7 +104,7 @@ class Command(BaseCommand):
             # Select 500 results per page
             select_element = Select(driver.find_element(By.ID, "mainForm:dataTable_rppDD"))
             select_element.select_by_value("500")
-            time.sleep(5)
+            time.sleep(15)
 
             while True:
                 time.sleep(4)
@@ -154,7 +154,7 @@ class Command(BaseCommand):
                     if "ui-state-disabled" in next_btn.get_attribute("class"):
                         break
                     driver.execute_script("arguments[0].click();", next_btn)
-                    time.sleep(8)
+                    time.sleep(15)
                 except NoSuchElementException:
                     break
 

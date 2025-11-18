@@ -132,7 +132,7 @@ class Command(BaseCommand):
             apply_button.click()
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "mainForm:dataTable")))
             self.stdout.write("✅ Filtro aplicado correctamente (IPBLN).")
-            time.sleep(5)
+            time.sleep(15)
 
             while True:
                 WebDriverWait(driver, 15).until(
@@ -204,7 +204,7 @@ class Command(BaseCommand):
                     if "ui-state-disabled" in next_btn.get_attribute("class"):
                         break
                     driver.execute_script("arguments[0].click();", next_btn)
-                    time.sleep(5)
+                    time.sleep(10)
                 except NoSuchElementException:
                     break
 
