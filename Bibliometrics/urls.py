@@ -34,6 +34,17 @@ urlpatterns += i18n_patterns(
 )
 
 # Servir archivos estáticos en desarrollo
+def strip_script_prefix(url: str) -> str:
+    """Return a URL path without the FORCE_SCRIPT_NAME prefix for internal routing."""
+
+    script_name = (settings.FORCE_SCRIPT_NAME or '').rstrip('/')
+    if script_name and url.startswith(script_name):
+        url = url[len(script_name):]
+    return url
+
+
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    static_url = strip_script_prefix(settings.STATIC_URL)
+    media_url = strip_script_prefix(settings.MEDIA_URL)
+    urlpatterns += static(static_url, document_root=settings.STATICFILES_DIRS[0])
+    urlpatterns += static(media_url, document_root=settings.MEDIA_ROOT)

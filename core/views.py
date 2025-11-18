@@ -1,4 +1,5 @@
 import logging
+from io import BytesIO, StringIO
 from django.shortcuts import render, get_object_or_404
 import json
 from django.http import JsonResponse, HttpResponse
@@ -14,16 +15,15 @@ import random
 import networkx as nx
 import csv
 import random
-from reportlab.platypus import PageBreak
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.colors import blue
 import unicodedata
 from pathlib import Path
 from bibliodata.models import PublicationEmbedding
-from core.utils_bibtex import build_bibtex_entry
-from core.utils_ris import build_ris_entry
+from core.reports.network_exports import build_collaboration_graph
+from core.reports.bibtex import build_bibtex_entry
+from core.reports.ris import build_ris_entry
+from core.reports.pdf_exports import build_pdf_report
 
 # --- Optimized: Use HNSWlib index ---
 import hnswlib
@@ -1093,7 +1093,6 @@ def get_author_metrics(request):
     except Author.DoesNotExist:
         return JsonResponse({'error': 'Author not found'}, status=404)
 
-
 @require_http_methods(["GET", "POST"])
 @csrf_exempt
 @login_required(login_url='/BiblioMetrics/accounts/login/')
@@ -1152,6 +1151,9 @@ def export_report(request):
     format_ = data.get('format', 'pdf')
     sort_field = data.get('sort_field')
     sort_order = data.get('sort_order', 'desc')
+    network_scope = data.get('network_scope', 'ips')
+    if network_scope not in {'ips', 'full'}:
+        network_scope = 'ips'
 
     # Build base queryset (shared by most formats)
     pubs_query = Publication.objects.all()
@@ -1331,48 +1333,28 @@ def export_report(request):
         resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Publicaciones.ris"'
         return resp
 
-    # Collaboration network (authors) GEXF export
-    if format_ == 'gexf' or format_ == 'network_csv' or format_ == 'zip':
-        import networkx as nx
-        # Build co-author network restricted to filtered publications
-        # Edge weight = number of shared publications between two authors in filtered set
-        G = nx.Graph()
-        # Collect authors per publication
-        for pub in pubs_query:
-            authors = list(pub.authors.all())
-            for a in authors:
-                if not G.has_node(a.gesbib_id):
-                    G.add_node(a.gesbib_id, label=a.name)
-            # Add edges
-            for i in range(len(authors)):
-                for j in range(i + 1, len(authors)):
-                    u = authors[i].gesbib_id
-                    v = authors[j].gesbib_id
-                    if G.has_edge(u, v):
-                        G[u][v]['weight'] += 1
-                    else:
-                        G.add_edge(u, v, weight=1)
+    network_graph = None
+    if format_ in {'gexf', 'network_csv', 'zip'}:
+        network_graph = build_collaboration_graph(network_scope)
 
-        if format_ == 'gexf':
-            gexf_io = BytesIO()
-            nx.write_gexf(G, gexf_io)
-            gexf_io.seek(0)
-            resp = HttpResponse(gexf_io.read(), content_type='application/gexf+xml')
-            resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorNetwork.gexf"'
-            return resp
-        if format_ == 'network_csv':
-            import csv as _csv
-            resp = HttpResponse(content_type='text/csv; charset=utf-8')
-            resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorEdges.csv"'
-            resp.write('\ufeff')
-            writer = _csv.writer(resp)
-            writer.writerow(['author_id', 'collaborator_id', 'weight'])
-            for u, v, data in G.edges(data=True):
-                writer.writerow([u, v, data.get('weight', 1)])
-            return resp
+    if format_ == 'gexf':
+        gexf_io = BytesIO()
+        nx.write_gexf(network_graph, gexf_io)
+        gexf_io.seek(0)
+        resp = HttpResponse(gexf_io.read(), content_type='application/gexf+xml')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorNetwork.gexf"'
+        return resp
 
-        # ZIP bundle (processed later)
-        # Pass through to zip logic below.
+    if format_ == 'network_csv':
+        import csv as _csv
+        resp = HttpResponse(content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorEdges.csv"'
+        resp.write('\ufeff')
+        writer = _csv.writer(resp)
+        writer.writerow(['author_id', 'collaborator_id', 'weight'])
+        for u, v, data in network_graph.edges(data=True):
+            writer.writerow([u, v, data.get('weight', 1)])
+        return resp
 
     # ZIP bundle of all formats
     if format_ == 'zip':
@@ -1401,20 +1383,28 @@ def export_report(request):
             ris_entries = [build_ris_entry(pub) for pub in pubs_query]
             zf.writestr('publicaciones.ris', ''.join(ris_entries))
 
-            # Network GEXF and edges CSV (reusing G built earlier if present else rebuild)
-            if 'G' in locals():
-                gexf_out = BytesIO(); nx.write_gexf(G, gexf_out); zf.writestr('red_coautorias.gexf', gexf_out.getvalue())
-                edges_buffer = BytesIO(); edges_writer = _csv.writer(edges_buffer); edges_writer.writerow(['author_id','collaborator_id','weight'])
-                for u, v, data in G.edges(data=True):
-                    edges_writer.writerow([u, v, data.get('weight', 1)])
-                zf.writestr('red_coautorias_edges.csv', edges_buffer.getvalue().decode('utf-8'))
+            # Network GEXF and edges CSV respecting the selected scope
+            if network_graph is None:
+                network_graph = build_collaboration_graph(network_scope)
+            gexf_out = BytesIO()
+            nx.write_gexf(network_graph, gexf_out)
+            zf.writestr('red_coautorias.gexf', gexf_out.getvalue())
+
+            edges_buffer = StringIO()
+            edges_writer = _csv.writer(edges_buffer)
+            edges_writer.writerow(['author_id', 'collaborator_id', 'weight'])
+            for u, v, data in network_graph.edges(data=True):
+                edges_writer.writerow([u, v, data.get('weight', 1)])
+            zf.writestr('red_coautorias_edges.csv', edges_buffer.getvalue().encode('utf-8'))
 
             # README
+            network_label = 'Red completa (todos los investigadores)' if network_scope == 'full' else 'Red de IPs (investigadores principales)'
             readme = (
                 "Paquete de exportación bibliométrica IPBLN\n\n"
                 "Incluye: CSV, NDJSON, BibTeX, RIS, red de coautorías (GEXF + edges CSV).\n"
                 f"Filtros aplicados: años={year_from}-{year_to}, areas={', '.join(areas)}, instituciones={', '.join(institutions)}, tipos={', '.join(types)}, autor={author or '-'}\n"
                 f"Ordenación: campo={sort_field or '-'} orden={sort_order}\n"
+                f"Tipo de red exportada: {network_label}\n"
             )
             zf.writestr('README.txt', readme)
 
@@ -1423,249 +1413,32 @@ def export_report(request):
         resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_ExportBundle.zip"'
         return resp
 
-    if format_ != 'pdf':
-        return JsonResponse({'error': 'Formato no soportado aún'}, status=400)
-
-    # Valores por defecto personalizados
-    default_year_from = '1965'
-    default_year_to = '2025'
-    default_areas = _('Todas las áreas')
-    default_institutions = _('Todas las instituciones')
-    default_types = _('Todos los tipos')
-    default_quartiles = _('Todos los cuartiles')
-    default_citations = _('Todas (0 - máx)')
-    # metric source fixed to WoS; no generic default needed
-
-    buffer = BytesIO()
-    doc_title = 'Bibliometría IPBLN: Informe'
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-    doc.title = doc_title
-    elements = []
-    styles = getSampleStyleSheet()
-
-    # Título dinámico
-    if author:
-        title = f"{_('Informe bibliométrico de')} {author}"
-    else:
-        title = _('Bibliometría IPBLN: Informe generado con filtros personalizados')
-
-    # Fecha de generación
-    fecha = datetime.now().strftime('%d/%m/%Y %H:%M')
-    subtitle = f"{_('Fecha de generación')}: {fecha}"
-
-    # Añadir título y subtítulo
-    title_style = styles['Title']
-    title_style.alignment = TA_CENTER
-    subtitle_style = styles['Heading3']
-    subtitle_style.alignment = TA_CENTER
-    elements.append(Paragraph(title, title_style))
-    elements.append(Spacer(1, 0.3*cm))
-    elements.append(Paragraph(subtitle, subtitle_style))
-    elements.append(Spacer(1, 0.7*cm))
-
-    # Sección de filtros
-    normal = styles['Normal']
-    def safe_value(val, default):
-        if isinstance(val, list):
-            return Paragraph(', '.join(val) if val else default, normal)
-        return Paragraph(str(val) if val else default, normal)
-    def label(text):
-        return Paragraph(f"<b>{text}</b>", normal)
-    filters_data = [
-        [label(_('Año desde')), safe_value(year_from, default_year_from)],
-        [label(_('Año hasta')), safe_value(year_to, default_year_to)],
-        [label(_('Áreas temáticas')), safe_value(areas, default_areas)],
-        [label(_('Instituciones')), safe_value(institutions, default_institutions)],
-        [label(_('Tipos de publicación')), safe_value(types, default_types)],
-    # Metric source row removed (always WoS JCR - JIF)
-        [label(_('Cuartiles')), safe_value(quartiles, default_quartiles)],
-        [label(_('Citas (mín - máx)')), safe_value(
-            f"{citations_from or '0'} - {citations_to or _('máx')}" if (citations_from or citations_to) else None,
-            default_citations
-        )],
-    ]
-    if author:
-        filters_data.append([label(_('Autor seleccionado')), safe_value(author, '-')])
-    table = Table(filters_data, colWidths=[5*cm, 10*cm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 1*cm))
-
-    base_url = request.build_absolute_uri(settings.MEDIA_URL + 'networks_html/')
-    link_style = ParagraphStyle(
-        'LinkStyle',
-        parent=styles['Normal'],
-        textColor=blue,
-        underline=True,
-        fontSize=12,
+    filters_context = {
+        'year_from': year_from,
+        'year_to': year_to,
+        'areas': areas,
+        'institutions': institutions,
+        'types': types,
+        'quartiles': quartiles,
+        'citations_from': citations_from,
+        'citations_to': citations_to,
+        'author': author,
+    }
+    images_context = {
+        'timeline': data.get('timeline_img'),
+        'pie': data.get('pie_img'),
+        'bar': data.get('bar_img'),
+    }
+    pdf_content = build_pdf_report(
+        request=request,
+        pubs_queryset=pubs_query,
+        filters=filters_context,
+        images=images_context,
+        network_html=data.get('network_html'),
+        logger=logger,
     )
 
-    # Añadir imágenes según la lógica pedida
-    timeline_img = data.get('timeline_img')
-    pie_img = data.get('pie_img')
-    bar_img = data.get('bar_img')
-
-    def add_image_section(title, img_b64):
-        if img_b64:
-            elements.append(Paragraph(f'<b>{title}</b>', styles['Heading4']))
-            elements.append(Spacer(1, 0.2*cm))
-            # Quitar el prefijo data:image/png;base64,
-            if img_b64.startswith('data:image'):
-                img_b64 = img_b64.split(',')[1]
-            img_bytes = base64.b64decode(img_b64)
-            img_io = BytesIO(img_bytes)
-            img = Image(img_io, width=18*cm, height=9*cm)
-            elements.append(img)
-            elements.append(Spacer(1, 0.7*cm))
-
-    # Lógica: si bar_img existe, solo timeline y bar. Si no, timeline y pie.
-    elements.append(PageBreak())
-    if timeline_img:
-        add_image_section(_('Línea temporal de publicaciones'), timeline_img)
-    else:
-        logger.warning('No hay imagen para línea temporal')
-
-    if bar_img:
-        add_image_section(_('Distribución de áreas (gráfico de barras)'), bar_img)
-    elif pie_img:
-        add_image_section(_('Distribución de áreas (gráfico circular)'), pie_img)
-    else:
-        logger.warning('No hay imagen para gráfico de barras ni circular')
-        elements.append(Paragraph('<b>No se han podido exportar los gráficos.</b>', styles['Heading4']))
-        elements.append(Spacer(1, 0.7*cm))
-
-    # --- Añadir enlaces a redes interactivas ---
-    elements.append(Spacer(1, 0.7*cm))
-    elements.append(Paragraph('<b>Visualizar redes de colaboración entre IPs:</b>', styles['Heading4']))
-    # Enlaces fijos
-    elements.append(Paragraph(f'<a href="{base_url}departments_comunidades.html">Departamentos</a>', link_style))
-    elements.append(Paragraph(f'<a href="{base_url}lovaina_comunidades.html">Lovaina (7 comunidades)</a>', link_style))
-    elements.append(Paragraph(f'<a href="{base_url}leiden_comunidades.html"> Leiden (6 comunidades)</a>', link_style))
-    # Palabras clave (si existe)
-    network_html = data.get('network_html')
-    if network_html:
-        elements.append(Paragraph(f'<a href="{base_url}{network_html}">Red de Coautorías por Palabras Clave</a>', link_style))
-        
-    # --- Apartado de autor seleccionado (ahora lo primero) ---
-    if author:
-        from bibliodata.models import Author
-        elements.append(Spacer(1, 0.5*cm))
-        elements.append(Paragraph(f'<b>Métricas del autor seleccionado</b>', styles['Heading3']))
-        try:
-            author_obj = Author.objects.get(name=author)
-            metrics = [
-                (_('ORCID'), author_obj.orcid_link or '-'),
-                (_('Total publicaciones'), author_obj.total_publications or '-'),
-                (_('Total citas'), author_obj.total_citations or '-'),
-                (_('Citas WoS'), author_obj.citations_wos or '-'),
-                (_('Citas Scopus'), author_obj.citations_scopus or '-'),
-                (_('Índice h (WoS/Scopus)'), author_obj.h_index or '-'),
-                (_('Índice h GESBIB'), author_obj.h_index_gb or '-'),
-                (_('Índice h5 GESBIB'), author_obj.h_index_h5gb or '-'),
-                (_('Índice internacionalización'), author_obj.international_index or '-')
-            ]
-            table = Table(metrics, colWidths=[7*cm, 8*cm])
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -1), 11),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
-            ]))
-            elements.append(table)
-        except Author.DoesNotExist:
-            elements.append(Paragraph('<b>No se han encontrado métricas para el autor seleccionado.</b>', styles['Normal']))
-        elements.append(Spacer(1, 0.7*cm))
-        
-        # Enlace a la red de colaboración del autor
-        def slugify(value):
-            value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-            value = value.replace(' ', '_').replace('/', '_').replace(',', '').replace('.', '')
-            return value
-        author_slug = slugify(author)
-        author_html = f'collab_{author_slug}.html'
-        elements.append(Paragraph(f'<a href="{base_url}{author_html}">Red de colaboración de {author}</a>', link_style))
-        elements.append(Spacer(1, 1*cm))
-
-    # --- Sección de publicaciones filtradas ---
-    elements.append(PageBreak())
-    elements.append(Paragraph('<b>Listado de publicaciones filtradas</b>', styles['Heading2']))
-    # Construir el queryset con los mismos filtros
-    pubs_query = Publication.objects.all()
-    if year_from:
-        pubs_query = pubs_query.filter(year__gte=year_from)
-    if year_to:
-        pubs_query = pubs_query.filter(year__lte=year_to)
-    if areas:
-        pubs_query = pubs_query.filter(thematic_areas__name__in=areas)
-    if institutions:
-        pubs_query = pubs_query.filter(institutions__name__in=institutions)
-    if types:
-        type_query = Q()
-        for t in types:
-            type_query |= Q(publication_type__icontains=t)
-        pubs_query = pubs_query.filter(type_query)
-    if quartiles:
-        pubs_query = _apply_quartile_filter(pubs_query, quartiles, metric_source)
-    if author:
-        pubs_query = pubs_query.filter(authors__name=author)
-    pubs = pubs_query.distinct().order_by('-year', '-publication_date')
-    num_pubs = pubs.count()
-    # Mostrar el número de publicaciones
-    elements.append(Paragraph(f'Se muestran {num_pubs} publicaciones que cumplen los filtros seleccionados.', styles['Normal']))
-    elements.append(Spacer(1, 0.2*cm))
-    # Construir la tabla
-    data = [[Paragraph('<b>Título</b>', styles['Normal']), Paragraph('<b>Año</b>', styles['Normal'])]]
-    for pub in pubs:
-        pub_url = request.build_absolute_uri(f"/BiblioMetrics/publication/{pub.id}")
-        title_link = f'<a href="{pub_url}">{pub.title}</a>'
-        data.append([Paragraph(title_link, link_style), str(pub.year) if pub.year else '-'])
-    if len(data) == 1:
-        elements.append(Paragraph('No hay publicaciones que coincidan con los filtros seleccionados.', styles['Normal']))
-    else:
-        table = Table(data, colWidths=[13*cm, 2.5*cm])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
-        ]))
-        elements.append(table)
-
-    # Pie de página en todas las páginas
-    def add_footer(canvas, doc):
-        footer_text = _('Este informe ha sido generado automáticamente por la plataforma de Bibliometría IPBLN.')
-        canvas.saveState()
-        canvas.setFont('Helvetica', 9)
-        canvas.setFillColor(colors.grey)
-        width, height = A4
-        canvas.drawCentredString(width / 2, 1.2 * cm, footer_text)
-        canvas.restoreState()
-
-    def set_metadata(canvas, doc):
-        canvas.setTitle(doc_title)
-        add_footer(canvas, doc)
-    doc.build(elements, onFirstPage=set_metadata, onLaterPages=add_footer)
-    pdf = buffer.getvalue()
-    buffer.close()
-
-    response = HttpResponse(pdf, content_type='application/pdf')
+    response = HttpResponse(pdf_content, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_Informe.pdf"'
     return response
 

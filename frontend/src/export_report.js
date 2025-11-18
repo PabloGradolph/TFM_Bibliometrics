@@ -27,6 +27,27 @@ export function setupExportReportButton() {
             gexf: 'GEXF Red',
             network_csv: 'CSV Red',
             zip: 'ZIP Todo',
+            sections: {
+                publications: 'Publicaciones',
+                networks: 'Redes',
+                bundle: 'Exportación completa'
+            },
+            descriptions: {
+                pdf: 'Informe PDF con gráficos y resúmenes filtrados.',
+                csv: 'Tabla completa de publicaciones en formato CSV.',
+                ndjson: 'Publicaciones como objetos JSON independientes.',
+                bibtex: 'Citas BibTeX listas para gestores de referencias.',
+                ris: 'Archivo RIS compatible con gestores bibliográficos.',
+                gexf: 'Red de coautorías en formato GEXF para Gephi.',
+                network_csv: 'Listado CSV de colaboraciones autor-autor.',
+                zip: 'Paquete con todos los formatos, incluyendo redes.'
+            },
+            networkLabel: 'Tipo de red',
+            networkPrompt: 'Elige si prefieres la red completa o solo los IPs.',
+            networkOptions: {
+                ips: 'Red de IPs del IPBLN (investigadores principales)',
+                full: 'Red completa de investigadores del IPBLN'
+            },
             orderLabel: 'Ordenar por métricas',
             orderField: 'Métrica',
             orderDirection: 'Dirección',
@@ -59,6 +80,27 @@ export function setupExportReportButton() {
             gexf: 'GEXF Network',
             network_csv: 'CSV Network',
             zip: 'ZIP All',
+            sections: {
+                publications: 'Publications',
+                networks: 'Networks',
+                bundle: 'Full export'
+            },
+            descriptions: {
+                pdf: 'PDF report with charts and filtered summary.',
+                csv: 'Full publications table in CSV format.',
+                ndjson: 'Each publication as an individual JSON object.',
+                bibtex: 'BibTeX citations ready for reference managers.',
+                ris: 'RIS file compatible with reference managers.',
+                gexf: 'Co-authorship network in GEXF for Gephi.',
+                network_csv: 'CSV edge list of collaborations with weights.',
+                zip: 'Bundle containing every export format, including networks.'
+            },
+            networkLabel: 'Network type',
+            networkPrompt: 'Choose between the full network or only principal investigators.',
+            networkOptions: {
+                ips: 'IPBLN PIs network (principal investigators only)',
+                full: 'Full IPBLN researcher network'
+            },
             orderLabel: 'Order by metrics',
             orderField: 'Metric',
             orderDirection: 'Direction',
@@ -78,118 +120,154 @@ export function setupExportReportButton() {
         }
     };
     const t = texts[lang];
+    const defaultFormat = 'pdf';
+    const publicationFormats = new Set(['pdf', 'csv', 'ndjson', 'bibtex', 'ris']);
+    const networkFormats = new Set(['gexf', 'network_csv']);
+    const bundleFormats = new Set(['zip']);
+    const formatSections = [
+        { key: 'publications', label: t.sections.publications, formats: Array.from(publicationFormats) },
+        { key: 'networks', label: t.sections.networks, formats: Array.from(networkFormats) },
+        { key: 'bundle', label: t.sections.bundle, formats: Array.from(bundleFormats) }
+    ];
+    const formatDescriptions = t.descriptions || {};
+    const metricFields = ['', 'year', 'citations', 'dimensions_citations', 'wos_citations', 'scopus_citations', 'fcr', 'rcr', 'international_collab'];
 
-    // Crear el modal si no existe
+    const shouldShowMetricControls = (format) => publicationFormats.has(format) || bundleFormats.has(format);
+    const shouldShowNetworkControls = (format) => networkFormats.has(format) || bundleFormats.has(format);
+
+    const buildMetricOptions = () => metricFields.map(field => (
+        field === ''
+            ? `<option value="">${t.metricsPlaceholder}</option>`
+            : `<option value="${field}">${t.metrics[field]}</option>`
+    )).join('');
+
+    const buildFormatSections = () => formatSections.map(section => `
+        <div class="mb-3" data-section="${section.key}">
+            <p class="fw-semibold mb-2">${section.label}</p>
+            <div class="d-flex flex-wrap gap-2">
+                ${section.formats.map(format => `
+                    <div>
+                        <input type="radio" class="btn-check" name="exportFormat" id="exportFormat_${format}" value="${format}" autocomplete="off" ${format === defaultFormat ? 'checked' : ''}>
+                        <label class="btn btn-outline-primary btn-sm" for="exportFormat_${format}">${t[format]}</label>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    const renderModalContent = () => {
+        const descriptionText = formatDescriptions[defaultFormat] || t.prompt;
+        return `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${t.title}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="${t.cancel}"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted mb-3">${t.message}</p>
+                        ${buildFormatSections()}
+                        <div class="alert alert-info py-2 px-3 small mb-3" id="exportFormatDescription">
+                            ${descriptionText}
+                        </div>
+                        <div class="border rounded p-3 mb-3" data-metric-controls>
+                            <h6 class="mb-2">${t.orderLabel}</h6>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-6">
+                                    <label class="form-label" for="exportSortField">${t.orderField}</label>
+                                    <select class="form-select form-select-sm" id="exportSortField">${buildMetricOptions()}</select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">${t.orderDirection}</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="sortDirection" id="sortAsc" value="asc" autocomplete="off">
+                                        <label class="btn btn-outline-secondary btn-sm" for="sortAsc">${t.asc}</label>
+                                        <input type="radio" class="btn-check" name="sortDirection" id="sortDesc" value="desc" autocomplete="off" checked>
+                                        <label class="btn btn-outline-secondary btn-sm" for="sortDesc">${t.desc}</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border rounded p-3 mb-3 d-none" data-network-controls>
+                            <h6 class="mb-2">${t.networkLabel}</h6>
+                            <div class="d-flex flex-column gap-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="networkScope" id="networkScope_ips" value="ips" checked>
+                                    <label class="form-check-label" for="networkScope_ips">${t.networkOptions.ips}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="networkScope" id="networkScope_full" value="full">
+                                    <label class="form-check-label" for="networkScope_full">${t.networkOptions.full}</label>
+                                </div>
+                            </div>
+                            <p class="small text-muted mb-0">${t.networkPrompt}</p>
+                        </div>
+                        <div class="alert alert-info small mb-0">
+                            ${t.prompt}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="confirmExportReport">${t.continue}</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t.cancel}</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
     let modal = document.getElementById('exportReportModal');
+
+    const toggleConditionalControls = () => {
+        if (!modal) return;
+        const selected = modal.querySelector('input[name="exportFormat"]:checked');
+        const key = selected ? selected.value : defaultFormat;
+        const metricEl = modal.querySelector('[data-metric-controls]');
+        const networkEl = modal.querySelector('[data-network-controls]');
+        if (metricEl) {
+            metricEl.classList.toggle('d-none', !shouldShowMetricControls(key));
+        }
+        if (networkEl) {
+            networkEl.classList.toggle('d-none', !shouldShowNetworkControls(key));
+        }
+    };
+
+    const attachFormatDescriptionHandler = () => {
+        if (!modal) return;
+        const descriptionEl = modal.querySelector('#exportFormatDescription');
+        if (!descriptionEl) return;
+
+        const updateDescription = () => {
+            const selected = modal.querySelector('input[name="exportFormat"]:checked');
+            const key = selected ? selected.value : defaultFormat;
+            descriptionEl.textContent = formatDescriptions[key] || t.prompt;
+        };
+
+        const handleFormatChange = () => {
+            updateDescription();
+            toggleConditionalControls();
+        };
+
+        modal.querySelectorAll('input[name="exportFormat"]').forEach(input => {
+            input.addEventListener('change', handleFormatChange);
+        });
+
+        handleFormatChange();
+    };
+
+    const hydrateModal = () => {
+        modal.innerHTML = renderModalContent();
+        attachFormatDescriptionHandler();
+    };
+
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'exportReportModal';
         modal.className = 'modal fade';
         modal.setAttribute('tabindex', '-1');
-        // Build metric options HTML
-        const metricOptions = ['','year','citations','dimensions_citations','wos_citations','scopus_citations','fcr','rcr','international_collab']
-            .map(m => m === '' ? `<option value="">${t.metricsPlaceholder}</option>` : `<option value="${m}">${t.metrics[m]}</option>`)
-            .join('');
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">${t.title}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted mb-2">${t.message}</p>
-                        <div class="row g-2 mb-3">
-                            <div class="col-12">
-                                <div class="d-flex flex-wrap gap-2" id="exportFormatGroup">
-                                    ${[['pdf',t.pdf],['csv',t.csv],['ndjson',t.ndjson],['bibtex',t.bibtex],['ris',t.ris],['gexf',t.gexf],['network_csv',t.network_csv],['zip',t.zip]]
-                                        .map(([val,label]) => `
-                                        <div>
-                                          <input type="radio" class="btn-check" name="exportFormat" id="exportFormat_${val}" value="${val}" autocomplete="off" ${val==='pdf'?'checked':''}>
-                                          <label class="btn btn-outline-primary btn-sm" for="exportFormat_${val}">${label}</label>
-                                        </div>`).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="border rounded p-2 mb-3">
-                          <div class="row g-2 align-items-end">
-                            <div class="col-md-6">
-                              <label class="form-label">${t.orderField}</label>
-                              <select class="form-select form-select-sm" id="exportSortField">${metricOptions}</select>
-                            </div>
-                            <div class="col-md-6">
-                              <label class="form-label">${t.orderDirection}</label>
-                              <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="sortDirection" id="sortAsc" value="asc" autocomplete="off">
-                                <label class="btn btn-outline-secondary btn-sm" for="sortAsc">${t.asc}</label>
-                                <input type="radio" class="btn-check" name="sortDirection" id="sortDesc" value="desc" autocomplete="off" checked>
-                                <label class="btn btn-outline-secondary btn-sm" for="sortDesc">${t.desc}</label>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <p class="small text-muted">${t.prompt}</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-primary" id="confirmExportReport">${t.continue}</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t.cancel}</button>
-                    </div>
-                </div>
-            </div>`;
+        hydrateModal();
         document.body.appendChild(modal);
     } else {
-        // Rebuild body (simpler: remove then recreate for language switch)
-        const oldDialog = modal.querySelector('.modal-dialog');
-        if (oldDialog) oldDialog.remove();
-        const metricOptions = ['','year','citations','dimensions_citations','wos_citations','scopus_citations','fcr','rcr','international_collab']
-            .map(m => m === '' ? `<option value="">${t.metricsPlaceholder}</option>` : `<option value="${m}">${t.metrics[m]}</option>`)
-            .join('');
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">${t.title}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted mb-2">${t.message}</p>
-                        <div class="row g-2 mb-3">
-                            <div class="col-12">
-                                <div class="d-flex flex-wrap gap-2" id="exportFormatGroup">
-                                    ${[['pdf',t.pdf],['csv',t.csv],['ndjson',t.ndjson],['bibtex',t.bibtex],['ris',t.ris],['gexf',t.gexf],['network_csv',t.network_csv],['zip',t.zip]]
-                                        .map(([val,label]) => `
-                                        <div>
-                                          <input type="radio" class="btn-check" name="exportFormat" id="exportFormat_${val}" value="${val}" autocomplete="off" ${val==='pdf'?'checked':''}>
-                                          <label class="btn btn-outline-primary btn-sm" for="exportFormat_${val}">${label}</label>
-                                        </div>`).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="border rounded p-2 mb-3">
-                          <div class="row g-2 align-items-end">
-                            <div class="col-md-6">
-                              <label class="form-label">${t.orderField}</label>
-                              <select class="form-select form-select-sm" id="exportSortField">${metricOptions}</select>
-                            </div>
-                            <div class="col-md-6">
-                              <label class="form-label">${t.orderDirection}</label>
-                              <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="sortDirection" id="sortAsc" value="asc" autocomplete="off">
-                                <label class="btn btn-outline-secondary btn-sm" for="sortAsc">${t.asc}</label>
-                                <input type="radio" class="btn-check" name="sortDirection" id="sortDesc" value="desc" autocomplete="off" checked>
-                                <label class="btn btn-outline-secondary btn-sm" for="sortDesc">${t.desc}</label>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <p class="small text-muted">${t.prompt}</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-primary" id="confirmExportReport">${t.continue}</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t.cancel}</button>
-                    </div>
-                </div>
-            </div>`;
+        hydrateModal();
     }
 
     exportBtn.addEventListener('click', function() {
@@ -239,9 +317,16 @@ export function setupExportReportButton() {
     // Evento para el botón de continuar
     modal.addEventListener('click', function(e) {
         if (e.target && e.target.id === 'confirmExportReport') {
-            const format = document.querySelector('input[name="exportFormat"]:checked').value;
-            const sortField = document.getElementById('exportSortField')?.value || '';
-            const sortOrder = document.querySelector('input[name="sortDirection"]:checked')?.value || 'desc';
+            const selectedFormatInput = modal.querySelector('input[name="exportFormat"]:checked');
+            const format = selectedFormatInput ? selectedFormatInput.value : defaultFormat;
+            const sortFieldEl = modal.querySelector('#exportSortField');
+            const sortField = sortFieldEl ? sortFieldEl.value : '';
+            const sortOrderInput = modal.querySelector('input[name="sortDirection"]:checked');
+            const sortOrder = sortOrderInput ? sortOrderInput.value : 'desc';
+            const shouldSendOrdering = shouldShowMetricControls(format);
+            const shouldIncludeNetworkScope = shouldShowNetworkControls(format);
+            const networkScopeInput = modal.querySelector('input[name="networkScope"]:checked');
+            const networkScope = networkScopeInput ? networkScopeInput.value : 'ips';
 
             const collectFilters = () => {
                 const yearFrom = document.getElementById('yearFrom')?.value;
@@ -291,8 +376,9 @@ export function setupExportReportButton() {
                 if (author) formData.append('author', author);
                 quartiles.forEach(q => formData.append('quartiles', q));
                 if (metric_source) formData.append('metric_source', metric_source);
-                if (sortField) formData.append('sort_field', sortField);
-                if (sortOrder) formData.append('sort_order', sortOrder);
+                if (shouldSendOrdering && sortField) formData.append('sort_field', sortField);
+                if (shouldSendOrdering && sortOrder) formData.append('sort_order', sortOrder);
+                if (shouldIncludeNetworkScope) formData.append('network_scope', networkScope);
                 formData.append('format', fmt);
 
                 const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
