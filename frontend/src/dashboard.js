@@ -596,8 +596,13 @@ export function initFiltersAndSearch() {
 
     // Función para mostrar los resultados de búsqueda
     function showSearchResults(results) {
-        const currentLang = window.location.pathname.split('/')[1];
+        const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es';
         const searchResults = currentLang === 'es' ? 'Resultados de la búsqueda' : 'Search Results';
+        const emptyText = currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.';
+        const authorsLabel = currentLang === 'es' ? 'Autores' : 'Authors';
+        const institutionsLabel = currentLang === 'es' ? 'Instituciones' : 'Institutions';
+        const areasLabel = currentLang === 'es' ? 'Áreas' : 'Areas';
+        const viewLinkText = currentLang === 'es' ? 'Ver publicación' : 'View publication';
 
         // Crear el modal si no existe
         let modal = document.getElementById('searchResultsModal');
@@ -622,10 +627,13 @@ export function initFiltersAndSearch() {
             document.body.appendChild(modal);
         }
 
+        const modalTitle = modal.querySelector('.modal-title');
+        if (modalTitle) modalTitle.textContent = searchResults;
+
         // Actualizar el contenido del modal
         const resultsList = document.getElementById('searchResultsList');
         if (results.length === 0) {
-            resultsList.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
+            resultsList.innerHTML = `<p class="text-center">${emptyText}</p>`;
         } else {
             resultsList.innerHTML = results.map(result => {
                 const authors = Array.isArray(result.authors) ? result.authors.join(', ') : (result.authors || '');
@@ -640,11 +648,11 @@ export function initFiltersAndSearch() {
                             ${result.year} - ${result.publication_type}
                         </h6>
                         <p class="card-text">
-                            <strong>Autores:</strong> ${authors}${otherAuthors}<br>
-                            <strong>Instituciones:</strong> ${result.institutions.join(', ')}<br>
-                            <strong>Áreas:</strong> ${result.areas.join(', ')}
+                            <strong>${authorsLabel}:</strong> ${authors}${otherAuthors}<br>
+                            <strong>${institutionsLabel}:</strong> ${result.institutions.join(', ')}<br>
+                            <strong>${areasLabel}:</strong> ${result.areas.join(', ')}
                         </p>
-                        ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">Ver publicación</a>` : ''}
+                        ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">${viewLinkText}</a>` : ''}
                     </div>
                 </div>
                 `;
@@ -672,8 +680,8 @@ export function initFiltersAndSearch() {
      * @param {Array<Object>} results - Array of publication objects returned by the semantic search API.
      */
     function showSemanticResults(results) {
-        const currentLang = window.location.pathname.split('/')[1];
-        const titleText = currentLang === 'es' ? 'Resultados IA' : 'AI Search Results';
+    const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es';
+    const titleText = currentLang === 'es' ? 'Resultados IA' : 'AI Search Results';
 
         // Defensive: ensure we have an array
         if (!Array.isArray(results)) results = [];
