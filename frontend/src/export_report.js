@@ -25,7 +25,8 @@ export function setupExportReportButton() {
             bibtex: 'BibTeX',
             ris: 'RIS',
             gexf: 'GEXF Red',
-            network_csv: 'CSV Red',
+            network_csv: 'CSV Aristas',
+            network_nodes: 'CSV Nodos',
             zip: 'ZIP Todo',
             sections: {
                 publications: 'Publicaciones',
@@ -40,6 +41,7 @@ export function setupExportReportButton() {
                 ris: 'Archivo RIS compatible con gestores bibliográficos.',
                 gexf: 'Red de coautorías en formato GEXF para Gephi.',
                 network_csv: 'Listado CSV de colaboraciones autor-autor.',
+                network_nodes: 'Tabla CSV de nodos con departamento y comunidades.',
                 zip: 'Paquete con todos los formatos, incluyendo redes.'
             },
             networkLabel: 'Tipo de red',
@@ -78,7 +80,8 @@ export function setupExportReportButton() {
             bibtex: 'BibTeX',
             ris: 'RIS',
             gexf: 'GEXF Network',
-            network_csv: 'CSV Network',
+            network_csv: 'CSV Network (edges)',
+            network_nodes: 'CSV Network (nodes)',
             zip: 'ZIP All',
             sections: {
                 publications: 'Publications',
@@ -93,6 +96,7 @@ export function setupExportReportButton() {
                 ris: 'RIS file compatible with reference managers.',
                 gexf: 'Co-authorship network in GEXF for Gephi.',
                 network_csv: 'CSV edge list of collaborations with weights.',
+                network_nodes: 'CSV table of nodes with department and community metadata.',
                 zip: 'Bundle containing every export format, including networks.'
             },
             networkLabel: 'Network type',
@@ -122,7 +126,7 @@ export function setupExportReportButton() {
     const t = texts[lang];
     const defaultFormat = 'pdf';
     const publicationFormats = new Set(['pdf', 'csv', 'ndjson', 'bibtex', 'ris']);
-    const networkFormats = new Set(['gexf', 'network_csv']);
+    const networkFormats = new Set(['gexf', 'network_csv', 'network_nodes']);
     const bundleFormats = new Set(['zip']);
     const formatSections = [
         { key: 'publications', label: t.sections.publications, formats: Array.from(publicationFormats) },
@@ -401,7 +405,7 @@ export function setupExportReportButton() {
             };
 
             // Simple formats that do not need chart images
-            if (['csv','ndjson','bibtex','ris','gexf','network_csv','zip'].includes(format)) {
+            if (['csv','ndjson','bibtex','ris','gexf','network_csv','network_nodes','zip'].includes(format)) {
                 const fnMap = {
                     csv: 'Bibliometria_IPBLN_Publicaciones.csv',
                     ndjson: 'Bibliometria_IPBLN_Publicaciones.ndjson',
@@ -409,6 +413,7 @@ export function setupExportReportButton() {
                     ris: 'Bibliometria_IPBLN_Publicaciones.ris',
                     gexf: 'Bibliometria_IPBLN_CoauthorNetwork.gexf',
                     network_csv: 'Bibliometria_IPBLN_CoauthorEdges.csv',
+                    network_nodes: 'Bibliometria_IPBLN_CoauthorNodes.csv',
                     zip: 'Bibliometria_IPBLN_ExportBundle.zip'
                 };
                 sendSimpleFormat(format, fnMap[format]);

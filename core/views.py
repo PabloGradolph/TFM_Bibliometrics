@@ -2,7 +2,7 @@ import logging
 from io import BytesIO, StringIO
 from django.shortcuts import render, get_object_or_404
 import json
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from bibliodata.models import Publication, Author, Collaboration
 from django.db.models import Count, Min, Max, Q, F
 from django.http import JsonResponse
@@ -694,6 +694,31 @@ def publication_detail(request, publication_id):
     return render(request, 'core/publication_detail.html', context)
 
 
+@login_required(login_url='/BiblioMetrics/accounts/login/')
+@require_http_methods(["GET"])
+def publication_citation_export(request, publication_id, export_format):
+    """Allow downloading a single-publication citation in BibTeX or RIS format."""
+
+    publication = get_object_or_404(Publication, id=publication_id)
+    fmt = (export_format or '').lower()
+
+    if fmt == 'bib':
+        content = build_bibtex_entry(publication)
+        content_type = 'application/x-bibtex; charset=utf-8'
+        extension = 'bib'
+    elif fmt == 'ris':
+        content = build_ris_entry(publication)
+        content_type = 'application/x-research-info-systems; charset=utf-8'
+        extension = 'ris'
+    else:
+        raise Http404('Unsupported citation format')
+
+    filename = f"Bibliometria_Publicacion_{publication_id}.{extension}"
+    response = HttpResponse(content, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
 def get_metric_value(pub, key):
 # Mapeo entre clave y función de ordenación
     if key == 'International Collaboration':
@@ -1106,7 +1131,8 @@ def export_report(request):
         - bibtex: Bibliographic entries for LaTeX / reference managers.
         - ris: RIS formatted references.
         - gexf: Collaboration network (authors) in GEXF for Gephi.
-        - network_csv: Edges list (author, collaborator, weight) as CSV.
+    - network_csv: Edges list (author, collaborator, weight) as CSV with readable labels.
+    - network_nodes: Nodes table (id, label, department, communities) as CSV.
         - zip: Full bundle (CSV, NDJSON, BibTeX, RIS, GEXF, edges CSV, README, minimal PDF).
 
     Optional ordering parameters:
@@ -1334,7 +1360,7 @@ def export_report(request):
         return resp
 
     network_graph = None
-    if format_ in {'gexf', 'network_csv', 'zip'}:
+    if format_ in {'gexf', 'network_csv', 'network_nodes', 'zip'}:
         network_graph = build_collaboration_graph(network_scope)
 
     if format_ == 'gexf':
@@ -1351,9 +1377,28 @@ def export_report(request):
         resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorEdges.csv"'
         resp.write('\ufeff')
         writer = _csv.writer(resp)
-        writer.writerow(['author_id', 'collaborator_id', 'weight'])
+        writer.writerow(['Source', 'Source Label', 'Target', 'Target Label', 'Weight'])
         for u, v, data in network_graph.edges(data=True):
-            writer.writerow([u, v, data.get('weight', 1)])
+            u_label = network_graph.nodes[u].get('label', u)
+            v_label = network_graph.nodes[v].get('label', v)
+            writer.writerow([u, u_label, v, v_label, data.get('weight', 1)])
+        return resp
+
+    if format_ == 'network_nodes':
+        import csv as _csv
+        resp = HttpResponse(content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="Bibliometria_IPBLN_CoauthorNodes.csv"'
+        resp.write('\ufeff')
+        writer = _csv.writer(resp)
+        writer.writerow(['Id', 'Label', 'Department', 'Leiden Community', 'Lovaina Community'])
+        for node_id, attrs in network_graph.nodes(data=True):
+            writer.writerow([
+                node_id,
+                attrs.get('label', node_id),
+                attrs.get('department', ''),
+                attrs.get('leiden_community', ''),
+                attrs.get('lovaina_community', ''),
+            ])
         return resp
 
     # ZIP bundle of all formats
@@ -1392,16 +1437,31 @@ def export_report(request):
 
             edges_buffer = StringIO()
             edges_writer = _csv.writer(edges_buffer)
-            edges_writer.writerow(['author_id', 'collaborator_id', 'weight'])
+            edges_writer.writerow(['Source', 'Source Label', 'Target', 'Target Label', 'Weight'])
             for u, v, data in network_graph.edges(data=True):
-                edges_writer.writerow([u, v, data.get('weight', 1)])
+                u_label = network_graph.nodes[u].get('label', u)
+                v_label = network_graph.nodes[v].get('label', v)
+                edges_writer.writerow([u, u_label, v, v_label, data.get('weight', 1)])
             zf.writestr('red_coautorias_edges.csv', edges_buffer.getvalue().encode('utf-8'))
+
+            nodes_buffer = StringIO()
+            nodes_writer = _csv.writer(nodes_buffer)
+            nodes_writer.writerow(['Id', 'Label', 'Department', 'Leiden Community', 'Lovaina Community'])
+            for node_id, attrs in network_graph.nodes(data=True):
+                nodes_writer.writerow([
+                    node_id,
+                    attrs.get('label', node_id),
+                    attrs.get('department', ''),
+                    attrs.get('leiden_community', ''),
+                    attrs.get('lovaina_community', ''),
+                ])
+            zf.writestr('red_coautorias_nodes.csv', nodes_buffer.getvalue().encode('utf-8'))
 
             # README
             network_label = 'Red completa (todos los investigadores)' if network_scope == 'full' else 'Red de IPs (investigadores principales)'
             readme = (
                 "Paquete de exportación bibliométrica IPBLN\n\n"
-                "Incluye: CSV, NDJSON, BibTeX, RIS, red de coautorías (GEXF + edges CSV).\n"
+                "Incluye: CSV, NDJSON, BibTeX, RIS, red de coautorías (GEXF + edges/nodes CSV).\n"
                 f"Filtros aplicados: años={year_from}-{year_to}, areas={', '.join(areas)}, instituciones={', '.join(institutions)}, tipos={', '.join(types)}, autor={author or '-'}\n"
                 f"Ordenación: campo={sort_field or '-'} orden={sort_order}\n"
                 f"Tipo de red exportada: {network_label}\n"

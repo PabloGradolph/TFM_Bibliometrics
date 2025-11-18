@@ -21,6 +21,29 @@ def normalise_scope(scope: str | None) -> NetworkScope:
     return 'ips'
 
 
+def _node_attributes(author: Author, scope_value: NetworkScope, fallback_label: str) -> dict[str, str]:
+    """Return consistent node attributes depending on the selected scope."""
+
+    if scope_value == 'full':
+        department = getattr(author, 'department_global', None) or getattr(author, 'department', None)
+        leiden = getattr(author, 'leiden_community_global', None) or getattr(author, 'leiden_community', None)
+        lovaina = getattr(author, 'lovaina_community_global', None) or getattr(author, 'lovaina_community', None)
+    else:
+        department = getattr(author, 'department', None) or getattr(author, 'department_global', None)
+        leiden = getattr(author, 'leiden_community', None) or getattr(author, 'leiden_community_global', None)
+        lovaina = getattr(author, 'lovaina_community', None) or getattr(author, 'lovaina_community_global', None)
+
+    leiden = str(leiden).strip() if leiden not in (None, '', 'Unknown') else '0'
+    lovaina = str(lovaina).strip() if lovaina not in (None, '', 'Unknown') else '0'
+
+    return {
+        'label': author.name or fallback_label,
+        'department': department or 'Unknown',
+        'leiden_community': leiden,
+        'lovaina_community': lovaina,
+    }
+
+
 def build_collaboration_graph(scope: str | None) -> nx.Graph:
     """Create either the full researcher network or the IP-only network graph."""
     scope_value = normalise_scope(scope)
@@ -38,17 +61,9 @@ def build_collaboration_graph(scope: str | None) -> nx.Graph:
             if not author_id or not collaborator_id:
                 continue
             if not graph.has_node(author_id):
-                graph.add_node(
-                    author_id,
-                    label=author.name or author_id,
-                    department=getattr(author, 'department_global', getattr(author, 'department', 'Unknown'))
-                )
+                graph.add_node(author_id, **_node_attributes(author, scope_value, author_id))
             if not graph.has_node(collaborator_id):
-                graph.add_node(
-                    collaborator_id,
-                    label=collaborator.name or collaborator_id,
-                    department=getattr(collaborator, 'department_global', getattr(collaborator, 'department', 'Unknown'))
-                )
+                graph.add_node(collaborator_id, **_node_attributes(collaborator, scope_value, collaborator_id))
             weight = collab.publication_count or 1
             if graph.has_edge(author_id, collaborator_id):
                 graph[author_id][collaborator_id]['weight'] += weight
@@ -73,11 +88,7 @@ def build_collaboration_graph(scope: str | None) -> nx.Graph:
                 author_id = str(getattr(author, 'gesbib_id', '')).strip()
                 if not author_id:
                     continue
-                graph.add_node(
-                    author_id,
-                    label=author.name or author_id,
-                    department=getattr(author, 'department', 'Unknown')
-                )
+                graph.add_node(author_id, **_node_attributes(author, scope_value, author_id))
                 name_lookup[name.lower()] = author_id
 
     if edges_path.exists() and name_lookup:

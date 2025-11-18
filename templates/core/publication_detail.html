@@ -6,11 +6,28 @@
 {% block content %}
 <div class="container mt-4">
 
-    <!-- Botón de regreso -->
-    <div class="mb-4">
+    <!-- Botones de navegación y citación -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <a href="{% url 'dashboard' %}" class="btn btn-secondary hover-lift">
             <i class="fas fa-arrow-left me-2"></i> {% trans "Back to Dashboard" %}
         </a>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                {% trans "Cite this publication" %}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item" href="{% url 'publication_citation_export' publication.id 'bib' %}">
+                        {% trans "BibTeX (.bib)" %}
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'publication_citation_export' publication.id 'ris' %}">
+                        {% trans "RIS (.ris)" %}
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
 
     <!-- Título y resumen -->

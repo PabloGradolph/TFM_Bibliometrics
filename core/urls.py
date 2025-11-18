@@ -16,5 +16,6 @@ urlpatterns = [
     path('api/author/metrics/', views.get_author_metrics, name='get_author_metrics'),
     path('semantic_search/', views.semantic_search, name='semantic_search'),
     path('publication/<int:publication_id>/', views.publication_detail, name='publication_detail'),
+    path('publication/<int:publication_id>/citation/<str:export_format>/', views.publication_citation_export, name='publication_citation_export'),
     path('api/export/report/', views.export_report, name='export_report'),
 ]

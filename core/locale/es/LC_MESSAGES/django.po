@@ -565,3 +565,6 @@ msgstr "Afiliaciones Españolas"
 
 msgid "Foreign Affils"
 msgstr "Afilicaciones Extranjeras"
+
+msgid "Cite this publication"
+msgstr "Cita esta publicación"
