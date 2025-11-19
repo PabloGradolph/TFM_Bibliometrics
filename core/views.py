@@ -139,7 +139,19 @@ def semantic_search(request):
         })
 
     # Reranking con cross-encoder (multilingüe)
-    pairs = [(query, c['title'] + ' ' + (c['abstract'] or '')) for c in candidates]
+
+    def _build_rerank_text(candidate):
+        """Return a reranking text combining the title with curated thematic areas."""
+        title = candidate.get('title') or ''
+        curated = candidate.get('areas') or []
+        raw = candidate.get('areas_all') or []
+        areas_text = ', '.join(curated) if curated else ', '.join(raw)
+        if areas_text:
+            return f"{title} || Areas: {areas_text}"
+        fallback = candidate.get('abstract') or ''
+        return f"{title} || {fallback}" if fallback else title
+
+    pairs = [(query, _build_rerank_text(c)) for c in candidates]
     cross_encoder_model = 'cross-encoder/stsb-xlm-r-multilingual'
     if pairs:
         try:
@@ -668,13 +680,11 @@ def search_publications(request):
         institutions = [i.name for i in pub.institutions.all()]
         areas = [a.name for a in pub.thematic_areas.all()]
 
-        norm = _get_normalized_type_value(pub.normalized_types)
-
         results.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
-            'publication_type': norm,  # <- now the canonical single type
+            'publication_type': pub.publication_type,
             'authors': authors,
             'institutions': institutions,
             'areas': areas,
