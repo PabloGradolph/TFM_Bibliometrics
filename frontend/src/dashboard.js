@@ -733,9 +733,14 @@ export function initFiltersAndSearch() {
                     const otherAuthors = Array.isArray(r.other_authors) && r.other_authors.length > 0
                         ? ` <span class="text-muted">(${r.other_authors.join(', ')})</span>`
                         : '';
-                    const areas = Array.isArray(r.areas) ? r.areas.join(', ') : (r.areas || '');
+                    const areasFallback = Array.isArray(r.areas) && r.areas.length ? r.areas : Array.isArray(r.areas_all) ? r.areas_all : [];
+                    const areas = areasFallback.length ? areasFallback.join(', ') : (currentLang === 'es' ? 'Sin áreas registradas' : 'No areas available');
+                    const institutions = Array.isArray(r.institutions) && r.institutions.length ? r.institutions.join(', ') : '';
+                    const instLabel = currentLang === 'es' ? 'Instituciones' : 'Institutions';
+                    const areasLabel = currentLang === 'es' ? 'Áreas' : 'Areas';
                     const pubType = r.publication_type || '';
                     const year = r.year || '';
+                    const subtitleText = (year ? year : '') + (pubType ? ` - ${pubType}` : '');
                     const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
 
                     return `
@@ -744,12 +749,13 @@ export function initFiltersAndSearch() {
                                 <div class="d-flex justify-content-between">
                                     <div>
                                         <h5 class="card-title mb-1">${r.title}</h5>
-                                        <h6 class="card-subtitle mb-2 text-muted">${year} ${pubType ? '- ' + pubType : ''}</h6>
+                                        <h6 class="card-subtitle mb-2 text-muted">${subtitleText}</h6>
                                     </div>
                                     ${simText}
                                 </div>
                                 <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}${otherAuthors}</p>
-                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Áreas' : 'Areas'}:</strong> ${areas}</p>
+                                ${institutions ? `<p class="card-text mb-1"><strong>${instLabel}:</strong> ${institutions}</p>` : ''}
+                                <p class="card-text mb-1"><strong>${areasLabel}:</strong> ${areas}</p>
                                 <div>${urlLink}</div>
                             </div>
                         </div>

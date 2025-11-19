@@ -105,7 +105,10 @@ def semantic_search(request):
 
     # Convert cosine distance to similarity (1 - distance)
     candidates = []
-    emb_objs = {pe.publication_id: pe for pe in PublicationEmbedding.objects.filter(publication_id__in=ids).select_related('publication')}
+    emb_objs = {
+        pe.publication_id: pe
+        for pe in PublicationEmbedding.objects.filter(publication_id__in=ids).select_related('publication')
+    }
     for idx, pub_id in enumerate(ids):
         pe = emb_objs.get(pub_id)
         if not pe:
@@ -115,30 +118,40 @@ def semantic_search(request):
         if similarity < 0.1:
             continue
 
+        curated_areas = [area.name for area in pub.thematic_areas.all()]
+        raw_areas = list(pub.areas_all or [])
+        institutions = [inst.name for inst in pub.institutions.all()]
+        publication_type = pub.publication_type
+
         candidates.append({
             'id': pub.id,
             'title': pub.title,
             'year': pub.year,
+            'publication_type': publication_type,
             'abstract': pub.abstract,
             'similarity': float(round(similarity, 3)),
             'authors': [author.name for author in pub.authors.all()],
             'other_authors': getattr(pub, 'other_authors', []),
             'keywords': list(pub.keywords_all or []),
-            'areas': list(pub.areas_all or []),
+            'areas': curated_areas or raw_areas,
+            'areas_all': raw_areas,
+            'institutions': institutions,
         })
 
-    # Reranking con cross-encoder
-    cross_encoder_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
-    cross_encoder = CrossEncoder(cross_encoder_model)
-    # Prepara los pares (query, texto candidato)
+    # Reranking con cross-encoder (multilingüe)
     pairs = [(query, c['title'] + ' ' + (c['abstract'] or '')) for c in candidates]
+    cross_encoder_model = 'cross-encoder/stsb-xlm-r-multilingual'
     if pairs:
-        scores = cross_encoder.predict(pairs)
-        # Añade la puntuación de reranking
-        for i, c in enumerate(candidates):
-            c['rerank_score'] = float(scores[i])
-        # Ordena por rerank_score descendente
-        candidates.sort(key=lambda x: x['rerank_score'], reverse=True)
+        try:
+            if not hasattr(semantic_search, '_cross_encoder'):
+                semantic_search._cross_encoder = CrossEncoder(cross_encoder_model)
+            cross_encoder = semantic_search._cross_encoder
+            scores = cross_encoder.predict(pairs)
+            for i, c in enumerate(candidates):
+                c['rerank_score'] = float(scores[i])
+            candidates.sort(key=lambda x: x.get('rerank_score', 0.0), reverse=True)
+        except Exception as rerank_error:  # noqa: BLE001
+            logging.warning("Cross-encoder rerank skipped: %s", rerank_error)
     return JsonResponse({'results': candidates, 'received_query': query})
 
 def home(request):
