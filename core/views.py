@@ -667,9 +667,12 @@ def search_publications(request):
     if author:
         publications = publications.filter(authors__name=author)
     elif q:
+        # Publications-only search. Besides title and thematic areas, also match DOI.
+        # This enables users to paste a full DOI or just a prefix.
         publications = publications.filter(
             Q(title__icontains=q) |
-            Q(thematic_areas__name__icontains=q)
+            Q(thematic_areas__name__icontains=q) |
+            Q(doi__icontains=q)
         )
 
     publications = publications.distinct().order_by('-year', '-publication_date')[:50]
@@ -688,6 +691,7 @@ def search_publications(request):
             'authors': authors,
             'institutions': institutions,
             'areas': areas,
+            'doi': getattr(pub, 'doi', None),
             'url': getattr(pub, 'url', None),
             'other_authors': getattr(pub, 'other_authors', []),
         })

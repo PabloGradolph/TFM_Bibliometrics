@@ -6,12 +6,15 @@ import EdgeCurveProgram from "@sigma/edge-curve";
 import { setupExportReportButton } from './export_report';
 import { initWorldMap, setWorldMapActiveCountries, setWorldMapLoading } from './worldmap.js';
 import { initSpainMap, setSpainMapCounts, showSpainLevel, setSpainMapLoading, setSpainMapVisible } from './spainmap.js';
+import { createMapViewsController } from './dashboard/map_views.js';
+import { createCollaborationNetworkController } from './dashboard/collaboration_network.js';
 import { detectLangFromPath as detectLangFromPathUtil } from './dashboard/utils.js';
 import { initTimelineExporter, updateTimeline as updateTimelineUtil } from './dashboard/timeline.js';
 import {
     initAreasExporter,
     renderAreasChart as renderAreasChartUtil,
 } from './dashboard/areas.js';
+import { createPublicationsTableController } from './dashboard/publications_table.js';
 
 export function initFiltersAndSearch() {
 
@@ -32,9 +35,13 @@ export function initFiltersAndSearch() {
     const selectedQuartiles = document.getElementById('selectedQuartiles');
     const standardSearch = document.getElementById('standardSearch');
     const standardSearchBtn = document.getElementById('standardSearchBtn');
-    const searchSuggestions = document.getElementById('searchSuggestions');
-    const selectedAuthor = document.getElementById('selectedAuthor');
-    const authorLimitMessage = document.getElementById('authorLimitMessage');
+    // Main search is publications-only. Author selection is handled in Filters.
+
+    // Filters-section author search (author-only)
+    const filtersAuthorSearch = document.getElementById('filtersAuthorSearch');
+    const filtersAuthorSuggestions = document.getElementById('filtersAuthorSuggestions');
+    const filtersSelectedAuthor = document.getElementById('filtersSelectedAuthor');
+    const filtersAuthorLimitMessage = document.getElementById('filtersAuthorLimitMessage');
     // Notice card elements ("missing publications")
     const missingPubsNotice = document.getElementById('missingPubsNotice');
     const missingPubsNoticeText = document.getElementById('missingPubsNoticeText');
@@ -323,38 +330,129 @@ export function initFiltersAndSearch() {
         }
     }
 
-    // Variables para el autocompletado
+    // Variables for debounced autocomplete (shared)
     let searchTimeout = null;
 
-    // Función para actualizar el estado del botón de búsqueda
-    function updateSearchButton() {
-        if (selectedAuthorName) {
-            standardSearchBtn.classList.remove('btn-primary', 'btn-success');
-            standardSearchBtn.classList.add('btn-secondary');
-            standardSearchBtn.disabled = true;
-        } else {
-            standardSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
-            standardSearchBtn.classList.remove('btn-success', 'btn-secondary');
-            standardSearchBtn.classList.add('btn-primary');
-            standardSearchBtn.disabled = false;
+    /**
+     * Move the dropdown to <body> so it is not affected by local stacking contexts.
+     *
+     * @returns {void}
+     */
+    function ensureFiltersAuthorSuggestionsPortal() {
+        if (!filtersAuthorSuggestions) return;
+        if (filtersAuthorSuggestions.dataset.portalized === 'true') return;
+
+        // If this element previously relied on Bootstrap's w-100/position-absolute inside a
+        // relatively positioned parent, remove those width helpers because once we portal it
+        // to <body> they can unintentionally make the dropdown span the whole viewport.
+        filtersAuthorSuggestions.classList.remove('w-150');
+
+        document.body.appendChild(filtersAuthorSuggestions);
+        filtersAuthorSuggestions.dataset.portalized = 'true';
+
+        // Base styles for portalized dropdown
+        filtersAuthorSuggestions.style.position = 'fixed';
+        filtersAuthorSuggestions.style.zIndex = '999999';
+        filtersAuthorSuggestions.style.boxSizing = 'border-box';
+        filtersAuthorSuggestions.style.maxWidth = '600px';
+        filtersAuthorSuggestions.style.right = 'auto';
+        filtersAuthorSuggestions.style.bottom = 'auto';
+        filtersAuthorSuggestions.style.maxHeight = '160px';
+        filtersAuthorSuggestions.style.overflowY = 'auto';
+        filtersAuthorSuggestions.style.overflowX = 'hidden';
+        filtersAuthorSuggestions.style.display = 'none';
+
+        const list = filtersAuthorSuggestions.querySelector('.list-group');
+        if (list) {
+            list.style.width = '100%';
+            list.style.maxWidth = '100%';
+            list.style.boxSizing = 'border-box';
+        }
+
+        // Ensure list style remains consistent
+        if (!filtersAuthorSuggestions.classList.contains('dropdown-portal')) {
+            filtersAuthorSuggestions.classList.add('dropdown-portal');
         }
     }
 
-    // Función para mostrar sugerencias de autores
-    function showAuthorSuggestions(query) {
+    /**
+     * Position the dropdown under the input using fixed positioning.
+     *
+     * We use fixed positioning + a body portal to escape any stacking context created
+     * by charts/cards. We also compensate for VisualViewport offsets on mobile/zoom.
+     *
+     * @returns {void}
+     */
+    function positionFiltersAuthorDropdown() {
+        if (!filtersAuthorSearch || !filtersAuthorSuggestions) return;
+        if (filtersAuthorSuggestions.style.display !== 'block') return;
+
+        ensureFiltersAuthorSuggestionsPortal();
+
+        try {
+            const rect = filtersAuthorSearch.getBoundingClientRect();
+            const vv = window.visualViewport;
+            const offsetLeft = vv ? vv.offsetLeft : 0;
+            const offsetTop = vv ? vv.offsetTop : 0;
+
+            // Limit height so it doesn't cover the UI; keep it scrollable.
+            // The goal is to keep it compact (similar to a select height) while still usable.
+            const viewportHeight = vv ? vv.height : window.innerHeight;
+            const availableBelow = Math.max(0, viewportHeight - rect.bottom - 12);
+            const desiredMaxHeight = 160;
+            const computedMaxHeight = Math.min(desiredMaxHeight, availableBelow);
+
+            filtersAuthorSuggestions.style.position = 'fixed';
+            filtersAuthorSuggestions.style.left = `${Math.round(rect.left + offsetLeft)}px`;
+            filtersAuthorSuggestions.style.top = `${Math.round(rect.bottom + offsetTop)}px`;
+            const width = Math.round(rect.width);
+
+            // Force width to match input and ensure we don't overflow the viewport.
+            // Subtract a small margin to avoid touching the edge.
+            const viewportWidth = vv ? vv.width : window.innerWidth;
+            const maxAllowedWidth = Math.max(200, Math.round(viewportWidth - (rect.left + offsetLeft) - 12));
+            filtersAuthorSuggestions.style.width = `${Math.min(width, maxAllowedWidth)}px`;
+            filtersAuthorSuggestions.style.maxWidth = `${Math.min(width, maxAllowedWidth)}px`;
+            filtersAuthorSuggestions.style.maxHeight = `${Math.max(120, Math.round(computedMaxHeight))}px`;
+        } catch (e) {
+            // Last-resort: place near the input in the normal flow.
+            filtersAuthorSuggestions.style.position = 'absolute';
+            filtersAuthorSuggestions.style.top = '100%';
+            filtersAuthorSuggestions.style.left = '0';
+            filtersAuthorSuggestions.style.width = '100%';
+            filtersAuthorSuggestions.style.maxHeight = '160px';
+            filtersAuthorSuggestions.style.overflowY = 'auto';
+        }
+    }
+
+    /**
+     * Show author suggestions for the Filters section author search.
+     *
+     * This reuses the same `/api/search/authors/` endpoint but renders the dropdown
+     * next to the quartile (Q) filter. Selecting an author must apply the same
+     * dashboard behavior as selecting it from the main search.
+     *
+     * @param {string} query
+     */
+    function showFiltersAuthorSuggestions(query) {
+        if (!filtersAuthorSearch || !filtersAuthorSuggestions) return;
+
+        ensureFiltersAuthorSuggestionsPortal();
+
         if (!query || selectedAuthorName) {
-            searchSuggestions.style.display = 'none';
+            filtersAuthorSuggestions.style.display = 'none';
             return;
         }
 
         fetch(`/BiblioMetrics/${lang}/api/search/authors/?q=${encodeURIComponent(query)}`)
             .then(response => response.json())
             .then(data => {
-                const suggestionsList = searchSuggestions.querySelector('.list-group');
+                const suggestionsList = filtersAuthorSuggestions.querySelector('.list-group');
+                if (!suggestionsList) return;
                 suggestionsList.innerHTML = '';
 
-                if (data.suggestions.length === 0) {
-                    searchSuggestions.style.display = 'none';
+                if (!data.suggestions || data.suggestions.length === 0) {
+                    filtersAuthorSuggestions.style.display = 'none';
                     return;
                 }
 
@@ -373,43 +471,68 @@ export function initFiltersAndSearch() {
                     suggestionsList.appendChild(item);
                 });
 
-                searchSuggestions.style.display = 'block';
+                filtersAuthorSuggestions.style.display = 'block';
+                positionFiltersAuthorDropdown();
             })
             .catch(error => {
-                console.error('Error fetching author suggestions:', error);
-                searchSuggestions.style.display = 'none';
+                console.error('Error fetching author suggestions (filters):', error);
+                filtersAuthorSuggestions.style.display = 'none';
             });
+    }
+
+    // Keep the fixed dropdown aligned on scroll/resize (while visible)
+    window.addEventListener('scroll', positionFiltersAuthorDropdown, true);
+    window.addEventListener('resize', positionFiltersAuthorDropdown);
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('scroll', positionFiltersAuthorDropdown);
+        window.visualViewport.addEventListener('resize', positionFiltersAuthorDropdown);
     }
 
     // Event listener para el autor seleccionado
     function selectAuthor(authorName) {
         selectedAuthorName = authorName;
         window.selectedAuthorName = authorName;
-        standardSearch.value = '';
-        standardSearch.disabled = true;
-        searchSuggestions.style.display = 'none';
-        authorLimitMessage.style.display = 'block';
-        updateSearchButton();
+        // Main search remains available (publications-only)
 
-        // Crear el badge del autor seleccionado
-        selectedAuthor.innerHTML = `
-            <span class="badge bg-primary me-2 mb-2">
-                ${authorName}
-                <button type="button" class="btn-close btn-close-white ms-1" 
-                        style="font-size: 0.5rem; vertical-align: middle;"
-                        aria-label="Remove"></button>
-            </span>
-        `;
+        // Sync Filters-section author search UI (if present)
+        if (filtersAuthorSearch) {
+            filtersAuthorSearch.value = '';
+            filtersAuthorSearch.disabled = true;
+        }
+        if (filtersAuthorSuggestions) {
+            filtersAuthorSuggestions.style.display = 'none';
+        }
+        if (filtersAuthorLimitMessage) {
+            filtersAuthorLimitMessage.style.display = 'block';
+        }
+
+        if (filtersSelectedAuthor) {
+            filtersSelectedAuthor.innerHTML = `
+                <span class="badge bg-primary me-2 mb-2">
+                    ${authorName}
+                    <button type="button" class="btn-close btn-close-white ms-1"
+                            style="font-size: 0.5rem; vertical-align: middle;"
+                            aria-label="Remove"></button>
+                </span>
+            `;
+        }
 
         // Añadir evento para eliminar el autor
-        selectedAuthor.querySelector('.btn-close').addEventListener('click', () => {
+        const removeAuthor = () => {
             selectedAuthorName = null;
             window.selectedAuthorName = null;
-            selectedAuthor.innerHTML = '';
             setMissingPubsNoticeVisible(false);
-            standardSearch.disabled = false;
-            authorLimitMessage.style.display = 'none';
-            updateSearchButton();
+
+            if (filtersAuthorSearch) {
+                filtersAuthorSearch.disabled = false;
+            }
+            if (filtersSelectedAuthor) {
+                filtersSelectedAuthor.innerHTML = '';
+            }
+            if (filtersAuthorLimitMessage) {
+                filtersAuthorLimitMessage.style.display = 'none';
+            }
             
             // Eliminar la card de métricas del autor del DOM
             const authorMetricsCard = document.getElementById('authorMetricsCard');
@@ -424,7 +547,13 @@ export function initFiltersAndSearch() {
             }
             
             updateFilters(); // Actualizar filtros al eliminar el autor
-        });
+        };
+        if (filtersSelectedAuthor) {
+            const filtersCloseBtn = filtersSelectedAuthor.querySelector('.btn-close');
+            if (filtersCloseBtn) {
+                filtersCloseBtn.addEventListener('click', removeAuthor);
+            }
+        }
 
         // Crear y añadir la card de métricas del autor al DOM
         const collaborationRow = document.getElementById('collaborationRow');
@@ -600,6 +729,38 @@ export function initFiltersAndSearch() {
             });
     }
 
+    // Filters-section search listeners
+    if (filtersAuthorSearch) {
+        filtersAuthorSearch.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            if (!query || selectedAuthorName) {
+                if (filtersAuthorSuggestions) filtersAuthorSuggestions.style.display = 'none';
+                return;
+            }
+
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                showFiltersAuthorSuggestions(query);
+            }, 300);
+        });
+
+        filtersAuthorSearch.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && filtersAuthorSuggestions) {
+                filtersAuthorSuggestions.style.display = 'none';
+            }
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!filtersAuthorSuggestions || !filtersAuthorSearch) return;
+        if (
+            e.target !== filtersAuthorSearch &&
+            !filtersAuthorSuggestions.contains(e.target)
+        ) {
+            filtersAuthorSuggestions.style.display = 'none';
+        }
+    });
+
     // Función para mostrar los resultados de búsqueda
     function showSearchResults(results) {
         const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es';
@@ -608,6 +769,7 @@ export function initFiltersAndSearch() {
         const authorsLabel = currentLang === 'es' ? 'Autores' : 'Authors';
         const institutionsLabel = currentLang === 'es' ? 'Instituciones' : 'Institutions';
         const areasLabel = currentLang === 'es' ? 'Áreas' : 'Areas';
+        const doiLabel = currentLang === 'es' ? 'DOI' : 'DOI';
         const viewLinkText = currentLang === 'es' ? 'Ver publicación' : 'View publication';
 
         // Crear el modal si no existe
@@ -646,6 +808,8 @@ export function initFiltersAndSearch() {
                 const otherAuthors = Array.isArray(result.other_authors) && result.other_authors.length > 0
                     ? ` <span class="text-muted">(${result.other_authors.join(', ')})</span>`
                     : '';
+                const doi = (result.doi || '').toString().trim();
+                const doiLine = doi ? `<strong>${doiLabel}:</strong> ${doi}<br>` : '';
                 return `
                 <div class="card mb-3">
                     <div class="card-body" data-publication-id="${result.id}" style="cursor: pointer;">
@@ -657,6 +821,7 @@ export function initFiltersAndSearch() {
                             <strong>${authorsLabel}:</strong> ${authors}${otherAuthors}<br>
                             <strong>${institutionsLabel}:</strong> ${result.institutions.join(', ')}<br>
                             <strong>${areasLabel}:</strong> ${result.areas.join(', ')}
+                            <br>${doiLine}
                         </p>
                         ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">${viewLinkText}</a>` : ''}
                     </div>
@@ -808,29 +973,6 @@ export function initFiltersAndSearch() {
         modalInstance.show();
     }
 
-    // Event listeners para el autocompletado
-    standardSearch.addEventListener('input', function() {
-        if (selectedAuthorName) return;
-
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            showAuthorSuggestions(this.value.trim());
-        }, 300);
-    });
-
-    standardSearch.addEventListener('focus', function() {
-        if (this.value.trim() && !selectedAuthorName) {
-            showAuthorSuggestions(this.value.trim());
-        }
-    });
-
-    // Cerrar sugerencias al hacer clic fuera
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('#standardSearch') && !e.target.closest('#searchSuggestions')) {
-            searchSuggestions.style.display = 'none';
-        }
-    });
-
     // Event listeners para la búsqueda
     standardSearchBtn.addEventListener('click', performSearch);
     standardSearch.addEventListener('keypress', function(e) {
@@ -885,7 +1027,8 @@ export function initFiltersAndSearch() {
     });
 
     // Inicializar estado del botón al cargar la página
-    updateSearchButton();
+    // NOTE: updateSearchButton() was tied to the old main search author UI.
+    // The main search is publications-only now, so we don't call it.
 
     // Cargar los datos de los filtros
     loadFilterData();
@@ -1207,51 +1350,11 @@ export function initFiltersAndSearch() {
     }
 
     // Estado de ordenación actual (mover fuera de la función para mantenerlo entre llamadas)
-    let currentSort = {
-        metric: null,
-        direction: 'desc'
-    };
-
-    function updatePublicationsTable(page = 1) {
-        const tableBody = document.getElementById('metricsTable');
-        const pagination = document.getElementById('publicationsPagination');
-        const table = tableBody.closest('table');
-
-        // Mostrar indicador de carga y deshabilitar la tabla
-        if (table) {
-            // Crear overlay de carga si no existe
-            let loadingOverlay = table.querySelector('.loading-overlay');
-            if (!loadingOverlay) {
-                loadingOverlay = document.createElement('div');
-                loadingOverlay.className = 'loading-overlay';
-                loadingOverlay.style.cssText = `
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(255, 255, 255, 0.8);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 1000;
-                `;
-                loadingOverlay.innerHTML = `
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Cargando...</span>
-                    </div>
-                `;
-                table.style.position = 'relative';
-                table.appendChild(loadingOverlay);
-            }
-            loadingOverlay.style.display = 'flex';
-            
-            // Deshabilitar la tabla
-            table.style.pointerEvents = 'none';
-            table.style.opacity = '0.7';
-        }
-
-        const filters = {
+    const publicationsTableController = createPublicationsTableController({
+        getLang: () => lang,
+        getBaseUrl: () => '/BiblioMetrics',
+        getSelectedAuthorName: () => selectedAuthorName,
+        getFilters: () => ({
             year_from: yearFrom.value,
             year_to: yearTo.value,
             areas: Array.from(selectedAreasList),
@@ -1260,236 +1363,12 @@ export function initFiltersAndSearch() {
             quartiles: Array.from(selectedQuartilesList),
             citations_from: citationsFrom ? citationsFrom.value : '',
             citations_to: citationsTo ? citationsTo.value : '',
-            // metric_source removed (always WoS)
-            page: page
-        };
+        }),
+        detectLangFromPath,
+    });
 
-        // Construir la URL con los parámetros de filtrado
-        const params = new URLSearchParams();
-        if (filters.year_from) params.append('year_from', filters.year_from);
-    if (filters.year_to) params.append('year_to', filters.year_to);
-    if (filters.citations_from) params.append('citations_from', filters.citations_from);
-    if (filters.citations_to) params.append('citations_to', filters.citations_to);
-        filters.areas.forEach(area => params.append('areas', area));
-        filters.institutions.forEach(institution => params.append('institutions', institution));
-        filters.types.forEach(type => params.append('types', type));
-        filters.quartiles.forEach(q => params.append('quartiles', q));
-    // metric_source removed
-        params.append('page', filters.page);
-        
-        // Añadir el autor seleccionado si existe
-        if (selectedAuthorName) {
-            params.append('author', selectedAuthorName);
-        }
-
-        // Añadir parámetros de ordenación si existen
-        if (currentSort.metric) {
-            params.append('sort_by', currentSort.metric);
-            params.append('sort_order', currentSort.direction);
-        }
-
-        // Retornar la promesa de fetch
-        return fetch(`/BiblioMetrics/${lang}/api/dashboard/publications/?${params.toString()}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (!tableBody || !pagination) {
-                    return Promise.reject('Required elements not found');
-                }
-
-                const { data: publications, pagination: paginationData } = data.publications;
-
-                // Ordenar las métricas en un orden específico (keys fijos para backend / ordenación)
-                const orderedMetrics = [
-                    { key: 'Dimensions Citations', label: 'Dimensions Citations' },
-                    { key: 'WoS Citations', label: 'WoS Citations' },
-                    { key: 'Scopus Citations', label: 'Scopus Citations' },
-                    { key: 'FCR', label: 'FCR' },
-                    { key: 'RCR', label: 'RCR' },
-                    { key: 'International Collaboration', label: 'International Collaboration' }
-                ];
-
-                // Traducciones encabezados (bilingüe)
-                const langCodeForTable = typeof detectLangFromPath === 'function' ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
-                const metricTranslations = {
-                    es: {
-                        title: 'Título',
-                        'Dimensions Citations': 'Citas Dimensions',
-                        'WoS Citations': 'Citas WoS',
-                        'Scopus Citations': 'Citas Scopus',
-                        'International Collaboration': 'Colaboración Internacional',
-                        FCR: 'FCR',
-                        RCR: 'RCR'
-                    },
-                    en: {
-                        title: 'Title',
-                        'Dimensions Citations': 'Dimensions Citations',
-                        'WoS Citations': 'WoS Citations',
-                        'Scopus Citations': 'Scopus Citations',
-                        'International Collaboration': 'International Collaboration',
-                        FCR: 'FCR',
-                        RCR: 'RCR'
-                    }
-                };
-                const t = (k) => (metricTranslations[langCodeForTable] && metricTranslations[langCodeForTable][k]) || k;
-
-                // Crear el encabezado de la tabla con iconos de ordenación (texto según idioma)
-                const tableHeader = document.createElement('thead');
-                tableHeader.innerHTML = `
-                    <tr>
-                        <th style="max-width: 300px;">${t('title')}</th>
-                        ${orderedMetrics.map(({ key, label }) => `
-                            <th class="sortable" data-metric="${key}">
-                                ${t(key)}
-                                <i class="fas fa-sort${currentSort.metric === key ? `-${currentSort.direction === 'desc' ? 'down' : 'up'}` : ''} ms-1"></i>
-                            </th>
-                        `).join('')}
-                    </tr>
-                `;
-
-                // Añadir el encabezado a la tabla
-                if (table) {
-                    const existingHeader = table.querySelector('thead');
-                    if (existingHeader) {
-                        existingHeader.remove();
-                    }
-                    table.insertBefore(tableHeader, tableBody);
-                }
-
-                // Añadir eventos de clic a los encabezados ordenables
-                tableHeader.querySelectorAll('.sortable').forEach(header => {
-                    header.addEventListener('click', function() {
-                        const metric = this.dataset.metric;
-                        const icon = this.querySelector('i');
-
-                        // Resetear todos los iconos
-                        tableHeader.querySelectorAll('.sortable i').forEach(i => {
-                            i.className = 'fas fa-sort ms-1';
-                        });
-
-                        // Actualizar el estado de ordenación
-                        if (currentSort.metric === metric) {
-                            currentSort.direction = currentSort.direction === 'desc' ? 'asc' : 'desc';
-                        } else {
-                            currentSort.metric = metric;
-                            currentSort.direction = 'desc';
-                        }
-
-                        // Actualizar el icono
-                        icon.className = `fas fa-sort-${currentSort.direction === 'desc' ? 'down' : 'up'} ms-1`;
-
-                        // Actualizar la tabla con la nueva ordenación
-                        updatePublicationsTable(1); // Volver a la primera página
-                    });
-                });
-
-                // Función para actualizar el contenido de la tabla
-                function updateTableContent(pubs) {
-                    tableBody.innerHTML = pubs.map(pub => `
-                        <tr class="publication-row" data-publication-id="${pub.id}" style="cursor: pointer;">
-                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pub.title}</td>
-                            ${orderedMetrics.map(({ key }) => {
-                                const metric = pub.metrics[key];
-                                const displayValue = (metric && metric.value !== null) ? metric.value : '';
-                                return `<td>${displayValue}</td>`;
-                            }).join('')}
-                            <td>${pub.international_collab !== null ? pub.international_collab : '-'}</td>
-                        </tr>
-                    `).join('');
-
-                    // Añadir eventos para las filas de publicaciones
-                    tableBody.querySelectorAll('.publication-row').forEach(row => {
-                        row.addEventListener('click', function() {
-                            const publicationId = this.dataset.publicationId;
-                            if (publicationId) {
-                                window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
-                            }
-                        });
-                    });
-                }
-
-                // Actualizar el contenido inicial de la tabla
-                updateTableContent(publications);
-
-                // Actualizar la paginación
-                if (paginationData.total_pages > 1) {
-                    let paginationHTML = `
-                        <li class="page-item ${paginationData.current_page === 1 ? 'disabled' : ''}">
-                            <a class="page-link" href="#" data-page="1">&laquo;</a>
-                        </li>
-                        <li class="page-item ${paginationData.current_page === 1 ? 'disabled' : ''}">
-                            <a class="page-link" href="#" data-page="${paginationData.current_page - 1}">&lt;</a>
-                        </li>
-                    `;
-
-                    // Mostrar páginas alrededor de la actual
-                    const startPage = Math.max(1, paginationData.current_page - 2);
-                    const endPage = Math.min(paginationData.total_pages, paginationData.current_page + 2);
-
-                    for (let i = startPage; i <= endPage; i++) {
-                        paginationHTML += `
-                            <li class="page-item ${i === paginationData.current_page ? 'active' : ''}">
-                                <a class="page-link" href="#" data-page="${i}">${i}</a>
-                            </li>
-                        `;
-                    }
-
-                    paginationHTML += `
-                        <li class="page-item ${paginationData.current_page === paginationData.total_pages ? 'disabled' : ''}">
-                            <a class="page-link" href="#" data-page="${paginationData.current_page + 1}">&gt;</a>
-                        </li>
-                        <li class="page-item ${paginationData.current_page === paginationData.total_pages ? 'disabled' : ''}">
-                            <a class="page-link" href="#" data-page="${paginationData.total_pages}">&raquo;</a>
-                        </li>
-                    `;
-
-                    pagination.innerHTML = paginationHTML;
-                } else {
-                    pagination.innerHTML = '';
-                }
-
-                // Añadir eventos para la paginación
-                pagination.querySelectorAll('.page-link').forEach(link => {
-                    link.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        const page = parseInt(this.dataset.page);
-                        if (!isNaN(page)) {
-                            updatePublicationsTable(page);
-                        }
-                    });
-                });
-
-                // Ocultar indicador de carga y habilitar la tabla
-                if (table) {
-                    const loadingOverlay = table.querySelector('.loading-overlay');
-                    if (loadingOverlay) {
-                        loadingOverlay.style.display = 'none';
-                    }
-                    table.style.pointerEvents = 'auto';
-                    table.style.opacity = '1';
-                }
-
-                return Promise.resolve();
-            })
-            .catch(error => {
-                console.error('Error updating publications table:', error);
-                
-                // Ocultar indicador de carga y habilitar la tabla en caso de error
-                if (table) {
-                    const loadingOverlay = table.querySelector('.loading-overlay');
-                    if (loadingOverlay) {
-                        loadingOverlay.style.display = 'none';
-                    }
-                    table.style.pointerEvents = 'auto';
-                    table.style.opacity = '1';
-                }
-                
-                return Promise.reject(error);
-            });
+    function updatePublicationsTable(page = 1) {
+        return publicationsTableController.updatePublicationsTable(page);
     }
 
     // Funciones para actualizar cada visualización
@@ -1568,87 +1447,45 @@ export function initFiltersAndSearch() {
     });
 
     let renderer = null;
-    let showAllLabels = false; // Estado para controlar la visualización de todas las etiquetas
-
-    // Event listener para el botón de mostrar/ocultar etiquetas (con detección robusta de idioma)
-    const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
-    if (toggleLabelsBtn) {
-        // Establecer texto inicial acorde al idioma y estado
-        (function setInitialToggleLabel(){
-            const langInit = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
-            toggleLabelsBtn.textContent = (langInit === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
-        })();
-
-        toggleLabelsBtn.addEventListener('click', () => {
-            if (!renderer) {
-                console.warn('[LabelsToggle] Renderer no inicializado todavía');
-                return; // Asegurarse de que el renderer existe
-            }
-
-            showAllLabels = !showAllLabels; // Alternar el estado
-            const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
-            const txtShow = (lang === 'es') ? 'Mostrar etiquetas' : 'Show All Labels';
-            const txtHide = (lang === 'es') ? 'Ocultar etiquetas extra' : 'Hide Extra Labels';
-
-            if (showAllLabels) {
-                // Mostrar todas las etiquetas: ajustar settings para forzar renderizado
-                renderer.setSettings({
-                    labelDensity: Infinity,
-                    labelGridCellSize: 1,
-                    labelRenderedSizeThreshold: 0
-                });
-                toggleLabelsBtn.textContent = txtHide;
-            } else {
-                // Restaurar comportamiento por defecto
-                renderer.setSettings({
-                    labelDensity: 1,
-                    labelGridCellSize: 200,
-                    labelRenderedSizeThreshold: 0
-                });
-                toggleLabelsBtn.textContent = txtShow;
-            }
-            console.log('[LabelsToggle] Estado showAllLabels=', showAllLabels, 'Idioma=', lang, 'Texto=', toggleLabelsBtn.textContent);
-            renderer.refresh();
-        });
-    }
-
-    window.currentCommunityView = 'modularity-7'; // Estado para la vista de comunidad activa
+    let showAllLabels = false;
+    window.currentCommunityView = 'modularity-7';
     window.currentClusteringModel = null;
     window.currentNClusters = null;
     let isFullNetwork = false;
 
+    const collaborationNetworkController = createCollaborationNetworkController({
+        getLang: () => lang,
+        detectLangFromPath,
+        getIsFullNetwork: () => isFullNetwork,
+        setIsFullNetwork: (next) => {
+            isFullNetwork = next;
+        },
+        updateVisualizations,
+    });
 
-    // Event listeners para las opciones del menú desplegable de vista de comunidad
-    document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault(); // Prevenir el comportamiento por defecto del enlace
-
-            const selectedView = this.dataset.communityView; // Obtener el tipo de vista del data-attribute
-
-            // Si ya es la vista actual, no hacer nada
-            if (window.currentCommunityView === selectedView) {
-                 // Actualizar visualmente el menú para marcar la opción activa (en caso de que no lo estuviera)
-                document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
-                    link.classList.remove('active');
-                });
-                this.classList.add('active');
-                return; // Salir de la función si la vista no cambia
-            }
-
-            window.currentCommunityView = selectedView; // Actualizar el estado
-
-            // Actualizar visualmente el menú para marcar la opción activa
-            document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
-                link.classList.remove('active');
-            });
-            this.classList.add('active');
-
-            // Actualizar la red con la nueva vista
-            // La función updateVisualizations ya llama a get_collaboration_network
-            // y le pasa los parámetros, solo necesitamos que incluya el view_type
-            updateCommunityDropdownText();
-            updateVisualizations(); // Esto recarga los datos con el nuevo view_type y llama a updateCollaborationNetwork
+    function updateCollaborationNetwork(data) {
+        return collaborationNetworkController.updateCollaborationNetwork(data, {
+            renderer,
+            setRenderer: (r) => {
+                renderer = r;
+            },
+            showAllLabels,
         });
+    }
+
+    function updateCommunityDropdownText(model = null, nClusters = null) {
+        return collaborationNetworkController.updateCommunityDropdownText(model, nClusters);
+    }
+
+    collaborationNetworkController.initNetworkHandlers({
+        getRendererRef: () => renderer,
+        setRendererRef: (r) => {
+            renderer = r;
+        },
+        getShowAllLabels: () => showAllLabels,
+        setShowAllLabels: (v) => {
+            showAllLabels = v;
+        },
     });
 
     // Helper para detección robusta del idioma.
@@ -2106,102 +1943,7 @@ export function initFiltersAndSearch() {
         renderer.getCamera().animatedReset({ duration: 500 });
     }        
     
-               
-    document.getElementById('applyClustering').addEventListener('click', () => {
-        const configMode = document.querySelector('input[name="configMode"]:checked').value; // 'global' o 'manual'
-        const model = document.getElementById('clusteringModel').value;
-        const modelConfigMode = document.querySelector('input[name="modelConfigMode"]:checked').value; // 'auto' o 'manual'
-    
-        let nClusters = document.getElementById('nClusters').value;
-        if (model === 'dbscan') {
-            nClusters = document.getElementById('dbscanClusters').value;
-        } else if (model === 'hdbscan') {
-            nClusters = document.getElementById('hdbscanClusters').value;
-        } else if (model === 'lovaina') {
-            nClusters = document.getElementById('lovainaClusters').value;
-        }
-    
-        // === ESTABLECER LA VISTA EN KEYWORDS ===
-        window.currentCommunityView = 'keywords';
-        window.currentClusteringModel = model;
-        window.currentNClusters = nClusters;
-    
-        const params = new URLSearchParams({
-            communityView: 'keywords',
-            clusteringModel: model,
-            nClusters: nClusters,
-            autoMode: modelConfigMode === 'auto',
-            globalMode: configMode === 'global'
-        });
-    
-        // === HACER LA PETICIÓN AL BACKEND ===
-        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Error desde backend:', data.error);
-                    alert(`Ocurrió un error al generar la red: ${data.error}`);
-                    return;
-                }
-            
-                if (!data.nodes || !data.edges) {
-                    console.error('Respuesta incompleta del backend:', data);
-                    alert('La respuesta del servidor no contiene datos de red válidos.');
-                    return;
-                }
-            
-                // Guardar los datos actuales de la red
-                window.currentNetworkData = data;
-                
-                updateCommunityDropdownText(model, nClusters);
-                updateCollaborationNetwork(data);
-                document.activeElement.blur();
-                const modal = bootstrap.Modal.getInstance(document.getElementById('clusteringModal'));
-                modal.hide();
-            })
-            .catch(error => {
-                console.error('Error en la petición fetch:', error);
-            });
-    });
-    
-    function updateCommunityDropdownText(model = null, nClusters = null) {
-        const dropdownButton = document.getElementById('communityViewDropdown');
-        if (!dropdownButton) {
-            return;
-        }
-        const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.split('/')[1] || 'es');
-        let text = '';
-
-        if (window.currentCommunityView === 'department') {
-            text = currentLang === 'es' ? 'Por Departamento' : 'By Department';
-        } else if (window.currentCommunityView === 'modularity-7') {
-            if (currentLang === 'es') {
-                text = isFullNetwork ? 'Louvain' : 'Louvain (7 comunidades)';
-            } else {
-                text = isFullNetwork ? 'Louvain' : 'Louvain (7 communities)';
-            }
-        } else if (window.currentCommunityView === 'modularity-5') {
-            if (currentLang === 'es') {
-                text = isFullNetwork ? 'Leiden' : 'Leiden (5 comunidades)';
-            } else {
-                text = isFullNetwork ? 'Leiden' : 'Leiden (5 communities)';
-            }
-        } else if (window.currentCommunityView === 'keywords') {
-            const modelName = model || window.currentClusteringModel;
-            const nClustersValue = nClusters || window.currentNClusters;
-            if (modelName && nClustersValue) {
-                if (currentLang === 'es') {
-                    text = `Por palabras clave (${modelName}, ${nClustersValue} clústeres)`;
-                } else {
-                    text = `By keywords (${modelName}, ${nClustersValue} clusters)`;
-                }
-            } else {
-                text = currentLang === 'es' ? 'Por palabras clave' : 'By keywords';
-            }
-        }
-
-        dropdownButton.textContent = text;
-    }
+    // (Collaboration network handlers and dropdown text moved to ./dashboard/collaboration_network.js)
     
     function updateFilters() {
         const params = new URLSearchParams();
@@ -2344,202 +2086,7 @@ export function initFiltersAndSearch() {
         updateFilters();
     });
 
-    // Añadir el manejador del botón de red completa
-    document.getElementById('toggleFullNetworkBtn').addEventListener('click', function() {
-        const button = this;
-        const container = document.getElementById('collaborationNetwork');
-        const currentLang = detectLangFromPath();
-        
-        // Deshabilitar el botón y mostrar spinner
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' + 
-            (currentLang === 'es' ? 'Cargando...' : 'Loading...');
-        
-        // Mostrar overlay de carga
-        const loadingOverlay = document.createElement('div');
-        loadingOverlay.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            border-radius: inherit;
-        `;
-        loadingOverlay.innerHTML = `
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">${currentLang === 'es' ? 'Cargando...' : 'Loading...'}</span>
-            </div>
-        `;
-        container.appendChild(loadingOverlay);
-        
-        // Cambiar el estado de la red
-        isFullNetwork = !isFullNetwork;
-        
-        // Actualizar el texto del botón
-        button.textContent = currentLang === 'es' 
-            ? (isFullNetwork ? 'Mostrar Red de IPs' : 'Mostrar Red Completa')
-            : (isFullNetwork ? 'Show IPs Network' : 'Show Full Network');
-
-        // Actualizar el título del card
-        const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
-        cardTitle.textContent = currentLang === 'es'
-            ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
-            : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
-        
-        // Actualizar la red con el nuevo modo
-        const params = new URLSearchParams({
-            communityView: window.currentCommunityView,
-            fullNetwork: isFullNetwork
-        });
-        
-        if (window.currentClusteringModel) {
-            params.append('clusteringModel', window.currentClusteringModel);
-            params.append('nClusters', window.currentNClusters);
-            params.append('autoMode', 'true');
-            params.append('globalMode', 'true');
-        }
-
-        // Actualizar las opciones del menú desplegable
-        const dropdownItems = document.querySelectorAll('.network-community-view');
-        dropdownItems.forEach(item => {
-            // Habilitar todas las opciones
-            item.classList.remove('disabled');
-            item.style.pointerEvents = 'auto';
-            item.style.opacity = '1';
-        });
-
-        fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Error desde backend:', data.error);
-                    alert(`Ocurrió un error al generar la red: ${data.error}`);
-                    // Revertir el estado si hay error
-                    isFullNetwork = !isFullNetwork;
-                    return;
-                }
-                
-                if (!data.nodes || !data.edges) {
-                    console.error('Respuesta incompleta del backend:', data);
-                    alert('La respuesta del servidor no contiene datos de red válidos.');
-                    // Revertir el estado si hay error
-                    isFullNetwork = !isFullNetwork;
-                    return;
-                }
-                
-                // Guardar los datos actuales de la red
-                window.currentNetworkData = data;
-                
-                // Solo actualizar la red cuando tengamos los nuevos datos
-                updateCollaborationNetwork(data);
-
-                // Actualizar visibilidad del botón
-                if (!isFullNetwork && (window.currentCommunityView === 'modularity-5' || window.currentCommunityView === 'keywords')) {
-                    button.style.display = 'none';
-                } else {
-                    button.style.display = 'block';
-                }
-            })
-            .catch(error => {
-                console.error('Error en la petición fetch:', error);
-            })
-            .finally(() => {
-                // Eliminar el overlay de carga
-                loadingOverlay.remove();
-                // Habilitar el botón
-                button.disabled = false;
-            });
-    });
-
-    // También necesitamos actualizar el manejador de cambio de vista
-    document.querySelectorAll('.network-community-view').forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (this.classList.contains('disabled')) return;
-            
-            const view = this.getAttribute('data-community-view');
-            window.currentCommunityView = view;
-            
-            // Actualizar clases activas
-            document.querySelectorAll('.network-community-view').forEach(i => i.classList.remove('active'));
-            this.classList.add('active');
-
-            // Si estamos cambiando entre department, modularity-7 o modularity-5, forzar red de IPs
-            if ((view === 'department' || view === 'modularity-7' || view === 'modularity-5') && isFullNetwork) {
-                isFullNetwork = false;
-                const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
-                const currentLang = window.location.pathname.split('/')[1];
-                toggleFullNetworkBtn.textContent = currentLang === 'es' ? 'Mostrar Red Completa' : 'Show Full Network';
-            }
-
-            // Ocultar el botón de red completa para ciertas vistas en modo IPs
-            const toggleFullNetworkBtn = document.getElementById('toggleFullNetworkBtn');
-            if (!isFullNetwork && (view === 'keywords')) {
-                toggleFullNetworkBtn.style.display = 'none';
-            } else {
-                toggleFullNetworkBtn.style.display = 'block';
-            }
-            
-            // Mostrar overlay de carga
-            const container = document.getElementById('collaborationNetwork');
-            const loadingOverlay = document.createElement('div');
-            loadingOverlay.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(255, 255, 255, 0.8);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-                border-radius: inherit;
-            `;
-            loadingOverlay.innerHTML = `
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">${window.location.pathname.split('/')[1] === 'es' ? 'Cargando...' : 'Loading...'}</span>
-                </div>
-            `;
-            container.appendChild(loadingOverlay);
-            
-            // Actualizar la red
-            const params = new URLSearchParams({
-                communityView: view,
-                fullNetwork: isFullNetwork
-            });
-            
-            if (window.currentClusteringModel) {
-                params.append('clusteringModel', window.currentClusteringModel);
-                params.append('nClusters', window.currentNClusters);
-                params.append('autoMode', 'true');
-                params.append('globalMode', 'true');
-            }
-
-            fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${params.toString()}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error('Error desde backend:', data.error);
-                        return;
-                    }
-                    // Solo actualizar la red cuando tengamos los nuevos datos
-                    updateCollaborationNetwork(data);
-                })
-                .catch(error => {
-                    console.error('Error en la petición fetch:', error);
-                })
-                .finally(() => {
-                    // Eliminar el overlay de carga
-                    loadingOverlay.remove();
-                });
-        });
-    });
+    // (Full network toggle + view change overlay fetch moved to ./dashboard/collaboration_network.js)
 
     let includePredictedAreas = false;
 
@@ -2592,61 +2139,16 @@ export function initFiltersAndSearch() {
         if (overlay) overlay.style.display = 'none';
     }
 
-        window.addEventListener('DOMContentLoaded', () => {
-        // Map initialization: default to world
-        window.currentMapView = 'world'; // 'world' | 'spain'
-        initWorldMap('worldmap-container');
-        let spainInitialized = false;
-        const ensureSpainMap = () => {
-            if (!spainInitialized) {
-                initSpainMap('worldmap-container');
-                spainInitialized = true;
-            }
-        };
-        // Map view toggle buttons
-        document.querySelectorAll('[data-map-view]')?.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const view = btn.getAttribute('data-map-view');
-                if (view === window.currentMapView) return;
-                document.querySelectorAll('[data-map-view]')?.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const spainGroup = document.getElementById('spainLevelGroup');
-                // Update collaborations card title based on view and language
-                const titleEl = document.getElementById('collabCardTitleText');
-                const currentLang = (typeof window !== 'undefined' && window.location && window.location.pathname.split('/')[1] === 'es') ? 'es' : 'en';
-                if (view === 'spain') {
-                    spainGroup?.classList.remove('d-none');
-                    ensureSpainMap();
-                        // Show Spain overlay and refresh sizes
-                        setSpainMapVisible(true);
-                        // Optionally hide world map tooltips/overlays if needed
-                        if (titleEl) {
-                            const langMap = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
-                            titleEl.textContent = langMap === 'es' ? 'Colaboraciones Nacionales' : 'National Collaborations';
-                        }
-                } else {
-                    spainGroup?.classList.add('d-none');
-                        // Hide Spain overlay when switching back to world
-                        setSpainMapVisible(false);
-                        if (titleEl) {
-                            const langMap = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
-                            titleEl.textContent = langMap === 'es' ? 'Colaboraciones Internacionales' : 'International Collaborations';
-                        }
-                }
-                window.currentMapView = view;
-                // Refresh visualizations to load the right counts for the selected view
-                updateVisualizations();
-            });
+    window.addEventListener('DOMContentLoaded', () => {
+        const mapViewsController = createMapViewsController({
+            initWorldMap,
+            initSpainMap,
+            setSpainMapVisible,
+            showSpainLevel,
+            updateVisualizations,
+            detectLangFromPath,
         });
-        // Spain level toggle (CCAA/Provinces)
-        document.querySelectorAll('[data-spain-level]')?.forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('[data-spain-level]')?.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const level = btn.getAttribute('data-spain-level');
-                showSpainLevel(level);
-            });
-        });
+        mapViewsController.init();
 
         const btn = document.getElementById('togglePredictedAreasBtn');
         if (btn) {

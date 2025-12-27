@@ -221,11 +221,17 @@ msgstr "Tendencia"
 msgid "Change"
 msgstr "Cambio"
 
-msgid "Search Publications & Authors"
-msgstr "Buscar publicaciones y autores"
+msgid "Search Publications"
+msgstr "Buscar publicaciones"
 
-msgid "Search by publication title or author name..."
-msgstr "Buscar por título de publicación o nombre de autor..."
+msgid "Author"
+msgstr "Autor"
+
+msgid "Search author"
+msgstr "Buscar autor"
+
+msgid "Search by publication title or DOI..."
+msgstr "Buscar por título de publicación o DOI..."
 
 msgid "AI-Powered Search"
 msgstr "Búsqueda inteligente (IA)"
