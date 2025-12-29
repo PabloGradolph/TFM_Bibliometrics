@@ -12,6 +12,7 @@
  * @param {() => string} deps.getLang - Returns current language slug (e.g. 'es'/'en').
  * @param {() => string} deps.getBaseUrl - Returns base URL prefix (e.g. '/BiblioMetrics').
  * @param {() => (string|null)} deps.getSelectedAuthorName - Selected author name, or null.
+ * @param {(() => string[])|undefined} deps.getSelectedAuthorNames - Selected author names list.
  * @param {() => Object} deps.getFilters - Returns current filters (year_from, year_to, lists, citations).
  * @param {() => ('es'|'en')} deps.detectLangFromPath - Language detector.
  * @returns {{ updatePublicationsTable: (page?: number) => Promise<void> }}
@@ -20,6 +21,7 @@ export function createPublicationsTableController({
     getLang,
     getBaseUrl,
     getSelectedAuthorName,
+    getSelectedAuthorNames,
     getFilters,
     detectLangFromPath,
 }) {
@@ -247,9 +249,19 @@ export function createPublicationsTableController({
 
             params.append('page', String(page));
 
-            const selectedAuthorName = getSelectedAuthorName();
-            if (selectedAuthorName) {
-                params.append('author', selectedAuthorName);
+            const selectedAuthorNames = typeof getSelectedAuthorNames === 'function'
+                ? getSelectedAuthorNames()
+                : [];
+
+            if (Array.isArray(selectedAuthorNames) && selectedAuthorNames.length > 0) {
+                selectedAuthorNames.forEach((name) => {
+                    if (name) params.append('author', name);
+                });
+            } else {
+                const selectedAuthorName = getSelectedAuthorName();
+                if (selectedAuthorName) {
+                    params.append('author', selectedAuthorName);
+                }
             }
 
             if (currentSort.metric) {

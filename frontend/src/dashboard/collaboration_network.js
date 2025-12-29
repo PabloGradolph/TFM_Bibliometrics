@@ -114,14 +114,25 @@ export function createCollaborationNetworkController(deps) {
         const isFullNetwork = getIsFullNetwork();
 
         if (data.is_author_view) {
-            const selectedAuthor = data.nodes.find(node => node.is_selected);
-            if (selectedAuthor) {
+            // Author-centric views:
+            // - single author view: collaborations of the selected author
+            // - multi-author view: collaborations *between* selected authors only
+            if (data.is_multi_author_view) {
                 cardTitle.textContent = currentLang === 'es'
-                    ? `Colaboraciones de ${selectedAuthor.label}`
-                    : `Collaborations of ${selectedAuthor.label}`;
+                    ? 'Colaboraciones entre autores seleccionados'
+                    : 'Collaborations between selected authors';
+            } else {
+                const selectedAuthor = (data.nodes || []).find(node => node.is_selected);
+                if (selectedAuthor) {
+                    cardTitle.textContent = currentLang === 'es'
+                        ? `Colaboraciones de ${selectedAuthor.label}`
+                        : `Collaborations of ${selectedAuthor.label}`;
+                }
             }
-            document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'none';
-            toggleButton.style.display = 'none';
+
+            const dropdown = document.querySelector('#communityViewDropdown')?.closest('.dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            if (toggleButton) toggleButton.style.display = 'none';
         } else {
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
             updateCommunityDropdownText(

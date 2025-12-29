@@ -33,6 +33,40 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 import tempfile
 import shutil
 
+
+def _get_selected_authors(request):
+    """Return selected author names from the query string.
+
+    Supported formats:
+    - Single: ?author=Name
+    - Multi (repeated): ?author=Name1&author=Name2
+    - Multi (list): ?authors=Name1&authors=Name2
+    - Multi (array style): ?authors[]=Name1&authors[]=Name2
+
+    Returns:
+        list[str]: Normalized, non-empty author names.
+    """
+    authors = []
+
+    # Prefer multi-value forms if present.
+    authors.extend([a.strip() for a in request.GET.getlist('author') if str(a).strip()])
+    authors.extend([a.strip() for a in request.GET.getlist('authors') if str(a).strip()])
+    authors.extend([a.strip() for a in request.GET.getlist('authors[]') if str(a).strip()])
+
+    # Backwards compatibility: some call sites use request.GET.get('author')
+    single = (request.GET.get('author') or '').strip()
+    if single:
+        authors.append(single)
+
+    # De-duplicate while preserving order.
+    seen = set()
+    out = []
+    for a in authors:
+        if a not in seen:
+            out.append(a)
+            seen.add(a)
+    return out
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def semantic_search(request):
@@ -290,7 +324,7 @@ def get_filter_data(request):
     quartiles = request.GET.getlist('quartiles')  # e.g., ['Q1', 'Q2']
     # Business rule: ignore provided metric_source, always use WoS
     metric_source = 'wos'
-    author = request.GET.get('author')
+    selected_authors = _get_selected_authors(request)
 
     base_query = Publication.objects.all()
     if year_from:
@@ -308,8 +342,8 @@ def get_filter_data(request):
             base_query = base_query.filter(citations__lte=int(citations_to))
         except ValueError:
             pass
-    if author:
-        base_query = base_query.filter(authors__name=author)
+    if selected_authors:
+        base_query = base_query.filter(authors__name__in=selected_authors).distinct()
 
     # ---- Years (con todos los filtros, incl. tipos)
     query_with_all_filters = base_query
@@ -451,7 +485,7 @@ def get_filtered_data(request):
     quartiles = request.GET.getlist('quartiles')
     metric_source = 'wos'
     view_type = request.GET.get('view_type', 'yearly')
-    author = request.GET.get('author')
+    selected_authors = _get_selected_authors(request)
     include_predicted_areas = request.GET.get('include_predicted_areas') == 'true'
 
     # Construir el query base
@@ -480,8 +514,8 @@ def get_filtered_data(request):
         query = _apply_type_filter(query, types)
     if quartiles:
         query = _apply_quartile_filter(query, quartiles, metric_source)
-    if author:
-        query = query.filter(authors__name=author)
+    if selected_authors:
+        query = query.filter(authors__name__in=selected_authors).distinct()
 
     # Diccionario para convertir nombres de meses a números
     month_map = {
@@ -659,13 +693,13 @@ def get_author_suggestions(request):
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def search_publications(request):
     q = request.GET.get('q', '').strip()
-    author = request.GET.get('author', '').strip()
-    if not q and not author:
+    selected_authors = _get_selected_authors(request)
+    if not q and not selected_authors:
         return JsonResponse({'results': []})
 
     publications = Publication.objects.all()
-    if author:
-        publications = publications.filter(authors__name=author)
+    if selected_authors:
+        publications = publications.filter(authors__name__in=selected_authors).distinct()
     elif q:
         # Publications-only search. Besides title and thematic areas, also match DOI.
         # This enables users to paste a full DOI or just a prefix.
@@ -775,7 +809,7 @@ def get_publications_data(request):
     citations_from = request.GET.get('citations_from')
     citations_to = request.GET.get('citations_to')
     metric_source = 'wos'
-    author = request.GET.get('author')
+    selected_authors = _get_selected_authors(request)
     page = int(request.GET.get('page', 1))
     try:
         per_page = int(request.GET.get('per_page', 20))
@@ -813,8 +847,8 @@ def get_publications_data(request):
         query = _apply_type_filter(query, types)
     if quartiles:
         query = _apply_quartile_filter(query, quartiles, metric_source)
-    if author:
-        query = query.filter(authors__name=author)
+    if selected_authors:
+        query = query.filter(authors__name__in=selected_authors).distinct()
 
     # Fetch all filtered publications
     publications = list(query)
@@ -893,8 +927,84 @@ def get_collaboration_network(request):
         n_clusters = request.GET.get('nClusters')
         auto_mode = request.GET.get('autoMode') == 'true'
         global_mode = request.GET.get('globalMode') == 'true'
-        selected_author_name = request.GET.get('author')
+        selected_authors = _get_selected_authors(request)
+        selected_author_name = selected_authors[0] if selected_authors else None
         full_network = request.GET.get('fullNetwork') == 'true'
+
+        # Multi-author view (selected authors only): build a small graph composed only of the
+        # selected authors and edges representing collaborations *between them*.
+        if len(selected_authors) > 1:
+            selected_author_qs = Author.objects.filter(name__in=selected_authors)
+
+            # Ensure we return nodes in the same order the user selected.
+            author_by_name = {a.name: a for a in selected_author_qs}
+            selected_author_objs = [author_by_name.get(name) for name in selected_authors if author_by_name.get(name)]
+
+            G = nx.Graph()
+            id_to_author = {}
+            for author in selected_author_objs:
+                author_id = str(author.gesbib_id)
+                id_to_author[author_id] = author
+                G.add_node(
+                    author_id,
+                    label=author.name,
+                    department=getattr(author, 'department', 'Unknown'),
+                    is_selected=True,
+                )
+
+            # Aggregate collaboration weights for edges between selected authors.
+            selected_ids = [a.gesbib_id for a in selected_author_objs]
+            if selected_ids:
+                collabs = Collaboration.objects.filter(
+                    author__gesbib_id__in=selected_ids,
+                    collaborator__gesbib_id__in=selected_ids,
+                )
+
+                # Build an undirected edge map (src,tgt) with src < tgt to avoid duplicates.
+                edge_weights: dict[tuple[str, str], int] = {}
+                for c in collabs:
+                    src = str(c.author.gesbib_id)
+                    tgt = str(c.collaborator.gesbib_id)
+                    if src == tgt:
+                        continue
+                    a, b = (src, tgt) if src < tgt else (tgt, src)
+                    edge_weights[(a, b)] = edge_weights.get((a, b), 0) + int(c.publication_count or 0)
+
+                for (src, tgt), weight in edge_weights.items():
+                    if weight > 0:
+                        G.add_edge(src, tgt, weight=weight)
+
+            nodes = []
+            for nid, d in G.nodes(data=True):
+                nodes.append(
+                    {
+                        'id': nid,
+                        'label': d['label'],
+                        'department': d.get('department', 'Unknown'),
+                        'is_selected': True,
+                        # Sigma renderer expects positions; random layout is fine for small graphs.
+                        'x': random.random() * 1000,
+                        'y': random.random() * 1000,
+                    }
+                )
+
+            edges = [
+                {
+                    'source': s,
+                    'target': t,
+                    'weight': int(d.get('weight', 1) or 1),
+                }
+                for s, t, d in G.edges(data=True)
+            ]
+
+            return JsonResponse(
+                {
+                    'nodes': nodes,
+                    'edges': edges,
+                    'is_author_view': True,
+                    'is_multi_author_view': True,
+                }
+            )
 
         if selected_author_name:
             try:
@@ -931,7 +1041,7 @@ def get_collaboration_network(request):
                     'source': s, 'target': t, 'weight': d.get('weight', 1)
                 } for s, t, d in G.edges(data=True)]
 
-                return JsonResponse({'nodes': nodes, 'edges': edges, 'is_author_view': True})
+                return JsonResponse({'nodes': nodes, 'edges': edges, 'is_author_view': True, 'is_multi_author_view': False})
             except Author.DoesNotExist:
                 pass
 
@@ -1540,8 +1650,9 @@ def get_worldmap_counts(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
     quartiles = request.GET.getlist('quartiles')
-    metric_source = request.GET.get('metric_source')
-    author = request.GET.get('author')
+    # Business rule: ignore provided metric_source, always use WoS
+    metric_source = 'wos'
+    selected_authors = _get_selected_authors(request)
 
     query = Publication.objects.all()
     if year_from:
@@ -1566,8 +1677,8 @@ def get_worldmap_counts(request):
         query = _apply_type_filter(query, types)
     if quartiles:
         query = _apply_quartile_filter(query, quartiles, metric_source)
-    if author:
-        query = query.filter(authors__name=author)
+    if selected_authors:
+        query = query.filter(authors__name__in=selected_authors)
 
     query = query.distinct()
 
@@ -1615,8 +1726,9 @@ def get_spainmap_counts(request):
     institutions = request.GET.getlist('institutions')
     types = request.GET.getlist('types')  # canonical
     quartiles = request.GET.getlist('quartiles')
-    metric_source = request.GET.get('metric_source')
-    author = request.GET.get('author')
+    # Business rule: ignore provided metric_source, always use WoS
+    metric_source = 'wos'
+    selected_authors = _get_selected_authors(request)
 
     count_mode = request.GET.get('count', 'occurrences')  # 'occurrences' or 'publications'
     query = Publication.objects.all()
@@ -1642,8 +1754,8 @@ def get_spainmap_counts(request):
         query = _apply_type_filter(query, types)
     if quartiles:
         query = _apply_quartile_filter(query, quartiles, metric_source)
-    if author:
-        query = query.filter(authors__name=author)
+    if selected_authors:
+        query = query.filter(authors__name__in=selected_authors)
 
     query = query.distinct()
 

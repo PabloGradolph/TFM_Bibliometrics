@@ -303,7 +303,13 @@ export function initFiltersAndSearch() {
     let selectedTypesList = new Set();
     let selectedQuartilesList = new Set();
     // metric source removed; always WoS
+    // NOTE (2025-12): author filter UI now supports multi-select.
+    // For now, the rest of the app keeps using `window.selectedAuthorName` (single author)
+    // so existing behavior is preserved when exactly one author is selected.
+    /** @type {string|null} */
     let selectedAuthorName = null;
+    /** @type {Set<string>} */
+    let selectedAuthorNames = new Set();
 
     // Exponer en window para export_report.js
     window.selectedAreasList = selectedAreasList;
@@ -312,6 +318,8 @@ export function initFiltersAndSearch() {
     window.selectedQuartilesList = selectedQuartilesList;
     window.selectedMetricSource = 'wos';
     window.selectedAuthorName = selectedAuthorName;
+    // Expose list for future use (not wired to backend yet)
+    window.selectedAuthorNames = selectedAuthorNames;
 
     // Helper: show/hide the "missing publications" notice
     function setMissingPubsNoticeVisible(visible) {
@@ -439,7 +447,8 @@ export function initFiltersAndSearch() {
 
         ensureFiltersAuthorSuggestionsPortal();
 
-        if (!query || selectedAuthorName) {
+        // Allow suggestions even after selecting one author (multi-select).
+        if (!query) {
             filtersAuthorSuggestions.style.display = 'none';
             return;
         }
@@ -491,75 +500,269 @@ export function initFiltersAndSearch() {
 
     // Event listener para el autor seleccionado
     function selectAuthor(authorName) {
+        if (!authorName) return;
+
+        // Multi-select: accumulate authors.
+        selectedAuthorNames.add(authorName);
+        window.selectedAuthorNames = selectedAuthorNames;
+
+        // Keep `selectedAuthorName` as an "active author" (used by author-metrics UI and
+        // single-author consumers such as the publications table controller).
+        // The dashboard endpoints will use `selectedAuthorNames` for additive (OR) behavior.
         selectedAuthorName = authorName;
         window.selectedAuthorName = authorName;
-        // Main search remains available (publications-only)
 
-        // Sync Filters-section author search UI (if present)
+        // Keep input usable: clear it but DO NOT disable.
         if (filtersAuthorSearch) {
             filtersAuthorSearch.value = '';
-            filtersAuthorSearch.disabled = true;
+            filtersAuthorSearch.disabled = false;
+            // Keep focus so user can keep adding authors.
+            try { filtersAuthorSearch.focus(); } catch (e) { /* ignore */ }
         }
         if (filtersAuthorSuggestions) {
             filtersAuthorSuggestions.style.display = 'none';
         }
+        // Hide the old "limit reached" message (no longer applies).
         if (filtersAuthorLimitMessage) {
-            filtersAuthorLimitMessage.style.display = 'block';
+            filtersAuthorLimitMessage.style.display = 'none';
         }
 
-        if (filtersSelectedAuthor) {
-            filtersSelectedAuthor.innerHTML = `
-                <span class="badge bg-primary me-2 mb-2">
-                    ${authorName}
-                    <button type="button" class="btn-close btn-close-white ms-1"
-                            style="font-size: 0.5rem; vertical-align: middle;"
-                            aria-label="Remove"></button>
-                </span>
-            `;
-        }
-
-        // Añadir evento para eliminar el autor
-        const removeAuthor = () => {
-            selectedAuthorName = null;
-            window.selectedAuthorName = null;
-            setMissingPubsNoticeVisible(false);
-
-            if (filtersAuthorSearch) {
-                filtersAuthorSearch.disabled = false;
-            }
-            if (filtersSelectedAuthor) {
+        // Render selected authors as badges.
+        function renderSelectedAuthors() {
+            if (!filtersSelectedAuthor) return;
+            if (selectedAuthorNames.size === 0) {
                 filtersSelectedAuthor.innerHTML = '';
+                return;
             }
-            if (filtersAuthorLimitMessage) {
-                filtersAuthorLimitMessage.style.display = 'none';
+            filtersSelectedAuthor.innerHTML = Array.from(selectedAuthorNames)
+                .map((name) => `
+                    <span class="badge bg-primary me-2 mb-2" data-author-name="${String(name).replace(/"/g, '&quot;')}">
+                        ${name}
+                        <button type="button" class="btn-close btn-close-white ms-1"
+                                style="font-size: 0.5rem; vertical-align: middle;"
+                                aria-label="Remove"></button>
+                    </span>
+                `)
+                .join('');
+
+            // Wire remove for each badge
+            filtersSelectedAuthor.querySelectorAll('.badge[data-author-name] .btn-close').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const badge = btn.closest('.badge[data-author-name]');
+                    const name = badge ? badge.getAttribute('data-author-name') : null;
+                    if (!name) return;
+
+                    selectedAuthorNames.delete(name);
+                    window.selectedAuthorNames = selectedAuthorNames;
+
+                    // Keep active author aligned with the remaining selection.
+                    if (selectedAuthorNames.size === 0) {
+                        selectedAuthorName = null;
+                        window.selectedAuthorName = null;
+                    } else if (selectedAuthorName === name || !selectedAuthorName) {
+                        const next = Array.from(selectedAuthorNames)[0];
+                        selectedAuthorName = next;
+                        window.selectedAuthorName = next;
+                    }
+
+                    renderSelectedAuthors();
+
+                    // If there are no selected authors, we must return to the baseline dashboard:
+                    // - hide author metrics
+                    // - refresh visualizations without author filters
+                    if (selectedAuthorNames.size === 0) {
+                        const existingMetricsCard = document.getElementById('authorMetricsCard');
+                        if (existingMetricsCard) {
+                            existingMetricsCard.remove();
+                        }
+
+                        // Restore full-width layout for the collaboration network when
+                        // the author metrics panel is removed.
+                        const networkCol = document.getElementById('networkCol');
+                        if (networkCol) {
+                            networkCol.className = 'col-12 mb-10';
+                        }
+
+                        try {
+                            updateFilters();
+                        } catch (err) {
+                            console.error('Error updating dashboard after removing last author:', err);
+                            updateVisualizations();
+                        }
+                        return;
+                    }
+
+                    // If exactly one author remains, keep legacy single-author behavior aligned
+                    // (i.e., metrics and any single-author consumers should use that author).
+                    if (selectedAuthorNames.size === 1) {
+                        selectedAuthorName = Array.from(selectedAuthorNames)[0];
+                        window.selectedAuthorName = selectedAuthorName;
+
+                        // When we go back to a single author, restore the full-width network
+                        // layout (the metrics card will remain, but the IP network shouldn't
+                        // keep a leftover 50/50 split.
+                        const networkCol = document.getElementById('networkCol');
+                        if (networkCol) {
+                            networkCol.className = 'col-12 mb-10';
+                        }
+
+                        // If the network was in an author view, ensure it refreshes so any
+                        // internal author dropdowns don't keep removed authors.
+                        try {
+                            updateVisualizations();
+                        } catch (e3) {
+                            console.warn('Could not refresh network after author removal:', e3);
+                        }
+
+                        // If the metrics selector exists from a previous multi-selection,
+                        // refresh the metrics card to remove it.
+                        const metricsSelect = document.getElementById('authorMetricsSelect');
+                        if (metricsSelect) {
+                            // Trigger a full refresh of the metrics section by re-selecting
+                            // the remaining author.
+                            try {
+                                selectAuthor(selectedAuthorName);
+                            } catch (e2) {
+                                // If we're inside the author UI handler, avoid breaking the flow.
+                                console.warn('Could not refresh author metrics selector after removal:', e2);
+                            }
+                        }
+                    }
+
+                    // Refresh data to reflect the remaining selection (multi/single).
+                    try {
+                        updateFilters();
+                    } catch (err) {
+                        console.error('Error updating dashboard after removing author:', err);
+                        updateVisualizations();
+                    }
+
+                    // If we are still in multi-author mode, ensure the author metrics selector
+                    // reflects the current selection (removed authors must not appear).
+                    if (selectedAuthorNames.size >= 2) {
+                        const metricsSelect = document.getElementById('authorMetricsSelect');
+                        const metricsCard = document.getElementById('authorMetricsCard');
+                        if (metricsCard && metricsSelect) {
+                            const currentValue = metricsSelect.value;
+                            const safeAuthors = Array.from(selectedAuthorNames);
+                            const nextActive = safeAuthors.includes(currentValue)
+                                ? currentValue
+                                : (safeAuthors[0] || null);
+                            if (nextActive) {
+                                selectedAuthorName = nextActive;
+                                window.selectedAuthorName = nextActive;
+                            }
+
+                            // Recreate the metrics card so the <select> options are rebuilt.
+                            try {
+                                selectAuthor(selectedAuthorName);
+                            } catch (e4) {
+                                console.warn('Could not refresh metrics selector after author removal:', e4);
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        renderSelectedAuthors();
+
+        /**
+         * Fetch and render metrics for a given author into the author metrics table.
+         *
+         * @param {string} author
+         * @returns {Promise<void>}
+         */
+        async function loadAuthorMetrics(author) {
+            if (!author) return;
+
+            const metricsTable = document.getElementById('authorMetricsTable');
+            if (metricsTable) {
+                metricsTable.innerHTML = '';
             }
-            
-            // Eliminar la card de métricas del autor del DOM
-            const authorMetricsCard = document.getElementById('authorMetricsCard');
-            if (authorMetricsCard) {
-                authorMetricsCard.remove();
-            }
-            
-            // Ajustar la columna de la red de colaboración
-            const networkCol = document.getElementById('networkCol');
-            if (networkCol) {
-                networkCol.className = 'col-12';
-            }
-            
-            updateFilters(); // Actualizar filtros al eliminar el autor
-        };
-        if (filtersSelectedAuthor) {
-            const filtersCloseBtn = filtersSelectedAuthor.querySelector('.btn-close');
-            if (filtersCloseBtn) {
-                filtersCloseBtn.addEventListener('click', removeAuthor);
+
+            try {
+                const response = await fetch(
+                    `/BiblioMetrics/${lang}/api/author/metrics/?author_id=${encodeURIComponent(author)}`,
+                );
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Error fetching author metrics:', data.error);
+                    return;
+                }
+
+                const table = document.getElementById('authorMetricsTable');
+                if (!table) return;
+
+                // i18n for metric labels (ES/EN)
+                const metricNamesI18N = {
+                    es: {
+                        orcid: 'ORCID',
+                        total_publications: 'Publicaciones totales',
+                        total_citations: 'Citas totales',
+                        citations_wos: 'Citas WoS',
+                        citations_scopus: 'Citas Scopus',
+                        h_index: 'Índice h (WoS/Scopus)',
+                        h_index_gb: 'Índice h (Gesbib)',
+                        h_index_h5gb: 'Índice h5 (Gesbib)',
+                        international_index: 'Índice de colaboración internacional',
+                    },
+                    en: {
+                        orcid: 'ORCID',
+                        total_publications: 'Total Publications',
+                        total_citations: 'Total Citations',
+                        citations_wos: 'WoS Citations',
+                        citations_scopus: 'Scopus Citations',
+                        h_index: 'H-index (WoS/Scopus)',
+                        h_index_gb: 'H-index (Gesbib)',
+                        h_index_h5gb: 'H5-index (Gesbib)',
+                        international_index: 'International Collaboration Index',
+                    },
+                };
+
+                const tMetric = (k) => (metricNamesI18N[currentLang] && metricNamesI18N[currentLang][k]) || k;
+
+                table.innerHTML = '';
+                Object.entries(data.metrics || {}).forEach(([key, value]) => {
+                    const row = document.createElement('tr');
+
+                    if (key === 'orcid' && typeof value === 'string' && value.trim() !== '') {
+                        const url = value.replace(/^http:/, 'https:');
+                        row.innerHTML = `
+                            <td>${tMetric(key)}</td>
+                            <td><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></td>
+                        `;
+                    } else {
+                        row.innerHTML = `
+                            <td>${tMetric(key) || key}</td>
+                            <td>${value}</td>
+                        `;
+                    }
+
+                    table.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error fetching author metrics:', error);
             }
         }
 
         // Crear y añadir la card de métricas del autor al DOM
         const collaborationRow = document.getElementById('collaborationRow');
-        const authorMetricsCard = document.createElement('div');
-        authorMetricsCard.id = 'authorMetricsCard';
-        authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-10 h-100';
+        if (!collaborationRow) {
+            updateFilters();
+            return;
+        }
+
+        let authorMetricsCard = document.getElementById('authorMetricsCard');
+        if (!authorMetricsCard) {
+            authorMetricsCard = document.createElement('div');
+            authorMetricsCard.id = 'authorMetricsCard';
+            authorMetricsCard.className = 'col-md-6 mt-3 mt-md-0 mb-10 h-100';
+            collaborationRow.appendChild(authorMetricsCard);
+        }
         
         // Extraer el idioma de forma robusta
         const currentLang = (typeof detectLangFromPath === 'function')
@@ -569,12 +772,35 @@ export function initFiltersAndSearch() {
         const metricsTitle = currentLang === 'es' ? 'Métrica' : 'Metrics';
         const valuesTitle = currentLang === 'es' ? 'Valor' : 'Value';
         
+        const activeAuthorLabel = currentLang === 'es' ? 'Autor' : 'Author';
+        const multipleAuthorsHelper = currentLang === 'es'
+            ? 'Selecciona el autor del que quieres ver las métricas'
+            : 'Select the author you want to see metrics for';
+
+        const showAuthorSelector = selectedAuthorNames.size > 1;
+        const authorSelectOptions = Array.from(selectedAuthorNames)
+            .map((name) => {
+                const selectedAttr = name === authorName ? 'selected' : '';
+                const safe = String(name).replace(/"/g, '&quot;');
+                return `<option value="${safe}" ${selectedAttr}>${name}</option>`;
+            })
+            .join('');
+
         authorMetricsCard.innerHTML = `
             <div class="card dashboard-card h-100">
                 <div class="card-body d-flex flex-column">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="card-title mb-0">${cardTitle}</h5>
                     </div>
+                    ${showAuthorSelector ? `
+                        <div class="mb-3">
+                            <label for="authorMetricsSelect" class="form-label">${activeAuthorLabel}</label>
+                            <select id="authorMetricsSelect" class="form-select form-select-sm">
+                                ${authorSelectOptions}
+                            </select>
+                            <div class="form-text">${multipleAuthorsHelper}</div>
+                        </div>
+                    ` : ''}
                     <div id="authorMetricsContent" class="flex-grow-1">
                         <div class="table-responsive">
                             <table class="table table-hover">
@@ -593,7 +819,23 @@ export function initFiltersAndSearch() {
                 </div>
             </div>
         `;
-        collaborationRow.appendChild(authorMetricsCard);
+
+        if (showAuthorSelector) {
+            const select = document.getElementById('authorMetricsSelect');
+            if (select) {
+                select.addEventListener('change', () => {
+                    const nextAuthor = select.value;
+                    // Update active author (used by legacy single-author consumers such as
+                    // the publications table controller).
+                    selectedAuthorName = nextAuthor;
+                    window.selectedAuthorName = nextAuthor;
+
+                    // Only update the metrics view; the dashboard queries still use the
+                    // additive author set `selectedAuthorNames`.
+                    loadAuthorMetrics(nextAuthor);
+                });
+            }
+        }
 
         // Ajustar la columna de la red de colaboración
         const networkCol = document.getElementById('networkCol');
@@ -608,72 +850,8 @@ export function initFiltersAndSearch() {
         // Show notice now that an author is selected
         setMissingPubsNoticeVisible(true);
 
-        // Obtener las métricas del autor
-        fetch(`/BiblioMetrics/${lang}/api/author/metrics/?author_id=${encodeURIComponent(authorName)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    console.error('Error fetching author metrics:', data.error);
-                    return;
-                }
-                
-                const metricsTable = document.getElementById('authorMetricsTable');
-                if (!metricsTable) return;
-
-                // i18n para nombres de métricas (ES/EN)
-                const metricNamesI18N = {
-                    es: {
-                        orcid: 'ORCID',
-                        total_publications: 'Publicaciones totales',
-                        total_citations: 'Citas totales',
-                        citations_wos: 'Citas WoS',
-                        citations_scopus: 'Citas Scopus',
-                        h_index: 'Índice h (WoS/Scopus)',
-                        h_index_gb: 'Índice h (Gesbib)',
-                        h_index_h5gb: 'Índice h5 (Gesbib)',
-                        international_index: 'Índice de colaboración internacional'
-                    },
-                    en: {
-                        orcid: 'ORCID',
-                        total_publications: 'Total Publications',
-                        total_citations: 'Total Citations',
-                        citations_wos: 'WoS Citations',
-                        citations_scopus: 'Scopus Citations',
-                        h_index: 'H-index (WoS/Scopus)',
-                        h_index_gb: 'H-index (Gesbib)',
-                        h_index_h5gb: 'H5-index (Gesbib)',
-                        international_index: 'International Collaboration Index'
-                    }
-                };
-                const tMetric = (k) => (metricNamesI18N[currentLang] && metricNamesI18N[currentLang][k]) || k;
-
-                // Limpiar la tabla
-                metricsTable.innerHTML = '';
-
-                // Añadir cada métrica a la tabla
-                Object.entries(data.metrics).forEach(([key, value]) => {
-                    const row = document.createElement('tr');
-                
-                    if (key === 'orcid' && typeof value === 'string' && value.trim() !== '') {
-                        // Forzar https y generar enlace clicable
-                        const url = value.replace(/^http:/, 'https:');
-                        row.innerHTML = `
-                            <td>${tMetric(key)}</td>
-                            <td><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></td>
-                        `;
-                    } else {
-                        row.innerHTML = `
-                            <td>${tMetric(key) || key}</td>
-                            <td>${value}</td>
-                        `;
-                    }
-                
-                    metricsTable.appendChild(row);
-                });
-            })
-            .catch(error => {
-                console.error('Error fetching author metrics:', error);
-            });
+        // Load metrics for the active author (default: the last selected).
+        loadAuthorMetrics(authorName);
 
         // Actualizar los filtros y visualizaciones con el autor seleccionado
         updateFilters();
@@ -733,7 +911,8 @@ export function initFiltersAndSearch() {
     if (filtersAuthorSearch) {
         filtersAuthorSearch.addEventListener('input', (e) => {
             const query = e.target.value.trim();
-            if (!query || selectedAuthorName) {
+            // Multi-select: keep showing suggestions even if one author is already selected.
+            if (!query) {
                 if (filtersAuthorSuggestions) filtersAuthorSuggestions.style.display = 'none';
                 return;
             }
@@ -1240,9 +1419,13 @@ export function initFiltersAndSearch() {
     // metric_source removed
         params.append('view_type', filters.view_type);
         if (includePredictedAreas) params.append('include_predicted_areas', 'true');
-        
-        // Añadir el autor seleccionado si existe
-        if (selectedAuthorName) {
+
+        // Add selected authors.
+        // - Single author: keep legacy `author=<name>`
+        // - Multiple authors: send repeated `author=<name>` (OR semantics in backend)
+        if (selectedAuthorNames && selectedAuthorNames.size > 1) {
+            Array.from(selectedAuthorNames).forEach((name) => params.append('author', name));
+        } else if (selectedAuthorName) {
             params.append('author', selectedAuthorName);
         }
 
@@ -1354,6 +1537,7 @@ export function initFiltersAndSearch() {
         getLang: () => lang,
         getBaseUrl: () => '/BiblioMetrics',
         getSelectedAuthorName: () => selectedAuthorName,
+        getSelectedAuthorNames: () => Array.from(selectedAuthorNames || []),
         getFilters: () => ({
             year_from: yearFrom.value,
             year_to: yearTo.value,
@@ -1965,8 +2149,10 @@ export function initFiltersAndSearch() {
     selectedQuartilesList.forEach(q => params.append('quartiles', q));
     // metric_source not appended (always WoS)
 
-        // Añadir autor seleccionado si existe
-        if (selectedAuthorName) {
+        // Add selected authors.
+        if (selectedAuthorNames && selectedAuthorNames.size > 1) {
+            Array.from(selectedAuthorNames).forEach((name) => params.append('author', name));
+        } else if (selectedAuthorName) {
             params.append('author', selectedAuthorName);
         }
 
