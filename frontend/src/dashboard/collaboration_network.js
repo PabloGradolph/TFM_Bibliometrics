@@ -133,7 +133,19 @@ export function createCollaborationNetworkController(deps) {
             const dropdown = document.querySelector('#communityViewDropdown')?.closest('.dropdown');
             if (dropdown) dropdown.style.display = 'none';
             if (toggleButton) toggleButton.style.display = 'none';
+
+            // Compact height for the multi-author view: when there are few nodes/edges,
+            // a fixed 400px container leaves too much empty space.
+            if (data.is_multi_author_view) {
+                // Use a smaller height but keep enough room for labels.
+                container.style.height = '260px';
+            } else {
+                // Restore default height.
+                container.style.height = '400px';
+            }
         } else {
+            // Restore default height for non-author views.
+            container.style.height = '400px';
             document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
             updateCommunityDropdownText(
                 data.model || null,

@@ -499,8 +499,10 @@ export function initFiltersAndSearch() {
     }
 
     // Event listener para el autor seleccionado
-    function selectAuthor(authorName) {
+    function selectAuthor(authorName, opts = {}) {
         if (!authorName) return;
+
+        const { skipUpdate = false, skipMetrics = false } = opts;
 
         // Multi-select: accumulate authors.
         selectedAuthorNames.add(authorName);
@@ -851,10 +853,14 @@ export function initFiltersAndSearch() {
         setMissingPubsNoticeVisible(true);
 
         // Load metrics for the active author (default: the last selected).
-        loadAuthorMetrics(authorName);
+        if (!skipMetrics) {
+            loadAuthorMetrics(authorName);
+        }
 
         // Actualizar los filtros y visualizaciones con el autor seleccionado
-        updateFilters();
+        if (!skipUpdate) {
+            updateFilters();
+        }
     }
 
     // Función para actualizar el autor seleccionado
@@ -1015,7 +1021,8 @@ export function initFiltersAndSearch() {
                 const publicationId = this.dataset.publicationId;
                 if (publicationId) {
                     // Redirigir a la página de detalle de publicación
-                    window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
+                    const nextUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `/BiblioMetrics/publication/${publicationId}/?next=${nextUrl}`;
                 }
             });
         });
@@ -1340,6 +1347,107 @@ export function initFiltersAndSearch() {
 
     // --- ÁREAS TEMÁTICAS: LÓGICA DE BOTONES Y RENDER ---
     let currentAreasView = 'pie';
+    /**
+     * Persist dashboard state to the URL so browser back/forward keeps filters.
+     *
+     * Contract:
+     * - Only uses querystring (no local/session storage).
+     * - Encodes multi-author selection by repeating `author`.
+     * - Safe to call frequently (uses history.replaceState).
+     *
+     * @param {URLSearchParams} params
+     * @returns {void}
+     */
+    function persistDashboardStateToUrl(params) {
+        try {
+            const currentPath = window.location.pathname;
+            const next = params.toString();
+            const newUrl = next ? `${currentPath}?${next}` : currentPath;
+            window.history.replaceState({}, '', newUrl);
+        } catch (e) {
+            console.warn('Could not persist dashboard state to URL:', e);
+        }
+    }
+
+    /**
+     * Restore dashboard state from the querystring on initial load.
+     *
+     * Notes:
+     * - We restore the most important state: filters + authors.
+     * - UI-dependent views (timeline/monthly, areas view) will be restored when possible.
+     *
+     * @returns {void}
+     */
+    function restoreDashboardStateFromUrl() {
+        const qs = new URLSearchParams(window.location.search || '');
+        if (!qs || Array.from(qs.keys()).length === 0) return;
+
+        // Years
+        const yFrom = qs.get('year_from');
+        const yTo = qs.get('year_to');
+        if (yearFrom && yFrom) yearFrom.value = yFrom;
+        if (yearTo && yTo) yearTo.value = yTo;
+
+        // Citations
+        const cFrom = qs.get('citations_from');
+        const cTo = qs.get('citations_to');
+        if (citationsFrom && cFrom !== null) citationsFrom.value = cFrom;
+        if (citationsTo && cTo !== null) citationsTo.value = cTo;
+
+        // Multi-value filters
+        (qs.getAll('areas') || []).forEach((a) => {
+            if (a && !selectedAreasList.has(a)) {
+                selectedAreasList.add(a);
+                createBadge(a, selectedAreas, selectedAreasList);
+            }
+        });
+        (qs.getAll('institutions') || []).forEach((i) => {
+            if (i && !selectedInstitutionsList.has(i)) {
+                selectedInstitutionsList.add(i);
+                createBadge(i, selectedInstitutions, selectedInstitutionsList);
+            }
+        });
+        (qs.getAll('types') || []).forEach((t) => {
+            if (t && !selectedTypesList.has(t)) {
+                selectedTypesList.add(t);
+                createBadge(t, selectedTypes, selectedTypesList);
+            }
+        });
+        (qs.getAll('quartiles') || []).forEach((q) => {
+            if (q && !selectedQuartilesList.has(q)) {
+                selectedQuartilesList.add(q);
+                createBadge(q, selectedQuartiles, selectedQuartilesList);
+            }
+        });
+
+        // Authors (repeated)
+        const authors = (qs.getAll('author') || []).filter((a) => String(a || '').trim() !== '');
+        if (authors.length > 0) {
+            // Reset current selection to avoid accumulating across reloads.
+            selectedAuthorNames = new Set();
+            window.selectedAuthorNames = selectedAuthorNames;
+
+            // Use selectAuthor to rebuild badges + remove handlers + metrics card.
+            authors.forEach((name, idx) => {
+                const isLast = idx === (authors.length - 1);
+                try {
+                    selectAuthor(name, { skipUpdate: true, skipMetrics: !isLast });
+                } catch (e) {
+                    console.warn('Could not restore author from URL:', name, e);
+                }
+            });
+
+            // Ensure the active author matches the last selected.
+            selectedAuthorName = authors[authors.length - 1] || authors[0];
+            window.selectedAuthorName = selectedAuthorName;
+        }
+
+        // Predicted areas flag
+        includePredictedAreas = qs.get('include_predicted_areas') === 'true';
+
+        // Trigger a single refresh.
+        updateFilters();
+    }
     let lastAreasData = null;
 
     function renderAreasChart(data) {
@@ -2156,6 +2264,9 @@ export function initFiltersAndSearch() {
             params.append('author', selectedAuthorName);
         }
 
+        // Persist current state so going to publication details and back keeps filters.
+        persistDashboardStateToUrl(params);
+
         // Extraer el idioma de la URL
         const currentLang = window.location.pathname.split('/')[1];
         const allAreas = currentLang === 'es' ? 'Todas las Áreas' : 'All areas';
@@ -2348,4 +2459,11 @@ export function initFiltersAndSearch() {
         }
         setupExportReportButton();
     });
+
+    // Restore state from querystring after handlers are ready.
+    try {
+        restoreDashboardStateFromUrl();
+    } catch (e) {
+        console.warn('Could not restore dashboard state from URL:', e);
+    }
 }

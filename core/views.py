@@ -49,14 +49,17 @@ def _get_selected_authors(request):
     authors = []
 
     # Prefer multi-value forms if present.
-    authors.extend([a.strip() for a in request.GET.getlist('author') if str(a).strip()])
+    author_list = [a.strip() for a in request.GET.getlist('author') if str(a).strip()]
+    authors.extend(author_list)
     authors.extend([a.strip() for a in request.GET.getlist('authors') if str(a).strip()])
     authors.extend([a.strip() for a in request.GET.getlist('authors[]') if str(a).strip()])
 
     # Backwards compatibility: some call sites use request.GET.get('author')
-    single = (request.GET.get('author') or '').strip()
-    if single:
-        authors.append(single)
+    # Avoid duplicating when the multi-value form is already present.
+    if not author_list:
+        single = (request.GET.get('author') or '').strip()
+        if single:
+            authors.append(single)
 
     # De-duplicate while preserving order.
     seen = set()
@@ -750,6 +753,7 @@ def publication_detail(request, publication_id):
         'areas': publication.thematic_areas.all(),
         'metrics': metrics, # Añadimos las métricas al contexto
         'zipped_links': zipped_links,
+        'next': request.GET.get('next') or request.META.get('HTTP_REFERER') or '',
     }
     
     return render(request, 'core/publication_detail.html', context)

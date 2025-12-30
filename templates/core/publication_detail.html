@@ -8,7 +8,7 @@
 
     <!-- Botones de navegación y citación -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-        <a href="{% url 'dashboard' %}" class="btn btn-secondary hover-lift">
+        <a href="{% if next %}{{ next }}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-secondary hover-lift">
             <i class="fas fa-arrow-left me-2"></i> {% trans "Back to Dashboard" %}
         </a>
         <div class="btn-group">
