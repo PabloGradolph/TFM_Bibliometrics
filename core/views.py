@@ -520,6 +520,10 @@ def get_filtered_data(request):
     if selected_authors:
         query = query.filter(authors__name__in=selected_authors).distinct()
 
+    # Total publications matching all currently selected criteria.
+    # Note: We compute this after applying all filters (including authors).
+    total_publications = query.values('id').distinct().count()
+
     # Diccionario para convertir nombres de meses a números
     month_map = {
         'jan': 1, 'january': 1,
@@ -673,7 +677,8 @@ def get_filtered_data(request):
         'timeline_info': timeline_info,
         'areas': areas_data,
         'institutions': institutions_data,
-        'types': types_data
+        'types': types_data,
+        'total_publications': total_publications,
     })
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')

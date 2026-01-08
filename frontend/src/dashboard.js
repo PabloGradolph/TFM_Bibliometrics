@@ -1594,6 +1594,30 @@ export function initFiltersAndSearch() {
             const response = await fetch(`/BiblioMetrics/${lang}/api/dashboard/data/?${params.toString()}`);
             const data = await response.json();
 
+            // Update filtered publications count (below filters).
+            try {
+                const countEl = document.getElementById('filteredPublicationsCount');
+                if (countEl) {
+                    const currentLang = (typeof detectLangFromPath === 'function')
+                        ? detectLangFromPath()
+                        : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                    const total = (data && typeof data.total_publications === 'number')
+                        ? data.total_publications
+                        : null;
+
+                    if (total === null) {
+                        countEl.textContent = '';
+                    } else {
+                        const label = currentLang === 'es'
+                            ? 'Publicaciones que cumplen los filtros:'
+                            : 'Publications matching filters:';
+                        countEl.textContent = `${label} ${total}`;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not update filtered publications count:', e);
+            }
+
             // Obtener datos de la red de colaboración
             const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
             networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
