@@ -171,6 +171,23 @@ export function createCollaborationNetworkController(deps) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
 
+        // Hide the "Show labels" button only for the multi-author view.
+        // In this view the graph is small and showing extra labels is not useful.
+        const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+        if (toggleLabelsBtn) {
+            toggleLabelsBtn.style.display = (data && data.is_multi_author_view) ? 'none' : '';
+        }
+
+        // Ensure the network can expand to the full height of its card when needed.
+        // This is especially important for the multi-author view.
+        const cardBody = container.closest('.card-body');
+        if (cardBody) {
+            cardBody.style.display = 'flex';
+            cardBody.style.flexDirection = 'column';
+        }
+        container.style.flex = '1 1 auto';
+        container.style.minHeight = '260px';
+
         // Always show loading while destroying/rebuilding the renderer.
         // This avoids user confusion when switching networks/views.
         const cleanupLoading = showNetworkLoading();
@@ -202,11 +219,10 @@ export function createCollaborationNetworkController(deps) {
             if (dropdown) dropdown.style.display = 'none';
             if (toggleButton) toggleButton.style.display = 'none';
 
-            // Compact height for the multi-author view: when there are few nodes/edges,
-            // a fixed 400px container leaves too much empty space.
+            // Multi-author view should fill the card height to avoid clipping.
+            // We rely on the surrounding card layout to constrain the height.
             if (data.is_multi_author_view) {
-                // Use a smaller height but keep enough room for labels.
-                container.style.height = '260px';
+                container.style.height = '100%';
             } else {
                 // Restore default height.
                 container.style.height = '400px';
