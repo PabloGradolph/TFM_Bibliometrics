@@ -94,6 +94,70 @@ export function createCollaborationNetworkController(deps) {
     }
 
     /**
+     * Shows a loading overlay on top of the network container.
+     *
+     * @param {string} [message] Optional loading message.
+     * @returns {() => void} A cleanup function to hide the overlay.
+     */
+    function showNetworkLoading(message) {
+        const container = document.getElementById('collaborationNetwork');
+        if (!container) return () => {};
+
+        // Ensure local absolute overlay positioning works.
+        const computedStyle = window.getComputedStyle(container);
+        if (computedStyle.position === 'static') {
+            container.style.position = 'relative';
+        }
+
+        const currentLang = detectLangFromPath();
+        const text = message || (currentLang === 'es' ? 'Cargando...' : 'Loading...');
+
+        const existing = document.getElementById('collaborationNetworkLoadingOverlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'collaborationNetworkLoadingOverlay';
+        overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 5000;
+            pointer-events: all;
+        `;
+        overlay.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">${text}</span>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.95rem; color: #555;">${text}</div>
+            </div>
+        `;
+
+        container.appendChild(overlay);
+
+        return () => {
+            const el = document.getElementById('collaborationNetworkLoadingOverlay');
+            if (el) el.remove();
+        };
+    }
+
+    /**
+     * Hides any active loading overlay.
+     *
+     * @returns {void}
+     */
+    function hideNetworkLoading() {
+        const el = document.getElementById('collaborationNetworkLoadingOverlay');
+        if (el) el.remove();
+    }
+
+    /**
      * Renders/updates the Sigma collaboration network.
      *
      * @param {any} data Network payload from backend.
@@ -106,6 +170,10 @@ export function createCollaborationNetworkController(deps) {
     function updateCollaborationNetwork(data, ctx) {
         const container = document.getElementById('collaborationNetwork');
         if (!container) return;
+
+        // Always show loading while destroying/rebuilding the renderer.
+        // This avoids user confusion when switching networks/views.
+        const cleanupLoading = showNetworkLoading();
 
         const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
         const currentLang = detectLangFromPath();
@@ -152,6 +220,7 @@ export function createCollaborationNetworkController(deps) {
                 data.n_clusters || null,
             );
 
+                const cleanup = showNetworkLoading(currentLang === 'es' ? 'Cargando...' : 'Loading...');
             if (window.currentCommunityView === 'keywords') {
                 toggleButton.style.display = 'none';
             } else {
@@ -191,6 +260,9 @@ export function createCollaborationNetworkController(deps) {
                         color: #666;
                         position: relative;
                     `;
+                        // In the happy path, `updateCollaborationNetwork` will also remove the overlay.
+                        // This is a fallback for errors or early exits.
+                        cleanup();
 
                     const closeButton = document.createElement('button');
                     closeButton.className = 'btn-close';
@@ -201,6 +273,8 @@ export function createCollaborationNetworkController(deps) {
                         padding: 0.25rem;
                     `;
                     closeButton.onclick = () => {
+        showNetworkLoading,
+        hideNetworkLoading,
                         messageDiv.remove();
                     };
 
@@ -370,6 +444,13 @@ export function createCollaborationNetworkController(deps) {
         });
 
         ctx.setRenderer(renderer);
+
+        // Hide loading after Sigma has had at least one paint.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                cleanupLoading();
+            });
+        });
 
         // Legend
         if (!data.is_author_view && !(isFullNetwork && window.currentCommunityView === 'modularity-7') && !(isFullNetwork && window.currentCommunityView === 'modularity-5')) {
@@ -669,26 +750,9 @@ export function createCollaborationNetworkController(deps) {
         }
 
         // Community view dropdown items (bootstrap dropdown)
-        document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
-            item.addEventListener('click', function (e) {
-                e.preventDefault();
-
-                const selectedView = this.dataset.communityView;
-                if (window.currentCommunityView === selectedView) {
-                    document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => link.classList.remove('active'));
-                    this.classList.add('active');
-                    return;
-                }
-
-                window.currentCommunityView = selectedView;
-
-                document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => link.classList.remove('active'));
-                this.classList.add('active');
-
-                updateCommunityDropdownText();
-                updateVisualizations();
-            });
-        });
+        // NOTE (2026-01): Temporarily handled in `dashboard.js` to keep the legacy
+        // full refresh flow stable. We'll remove this module duplication permanently
+        // once the dashboard refactor is finished.
 
         // Clustering apply button
         const applyBtn = document.getElementById('applyClustering');
@@ -760,35 +824,16 @@ export function createCollaborationNetworkController(deps) {
         if (toggleFullBtn) {
             toggleFullBtn.addEventListener('click', function () {
                 const button = this;
-                const container = document.getElementById('collaborationNetwork');
                 const currentLang = detectLangFromPath();
+
+                const nextFull = !getIsFullNetwork();
 
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' +
                     (currentLang === 'es' ? 'Cargando...' : 'Loading...');
 
-                const loadingOverlay = document.createElement('div');
-                loadingOverlay.style.cssText = `
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(255, 255, 255, 0.8);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 1000;
-                    border-radius: inherit;
-                `;
-                loadingOverlay.innerHTML = `
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">${currentLang === 'es' ? 'Cargando...' : 'Loading...'}</span>
-                    </div>
-                `;
-                container.appendChild(loadingOverlay);
-
-                const nextFull = !getIsFullNetwork();
+                // Global overlay to ensure it's always visible (not hidden by canvas/z-index).
+                const cleanupLoading = showNetworkLoading(currentLang === 'es' ? 'Cargando...' : 'Loading...');
                 setIsFullNetwork(nextFull);
 
                 button.textContent = currentLang === 'es'
@@ -819,35 +864,19 @@ export function createCollaborationNetworkController(deps) {
                     item.style.opacity = '1';
                 });
 
-                fetch(`/BiblioMetrics/${getLang()}/api/dashboard/collaboration-network/?${params.toString()}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.error) {
-                            console.error('Error from backend:', data.error);
-                            alert(`Ocurrió un error al generar la red: ${data.error}`);
-                            setIsFullNetwork(!nextFull);
-                            return;
-                        }
-
-                        if (!data.nodes || !data.edges) {
-                            console.error('Incomplete backend response:', data);
-                            alert('La respuesta del servidor no contiene datos de red válidos.');
-                            setIsFullNetwork(!nextFull);
-                            return;
-                        }
-
-                        window.currentNetworkData = data;
-
-                        // Delegate actual rendering to wrapper in dashboard.js
-                        // (dashboard.js still holds updateCollaborationNetwork wrapper)
-                        // Nothing else to do here.
-                    })
+                // Use the single refresh flow to fetch & render the network.
+                // This prevents duplicated fetch paths and ensures the network is actually re-rendered.
+                Promise.resolve(updateVisualizations({ skipPublicationsTable: true }))
                     .catch(error => {
-                        console.error('Error in fetch request:', error);
+                        console.error('Error updating visualizations:', error);
+                        setIsFullNetwork(!nextFull);
                     })
                     .finally(() => {
-                        loadingOverlay.remove();
+                        cleanupLoading();
                         button.disabled = false;
+                        button.textContent = currentLang === 'es'
+                            ? (nextFull ? 'Mostrar Red de IPs' : 'Mostrar Red Completa')
+                            : (nextFull ? 'Show IPs Network' : 'Show Full Network');
                     });
             });
         }

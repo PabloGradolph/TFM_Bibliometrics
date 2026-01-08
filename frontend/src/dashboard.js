@@ -262,40 +262,10 @@ export function initFiltersAndSearch() {
         });
     }
 
-    // Modificar el event listener existente para el dropdown de vista de comunidad
-    document.querySelectorAll('.dropdown-item.network-community-view').forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-
-            const selectedView = this.dataset.communityView;
-
-            if (selectedView === 'keywords') {
-                // Mostrar el modal de clustering
-                const modal = new bootstrap.Modal(document.getElementById('clusteringModal'));
-                modal.show();
-                return;
-            }
-
-            // Si ya es la vista actual, no hacer nada
-            if (window.currentCommunityView === selectedView) {
-                document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
-                    link.classList.remove('active');
-                });
-                this.classList.add('active');
-                return;
-            }
-
-            window.currentCommunityView = selectedView;
-
-            document.querySelectorAll('.dropdown-item.network-community-view').forEach(link => {
-                link.classList.remove('active');
-            });
-            this.classList.add('active');
-            
-            updateCommunityDropdownText();
-            updateVisualizations();
-        });
-    });
+    // NOTE (2026-01): Community view dropdown handler moved to
+    // `frontend/src/dashboard/collaboration_network.js` (controller).
+    // Keeping a second handler here causes duplicated requests and timing issues
+    // (including the loading overlay never becoming visible).
 
     // Almacenar las selecciones
     let selectedAreasList = new Set();
@@ -497,6 +467,87 @@ export function initFiltersAndSearch() {
         window.visualViewport.addEventListener('scroll', positionFiltersAuthorDropdown);
         window.visualViewport.addEventListener('resize', positionFiltersAuthorDropdown);
     }
+
+    // Community view dropdown handler (Leiden/Louvain/Department/Keywords)
+    // NOTE (2026-01): Kept here intentionally for stability while the dashboard is being modularized.
+    // The community dropdown listener in `collaboration_network.js` is disabled to avoid duplication.
+    document.querySelectorAll('.dropdown-item.network-community-view').forEach((item) => {
+        item.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            const selectedView = this.dataset.communityView;
+            if (!selectedView) return;
+
+            if (selectedView === 'keywords') {
+                const modalEl = document.getElementById('clusteringModal');
+                if (modalEl) {
+                    const modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                }
+                return;
+            }
+
+            if (window.currentCommunityView === selectedView) {
+                document.querySelectorAll('.dropdown-item.network-community-view').forEach((link) => {
+                    link.classList.remove('active');
+                });
+                this.classList.add('active');
+                return;
+            }
+
+            window.currentCommunityView = selectedView;
+            document.querySelectorAll('.dropdown-item.network-community-view').forEach((link) => {
+                link.classList.remove('active');
+            });
+            this.classList.add('active');
+
+            // Update dropdown text immediately.
+            updateCommunityDropdownText();
+
+            // Show the network spinner immediately (same UI as IPs/global toggle).
+            const networkContainer = document.getElementById('collaborationNetwork');
+            if (networkContainer) {
+                const computedStyle = window.getComputedStyle(networkContainer);
+                if (computedStyle.position === 'static') networkContainer.style.position = 'relative';
+
+                const currentLang = (typeof detectLangFromPath === 'function')
+                    ? detectLangFromPath()
+                    : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                const text = currentLang === 'es' ? 'Cargando...' : 'Loading...';
+
+                const existing = document.getElementById('collaborationNetworkLoadingOverlay');
+                if (existing) existing.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'collaborationNetworkLoadingOverlay';
+                overlay.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(255, 255, 255, 0.75);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 5000;
+                    pointer-events: all;
+                `;
+                overlay.innerHTML = `
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">${text}</span>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 0.95rem; color: #555;">${text}</div>
+                    </div>
+                `;
+                networkContainer.appendChild(overlay);
+            }
+
+            // Network-only change: avoid table reload/spinner.
+            updateVisualizations({ skipPublicationsTable: true });
+        });
+    });
 
     // Event listener para el autor seleccionado
     function selectAuthor(authorName, opts = {}) {
@@ -1484,7 +1535,8 @@ export function initFiltersAndSearch() {
     }
 
     // Modifica updateVisualizations para guardar los datos de áreas y renderizar según la vista activa
-    function updateVisualizations() {
+    async function updateVisualizations(options = {}) {
+        const { skipPublicationsTable = false } = options;
         const filters = {
             year_from: yearFrom.value,
             year_to: yearTo.value,
@@ -1538,25 +1590,30 @@ export function initFiltersAndSearch() {
         }
 
         // Obtener los datos filtrados
-        fetch(`/BiblioMetrics/${lang}/api/dashboard/data/?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
+        try {
+            const response = await fetch(`/BiblioMetrics/${lang}/api/dashboard/data/?${params.toString()}`);
+            const data = await response.json();
 
-                // Obtener datos de la red de colaboración
-                const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
-                networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
+            // Obtener datos de la red de colaboración
+            const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
+            networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
 
-                fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${networkParams.toString()}`)
-                .then(response => response.json())
-                .then(data => {
-                    updateCollaborationNetwork(data);
+            // Keep network scope consistent with the toggle (IPs vs full network).
+            // Without this, the refresh flow always fetches the IPs network and overwrites
+            // the full network rendered by the toggle handler.
+            networkParams.append('fullNetwork', isFullNetwork ? 'true' : 'false');
+
+            const networkPromise = fetch(`/BiblioMetrics/${lang}/api/dashboard/collaboration-network/?${networkParams.toString()}`)
+                .then(r => r.json())
+                .then(networkData => {
+                    updateCollaborationNetwork(networkData);
                 })
                 .catch(error => {
                     console.error('Error fetching collaboration network data:', error);
                 });
 
-                // Actualizar la línea de tiempo
-                updateTimeline(data.timeline, filters.view_type, data.timeline_info);
+            // Actualizar la línea de tiempo
+            updateTimeline(data.timeline, filters.view_type, data.timeline_info);
                 // Guardar y renderizar áreas según el botón activo
                 lastAreasData = data.areas;
                 // Si ninguno está activo, activa Circular por defecto
@@ -1571,14 +1628,18 @@ export function initFiltersAndSearch() {
                 } else if (pieBtn && pieBtn.classList.contains('active')) {
                     currentAreasView = 'pie';
                 }
-                renderAreasChart(data.areas);
-                
-                // Actualizar la tabla de publicaciones
-                updatePublicationsTable(1).then(() => {
-                });
+            renderAreasChart(data.areas);
+
+            // Actualizar la tabla de publicaciones
+            // NOTE: When the user toggles/switches only the network view, we avoid reloading the
+            // publications table to prevent showing the table spinner for a network-only change.
+            let tablePromise = Promise.resolve();
+            if (!skipPublicationsTable) {
+                tablePromise = updatePublicationsTable(1).catch(() => {});
+            }
 
                 // Actualizar mapa (Mundo/España) con agregación en servidor
-                try {
+            try {
                     const paramsAll = new URLSearchParams(params);
                     // Count mode for Spain map: 'occurrences' (sum of all affiliations) by default
                     paramsAll.set('count', 'occurrences');
@@ -1636,8 +1697,12 @@ export function initFiltersAndSearch() {
                     setWorldMapLoading(false);
                     setSpainMapLoading(false);
                 }
-            })
-            .catch(error => console.error('Error updating visualizations:', error));
+
+            // Ensure the caller can await the completion of network rendering triggers.
+            await Promise.allSettled([networkPromise, tablePromise]);
+        } catch (error) {
+            console.error('Error updating visualizations:', error);
+        }
     }
 
     // Estado de ordenación actual (mover fuera de la función para mantenerlo entre llamadas)
@@ -1780,460 +1845,14 @@ export function initFiltersAndSearch() {
         },
     });
 
+    // NOTE (2026-01): We intentionally keep the legacy community dropdown handler
+    // in this file for now (stability). Do not gate it off.
+
     // Helper para detección robusta del idioma.
     // NOTE: wrapper kept intentionally, so we don't have to change any call sites yet.
     function detectLangFromPath() {
         return detectLangFromPathUtil();
     }
-
-    function updateCollaborationNetwork(data) {
-        const container = document.getElementById('collaborationNetwork');
-        if (!container) return;
-    
-        const cardTitle = document.querySelector('#collaborationNetwork').closest('.card').querySelector('.card-title');
-        const currentLang = detectLangFromPath();
-        const toggleButton = document.getElementById('toggleFullNetworkBtn');
-    
-        if (data.is_author_view) {
-            const selectedAuthor = data.nodes.find(node => node.is_selected);
-            if (selectedAuthor) {
-                cardTitle.textContent = currentLang === 'es'
-                    ? `Colaboraciones de ${selectedAuthor.label}`
-                    : `Collaborations of ${selectedAuthor.label}`;
-            }
-            document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'none';
-            toggleButton.style.display = 'none';
-        } else {
-            document.querySelector('#communityViewDropdown').closest('.dropdown').style.display = 'block';
-            updateCommunityDropdownText(
-                data.model || null,
-                data.n_clusters || null
-            );
-
-            // Ocultar el botón de toggle en todas las vistas de la red completa
-            if (window.currentCommunityView === 'keywords') {
-                toggleButton.style.display = 'none';
-            } else {
-                toggleButton.style.display = 'block';
-            }
-
-            // Añadir mensaje informativo para red completa
-            if (isFullNetwork) {
-                // Eliminar mensaje anterior si existe
-                const existingMessage = document.getElementById('networkInfoMessage');
-                if (existingMessage) {
-                    existingMessage.remove();
-                }
-
-                let messageText = '';
-                if (window.currentCommunityView === 'department') {
-                    messageText = currentLang === 'es'
-                        ? 'Los investigadores han sido clasificados en departamentos utilizando un Node2VecTransformer y un MLPClassifier. Esta clasificación no es 100% precisa. No aparecen investigadores sin colaboraciones.'
-                        : 'Researchers have been classified into departments using a Node2VecTransformer and MLPClassifier. This classification is not 100% accurate. There are no researchers without collaborations.';
-                } else if (window.currentCommunityView === 'modularity-7') {
-                    messageText = currentLang === 'es'
-                        ? 'Se ha utilizado el algoritmo de detección de comunidades Lovaina sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
-                        : 'The Louvain community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
-                }  else if (window.currentCommunityView === 'modularity-5') {
-                    messageText = currentLang === 'es'
-                        ? 'Se ha utilizado el algoritmo de detección de comunidades Leiden sobre la red de coautorías completa para agrupar a los investigadores en distintas comunidades. No aparecen investigadores sin colaboraciones.'
-                        : 'The Leiden community detection algorithm has been used on the complete co-authorship network to group researchers into different communities. There are no researchers without collaborations.';
-                }
-
-                if (messageText) {
-                    const cardBody = container.closest('.card-body');
-                    const messageDiv = document.createElement('div');
-                    messageDiv.id = 'networkInfoMessage';
-                    messageDiv.style.cssText = `
-                        background-color: #f8f9fa;
-                        border-left: 4px solid #0d6efd;
-                        padding: 10px 15px;
-                        margin: 10px 0;
-                        border-radius: 4px;
-                        font-size: 0.9rem;
-                        color: #666;
-                        position: relative;
-                    `;
-
-                    const closeButton = document.createElement('button');
-                    closeButton.className = 'btn-close';
-                    closeButton.style.cssText = `
-                        position: absolute;
-                        right: 10px;
-                        top: 10px;
-                        padding: 0.25rem;
-                    `;
-                    closeButton.onclick = function() {
-                        messageDiv.remove();
-                    };
-
-                    const messageContent = document.createElement('div');
-                    messageContent.textContent = messageText;
-
-                    messageDiv.appendChild(closeButton);
-                    messageDiv.appendChild(messageContent);
-
-                    // Insertar el mensaje después del título
-                    cardBody.insertBefore(messageDiv, container);
-                }
-            } else {
-                // Eliminar mensaje si no estamos en red completa
-                const existingMessage = document.getElementById('networkInfoMessage');
-                if (existingMessage) {
-                    existingMessage.remove();
-                }
-            }
-
-            if (window.currentCommunityView === 'keywords') {
-                cardTitle.textContent = currentLang === 'es'
-                    ? 'Red de coincidencia de palabras clave (entre IPs)'
-                    : 'Keyword Coincidence Network (between IPs)';
-            } else {
-                cardTitle.textContent = currentLang === 'es'
-                    ? (isFullNetwork ? 'Red de Coautorías Interactiva Completa' : 'Red de Coautorías Interactiva entre IPs')
-                    : (isFullNetwork ? 'Complete Interactive Co-authorship Network' : 'Interactive Co-authorship Network between IPs');
-            }
-        }
-    
-        if (renderer) {
-            renderer.kill();
-            renderer = null;
-        }
-        container.innerHTML = '';
-        const graph = new Graph();
-    
-        const colorPalette = [
-            "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6",
-            "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324", "#fffac8", "#800000", "#aaffc3",
-            "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#6a3d9a", "#b15928", "#1f78b4"
-        ];
-    
-        const colorByCommunity = c => {
-            if (c === -1 || isNaN(c)) return '#A9A9A9'; // gris para outliers
-            return colorPalette[c % colorPalette.length];
-        };
-    
-        const departmentColorScale = d3.scaleOrdinal()
-            .domain(['Departamento 1', 'Departamento 2', 'Departamento 3', 'Unknown'])
-            .range(['#1f78b4', '#ff7f0e', '#2ca02c', '#999999']);
-    
-        // Posicionamiento
-        if (data.is_author_view) {
-            const centerX = container.clientWidth / 2;
-            const centerY = container.clientHeight / 2;
-            const radius = 250;
-            const authorNode = data.nodes.find(n => n.is_selected);
-            if (!authorNode) return;
-            authorNode.x = centerX;
-            authorNode.y = centerY;
-            const coauthors = data.nodes.filter(n => !n.is_selected);
-            const angleStep = (2 * Math.PI) / Math.max(coauthors.length, 1);
-            coauthors.forEach((node, i) => {
-                const angle = i * angleStep;
-                node.x = centerX + radius * Math.cos(angle);
-                node.y = centerY + radius * Math.sin(angle);
-            });
-        } else {
-            let groupByProp;
-            if (window.currentCommunityView === 'department') {
-                groupByProp = 'department';
-            } else if (window.currentCommunityView === 'modularity-5') {
-                groupByProp = 'leiden_community';
-            } else if (window.currentCommunityView === 'modularity-7') {
-                groupByProp = 'community';  // aquí es lovaina_community en back
-            } else {
-                groupByProp = 'community';
-            }
-    
-            const groups = [...new Set(data.nodes.map(n => n[groupByProp]))].filter(g => g !== undefined);
-            const unknownIndex = groups.indexOf(-1);
-            if (unknownIndex > -1) {
-                groups.splice(unknownIndex, 1);
-                groups.push(-1);
-            }
-    
-            const nodesByGroup = {};
-            groups.forEach(group => {
-                nodesByGroup[group] = data.nodes.filter(n => n[groupByProp] === group);
-            });
-    
-            const canvasCenterX = container.clientWidth / 2;
-            const canvasCenterY = container.clientHeight / 2;
-            const totalGroups = groups.length;
-            const overallRadius = Math.min(canvasCenterX, canvasCenterY) * 0.8;
-            const groupRadius = overallRadius / Math.sqrt(totalGroups) * 0.5;
-    
-            groups.forEach((group, i) => {
-                const nodes = nodesByGroup[group];
-                const angleStep = (2 * Math.PI) / Math.max(nodes.length, 5);
-                const cx = canvasCenterX + overallRadius * Math.cos((2 * Math.PI * i) / totalGroups);
-                const cy = canvasCenterY + overallRadius * Math.sin((2 * Math.PI * i) / totalGroups);
-                nodes.forEach((node, j) => {
-                    const angle = j * angleStep;
-                    node.x = cx + groupRadius * Math.cos(angle);
-                    node.y = cy + groupRadius * Math.sin(angle);
-                });
-            });
-        }
-    
-        data.nodes.forEach(node => {
-            const comm = parseInt(node.community);
-            const leiden = parseInt(node.leiden_community);
-            const dept = node.department;
-    
-            const nodeColor = data.is_author_view
-                ? (node.is_selected ? '#e6194b' : '#bbbbbb')
-                : (window.currentCommunityView === 'department'
-                    ? departmentColorScale(dept)
-                    : (window.currentCommunityView === 'modularity-5'
-                        ? colorByCommunity(leiden)
-                        : colorByCommunity(comm)));
-    
-            graph.addNode(node.id, {
-                label: node.label,
-                x: node.x,
-                y: node.y,
-                size: node.is_selected ? 18 : 12,
-                color: nodeColor,
-                highlighted: node.is_selected,
-                forceLabel: showAllLabels
-            });
-        });
-    
-        data.edges.forEach(edge => {
-            if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-                const weight = edge.weight || 1;
-                const rawSize = Math.pow(weight, 0.7);
-                const edgeSize = Math.min(4.0, Math.max(1.5, rawSize));
-                const alpha = Math.min(0.9, 0.5 + 0.05 * weight);
-                const edgeColor = `rgba(3, 138, 255, ${alpha.toFixed(2)})`;
-                graph.addEdge(edge.source, edge.target, {
-                    size: edgeSize,
-                    color: edgeColor,
-                    type: 'curve'
-                });
-            }
-        });
-    
-        renderer = new Sigma(graph, container, {
-            minCameraRatio: 0.1,
-            maxCameraRatio: 10,
-            defaultEdgeType: "curve",
-            edgeProgramClasses: { curve: EdgeCurveProgram },
-            renderLabels: true,
-            labelDensity: 1,
-            labelGridCellSize: 300,
-            labelRenderedSizeThreshold: 0,
-            defaultLabelSize: 8,
-            zIndex: true,
-            enableEdgeHovering: false,
-            enableNodeHovering: false,
-            enableCamera: false
-        });
-    
-        // Leyenda
-        if (!data.is_author_view && !(isFullNetwork && window.currentCommunityView === 'modularity-7') && !(isFullNetwork && window.currentCommunityView === 'modularity-5')) {
-            const legend = document.createElement('div');
-            legend.id = 'networkLegend';
-            Object.assign(legend.style, {
-                position: 'absolute',
-                bottom: '10px',
-                left: '10px',
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                border: '1px solid #ccc',
-                borderRadius: '8px',
-                padding: '12px',
-                fontSize: '13px',
-                zIndex: 1000,
-                boxShadow: '0px 0px 6px rgba(0,0,0,0.1)'
-            });
-        
-            const title = document.createElement('div');
-            title.style.fontWeight = 'bold';
-            title.style.marginBottom = '6px';
-        
-            if (window.currentCommunityView === 'department') {
-                title.textContent = currentLang === 'es' ? 'Departamentos' : 'Departments';
-            } else if (window.currentCommunityView === 'keywords') {
-                title.textContent = currentLang === 'es' ? 'Comunidades de Palabras Clave' : 'Keyword Communities';
-            } else if (window.currentCommunityView === 'modularity-5' || window.currentCommunityView === 'modularity-7') {
-                const k = window.currentCommunityView === 'modularity-7' ? 7 : 5;
-                title.textContent = currentLang === 'es'
-                    ? `Comunidades (${k})`
-                    : `Communities (${k})`;
-            } else {
-                // Fallback genérico
-                title.textContent = currentLang === 'es' ? 'Comunidades' : 'Communities';
-            }
-        
-            legend.appendChild(title);
-
-            const counts = document.createElement('div');
-            counts.style.marginBottom = '8px';
-            // Bilingual counts (nodes / edges) depending on currentLang
-            const nodeWord = currentLang === 'es' ? 'nodos' : 'nodes';
-            const edgeWord = currentLang === 'es' ? 'enlaces' : 'edges';
-            counts.textContent = `${data.nodes.length} ${nodeWord} / ${data.edges.length} ${edgeWord}`;
-            legend.appendChild(counts);
-        
-            if (window.currentCommunityView === 'department') {
-                const departments = [...new Set(data.nodes.map(n => n.department))];
-                departments.forEach(dept => {
-                    const item = document.createElement('div');
-                    item.style.display = 'flex';
-                    item.style.alignItems = 'center';
-                    item.style.marginBottom = '4px';
-        
-                    const colorBox = document.createElement('div');
-                    Object.assign(colorBox.style, {
-                        width: '14px',
-                        height: '14px',
-                        backgroundColor: departmentColorScale(dept),
-                        marginRight: '6px',
-                        borderRadius: '3px'
-                    });
-        
-                    const label = document.createElement('span');
-                    label.textContent = dept;
-        
-                    item.appendChild(colorBox);
-                    item.appendChild(label);
-                    legend.appendChild(item);
-                });
-            } else {
-                // === Obtener comunidades ===
-                let communities = [];
-                if (window.currentCommunityView === 'keywords') {
-                    communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
-                } else if (window.currentCommunityView === 'modularity-5') {
-                    communities = [...new Set(data.nodes.map(n => parseInt(n.leiden_community)))];
-                } else if (window.currentCommunityView === 'modularity-7') {
-                    communities = [...new Set(data.nodes.map(n => parseInt(n.community)))];
-                }
-        
-                communities.sort((a, b) => a - b);
-        
-                communities.forEach((comm, i) => {
-                    const item = document.createElement('div');
-                    item.style.display = 'flex';
-                    item.style.alignItems = 'center';
-                    item.style.marginBottom = '4px';
-        
-                    const colorBox = document.createElement('div');
-                    Object.assign(colorBox.style, {
-                        width: '14px',
-                        height: '14px',
-                        backgroundColor: colorByCommunity(comm),
-                        marginRight: '6px',
-                        borderRadius: '3px'
-                    });
-        
-                    const label = document.createElement('span');
-                    if (comm === -1 || isNaN(comm)) {
-                        label.textContent = currentLang === 'es' ? 'Atípico' : 'Outlier';
-                    } else {
-                        const num = (window.currentCommunityView === 'modularity-7') ? (i + 1) : (comm + 1);
-                        const word = currentLang === 'es' ? 'Comunidad' : 'Community';
-                        label.textContent = `${word} ${num}`;
-                    }
-        
-                    item.appendChild(colorBox);
-                    item.appendChild(label);
-                    legend.appendChild(item);
-                });
-            }
-        
-            container.appendChild(legend);
-        }
-    
-        // Interactividad
-        const overlay = document.createElement('div');
-        overlay.innerText = currentLang === 'es' ? 'Haz click para activar la red' : 'Click to activate the network';
-        Object.assign(overlay.style, {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(255,255,255,0.85)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: '#333',
-            cursor: 'pointer',
-            zIndex: 1000,
-            borderRadius: getComputedStyle(container).borderRadius
-        });
-        container.appendChild(overlay);
-        overlay.addEventListener('click', () => {
-            overlay.remove();
-            activateInteractivity();
-        });
-    
-        const tooltip = document.createElement('div');
-        Object.assign(tooltip.style, {
-            position: 'absolute',
-            backgroundColor: '#fff',
-            border: '1px solid #aaa',
-            padding: '4px 8px',
-            fontSize: '12px',
-            borderRadius: '4px',
-            pointerEvents: 'none',
-            display: 'none',
-            zIndex: 1000
-        });
-        document.body.appendChild(tooltip);
-    
-        const activateInteractivity = () => {
-            renderer.setSettings({
-                enableEdgeHovering: true,
-                enableNodeHovering: true,
-                enableCamera: true
-            });
-    
-            renderer.on('enterNode', ({ node, event }) => {
-                const label = graph.getNodeAttribute(node, 'label');
-                const neighbors = graph.neighbors(node);
-                const lines = [];
-                neighbors.forEach(neighbor => {
-                    const edge = graph.edge(node, neighbor) || graph.edge(neighbor, node);
-                    const weight = graph.getEdgeAttribute(edge, 'size') || 1;
-                    const neighborLabel = graph.getNodeAttribute(neighbor, 'label');
-                    lines.push(`• ${neighborLabel} (${weight})`);
-                });
-                tooltip.innerText = `${label}\n${currentLang === 'es' ? 'Colabora con:' : 'Collaborates with:'}\n${lines.join('\n')}`;
-                tooltip.style.left = `${event.clientX + 10}px`;
-                tooltip.style.top = `${event.clientY + 10}px`;
-                tooltip.style.display = 'block';
-    
-                const visibleNodes = new Set(neighbors);
-                visibleNodes.add(node);
-                graph.forEachNode(n => {
-                    graph.setNodeAttribute(n, 'hidden', !visibleNodes.has(n));
-                    graph.setNodeAttribute(n, 'forceLabel', showAllLabels || visibleNodes.has(n));
-                });
-                graph.forEachEdge(e => {
-                    const src = graph.source(e);
-                    const tgt = graph.target(e);
-                    const visible = visibleNodes.has(src) && visibleNodes.has(tgt);
-                    graph.setEdgeAttribute(e, 'hidden', !visible);
-                });
-            });
-    
-            renderer.on('leaveNode', () => {
-                tooltip.style.display = 'none';
-                graph.forEachNode(n => {
-                    graph.removeNodeAttribute(n, 'hidden');
-                    graph.setNodeAttribute(n, 'forceLabel', showAllLabels);
-                });
-                graph.forEachEdge(e => graph.removeEdgeAttribute(e, 'hidden'));
-            });
-        };
-    
-        renderer.getCamera().animatedReset({ duration: 500 });
-    }        
     
     // (Collaboration network handlers and dropdown text moved to ./dashboard/collaboration_network.js)
     
