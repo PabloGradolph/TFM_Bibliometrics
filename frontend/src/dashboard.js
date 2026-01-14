@@ -423,7 +423,27 @@ export function initFiltersAndSearch() {
             return;
         }
 
-        fetch(`/BiblioMetrics/${lang}/api/search/authors/?q=${encodeURIComponent(query)}`)
+        // Pass current dashboard filters so author counts reflect the filtered subset
+        // (same behavior as other filter dropdowns).
+        const params = new URLSearchParams();
+        params.set('q', query);
+        if (yearFrom && yearFrom.value) params.append('year_from', yearFrom.value);
+        if (yearTo && yearTo.value) params.append('year_to', yearTo.value);
+        if (citationsFrom && citationsFrom.value) params.append('citations_from', citationsFrom.value);
+        if (citationsTo && citationsTo.value) params.append('citations_to', citationsTo.value);
+        selectedAreasList.forEach((a) => params.append('areas', a));
+        selectedInstitutionsList.forEach((i) => params.append('institutions', i));
+        selectedTypesList.forEach((t) => params.append('types', t));
+        selectedQuartilesList.forEach((q) => params.append('quartiles', q));
+
+        // Preserve already-selected authors to keep query semantics consistent with the dashboard.
+        if (selectedAuthorNames && selectedAuthorNames.size > 1) {
+            Array.from(selectedAuthorNames).forEach((name) => params.append('author', name));
+        } else if (selectedAuthorName) {
+            params.append('author', selectedAuthorName);
+        }
+
+        fetch(`/BiblioMetrics/${lang}/api/search/authors/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 const suggestionsList = filtersAuthorSuggestions.querySelector('.list-group');
@@ -1438,6 +1458,49 @@ export function initFiltersAndSearch() {
         updateFilters();
     }
 
+    /**
+     * Reset filter UI/state without triggering a data refresh.
+     *
+     * This is used by the "Clear filters" button, where we want to navigate to the
+     * canonical dashboard URL (no querystring). Triggering updateFilters() here would
+     * briefly re-persist stale state to the URL.
+     *
+     * @returns {void}
+     */
+    function resetFiltersUiOnly() {
+        yearFrom.value = '';
+        yearTo.value = '';
+        if (citationsFrom) citationsFrom.value = '';
+        if (citationsTo) citationsTo.value = '';
+
+        selectedAreasList.clear();
+        selectedInstitutionsList.clear();
+        selectedTypesList.clear();
+        selectedQuartilesList.clear();
+
+        selectedAreas.innerHTML = '';
+        selectedInstitutions.innerHTML = '';
+        selectedTypes.innerHTML = '';
+        selectedQuartiles.innerHTML = '';
+
+        if (quartileFilter) quartileFilter.value = '';
+    }
+
+    /**
+     * Get the canonical dashboard URL (no querystring).
+     *
+     * We keep a trailing slash because Django URLs typically redirect without it,
+     * and certain client-side logic expects the canonical form.
+     *
+     * @returns {string}
+     */
+    function getCanonicalDashboardUrl() {
+        // Example path: /es/dashboard/ or /en/dashboard/
+        const path = window.location.pathname;
+        const cleaned = path.endsWith('/') ? path : `${path}/`;
+        return `${window.location.origin}${cleaned}`;
+    }
+
     // --- ÁREAS TEMÁTICAS: LÓGICA DE BOTONES Y RENDER ---
     let currentAreasView = 'pie';
     /**
@@ -1858,15 +1921,31 @@ export function initFiltersAndSearch() {
 
     // Event listener para limpiar filtros
     clearFiltersBtn.addEventListener('click', () => {
-        yearFrom.value = '';
-        yearTo.value = '';
-        selectedAreasList.clear();
-        selectedInstitutionsList.clear();
-        selectedTypesList.clear();
-        selectedAreas.innerHTML = '';
-        selectedInstitutions.innerHTML = '';
-        selectedTypes.innerHTML = '';
-        updateFilters();
+        // Reset UI/state (including new filters) without triggering URL persistence.
+        resetFiltersUiOnly();
+
+        // Reset authors (single + multi) and clear UI.
+        selectedAuthorName = null;
+        window.selectedAuthorName = null;
+        selectedAuthorNames = new Set();
+        window.selectedAuthorNames = selectedAuthorNames;
+        if (filtersSelectedAuthor) filtersSelectedAuthor.innerHTML = '';
+
+        // Hide author-metrics card + selector if present.
+        try {
+            const metricsCard = document.getElementById('authorMetricsCard');
+            if (metricsCard) metricsCard.style.display = 'none';
+            const authorSelectContainer = document.getElementById('authorSelectContainer');
+            if (authorSelectContainer) authorSelectContainer.style.display = 'none';
+        } catch (e) {
+            console.warn('Could not reset author metrics UI:', e);
+        }
+
+        // IMPORTANT: we must end up in the clean dashboard URL (no querystring).
+        // Using replaceState alone is not enough because updateFilters() will immediately
+        // re-persist the (possibly stale) state. We force navigation to the base path.
+        const baseDashboardUrl = getCanonicalDashboardUrl();
+        window.location.assign(baseDashboardUrl);
     });
 
     let renderer = null;

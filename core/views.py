@@ -683,20 +683,70 @@ def get_filtered_data(request):
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def get_author_suggestions(request):
-    query = request.GET.get('q', '').strip()
-    if not query:
+    """Return author autocomplete suggestions.
+
+    The returned `count` reflects the number of publications that would remain
+    after applying current dashboard filters (year/type/quartile/citations/etc.)
+    plus selecting the suggested author.
+    """
+    q = request.GET.get('q', '').strip()
+    if not q:
         return JsonResponse({'suggestions': []})
 
-    # Buscar autores que coincidan con la consulta
-    authors = Author.objects.filter(
-        name__icontains=query
-    ).values('name').annotate(
-        count=Count('publications', distinct=True)
-    ).order_by('-count', 'name')[:10]  # Limitar a 10 sugerencias
+    # Read the same filters used by the dashboard so counts match the UI contract.
+    year_from = request.GET.get('year_from')
+    year_to = request.GET.get('year_to')
+    citations_from = request.GET.get('citations_from')
+    citations_to = request.GET.get('citations_to')
+    areas = request.GET.getlist('areas')
+    institutions = request.GET.getlist('institutions')
+    types = request.GET.getlist('types')
+    quartiles = request.GET.getlist('quartiles')
+    metric_source = 'wos'
+    selected_authors = _get_selected_authors(request)
 
-    return JsonResponse({
-        'suggestions': list(authors)
-    })
+    base_pubs = Publication.objects.all()
+    if year_from:
+        base_pubs = base_pubs.filter(year__gte=year_from)
+    if year_to:
+        base_pubs = base_pubs.filter(year__lte=year_to)
+    if citations_from is not None and citations_from != '':
+        try:
+            base_pubs = base_pubs.filter(citations__gte=int(citations_from))
+        except ValueError:
+            pass
+    if citations_to is not None and citations_to != '':
+        try:
+            base_pubs = base_pubs.filter(citations__lte=int(citations_to))
+        except ValueError:
+            pass
+    if areas:
+        base_pubs = base_pubs.filter(thematic_areas__name__in=areas)
+    if institutions:
+        base_pubs = base_pubs.filter(institutions__name__in=institutions)
+    if types:
+        base_pubs = _apply_type_filter(base_pubs, types)
+    if quartiles:
+        base_pubs = _apply_quartile_filter(base_pubs, quartiles, metric_source)
+    if selected_authors:
+        base_pubs = base_pubs.filter(authors__name__in=selected_authors).distinct()
+
+    # Suggest author names that match q.
+    candidate_names = list(
+        Author.objects.filter(name__icontains=q)
+        .values_list('name', flat=True)
+        .distinct()
+        .order_by('name')[:50]
+    )
+
+    suggestions = []
+    for name in candidate_names:
+        # Count how many publications would remain if the user selects this author.
+        count = base_pubs.filter(authors__name=name).values('id').distinct().count()
+        suggestions.append({'name': name, 'count': count})
+
+    suggestions.sort(key=lambda x: (-x['count'], x['name']))
+    return JsonResponse({'suggestions': suggestions[:10]})
 
 @login_required(login_url='/BiblioMetrics/accounts/login/')
 def search_publications(request):
