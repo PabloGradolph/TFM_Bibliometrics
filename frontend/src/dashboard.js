@@ -1305,7 +1305,11 @@ export function initFiltersAndSearch() {
                 data.publication_types.forEach(type => {
                     const option = document.createElement('option');
                     option.value = type.publication_type;
-                    option.textContent = `${type.publication_type} (${type.count})`;
+                    const currentLang = (typeof detectLangFromPath === 'function')
+                        ? detectLangFromPath()
+                        : (window.location.pathname.includes('/es/') ? 'es' : 'en');
+                    const label = getPublicationTypeLabel(type.publication_type, currentLang);
+                    option.textContent = `${label} (${type.count})`;
                     typeFilter.appendChild(option);
                 });
 
@@ -1374,6 +1378,44 @@ export function initFiltersAndSearch() {
         if (set === selectedInstitutionsList) window.selectedInstitutionsList = selectedInstitutionsList;
         if (set === selectedTypesList) window.selectedTypesList = selectedTypesList;
         if (set === selectedQuartilesList) window.selectedQuartilesList = selectedQuartilesList;
+    }
+
+    /**
+     * Return the UI label for a canonical publication type.
+     *
+     * Notes:
+     * - The backend stores and filters on canonical Spanish keys (e.g., "artículo").
+     * - We keep the option value untouched (so filters keep working), and only translate
+     *   the label shown to the user when the UI is in English.
+     *
+     * @param {string} typeKey
+     * @param {string} currentLang - 'es' | 'en'
+     * @returns {string}
+     */
+    function getPublicationTypeLabel(typeKey, currentLang) {
+        const key = String(typeKey || '').trim();
+        if (!key) return '';
+        if (currentLang !== 'en') return key;
+
+        const dict = {
+            'artículo': 'Article',
+            'artículo de revisión': 'Review article',
+            'bibliografía': 'Bibliography',
+            'capítulo de libro': 'Book chapter',
+            'carta': 'Letter',
+            'comunicación de congreso': 'Conference paper',
+            'editorial': 'Editorial',
+            'libro': 'Book',
+            'nota': 'Note',
+            'reseña': 'Review',
+            'reseña de libro': 'Book review',
+            'otro': 'Other',
+            'conferencias y seminarios': 'Conferences and seminars',
+            'publicación retractada': 'Retracted publication',
+            'corrigenda': 'Corrigenda',
+        };
+
+        return dict[key] || key;
     }
 
     // Función para limpiar todos los filtros
@@ -1948,7 +1990,8 @@ export function initFiltersAndSearch() {
                 data.publication_types.forEach(type => {
                     const option = document.createElement('option');
                     option.value = type.publication_type;
-                    option.textContent = `${type.publication_type} (${type.count})`;
+                    const label = getPublicationTypeLabel(type.publication_type, currentLang);
+                    option.textContent = `${label} (${type.count})`;
                     typeFilter.appendChild(option);
                 });
 
