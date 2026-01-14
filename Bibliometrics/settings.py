@@ -204,6 +204,16 @@ CORS_ALLOW_ALL_ORIGINS = True  # En desarrollo, en producción deberías especif
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
+# -----------------------------------------------------------------------------
+# Upload limits
+# -----------------------------------------------------------------------------
+# PDF export can include base64-encoded screenshots (charts + maps). Those can
+# exceed Django's default request body limit. We keep this configurable via env
+# var to avoid surprises in production.
+#
+# Default: 25MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('DATA_UPLOAD_MAX_MEMORY_SIZE', 25 * 1024 * 1024))
+
 password = os.getenv("MY_PASSWORD")
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

@@ -536,6 +536,182 @@ function ensureLeafletImage() {
   });
 }
 
+/**
+ * Capture the currently visible collaboration map card as a PNG data URL.
+ *
+ * This reuses the same capture logic used by the "Export image" button, but
+ * returns the image as base64 so it can be sent to the backend for PDF reports.
+ *
+ * @returns {Promise<string|null>} Base64 PNG data URL or null if capture fails.
+ */
+async function exportWorldMapImageBase64() {
+    try {
+        // If Spain view is active, delegate to Spain module.
+        if (typeof window !== 'undefined' && window.currentMapView === 'spain' && typeof window.__exportSpainMapImageBase64 === 'function') {
+            return await window.__exportSpainMapImageBase64();
+        }
+
+        const exportBtn = typeof document !== 'undefined' ? document.getElementById('exportCollabMap') : null;
+        const cardBody = exportBtn ? exportBtn.closest('.card-body') : null;
+        if (!cardBody) return null;
+        const mapContainer = cardBody.querySelector('#worldmap-container');
+        if (!mapContainer) return null;
+
+        await ensureLeafletImage();
+        const mapBitmapCanvas = await new Promise((resolve, reject) => {
+            window.leafletImage(map, (err, canvas) => {
+                if (err || !canvas) return reject(err || new Error('leaflet-image failed'));
+                resolve(canvas);
+            });
+        });
+
+        // Detect blank canvas edge-case
+        const isBlank = (() => {
+            try {
+                const ctx = mapBitmapCanvas.getContext('2d');
+                const sampleW = Math.min(20, mapBitmapCanvas.width);
+                const sampleH = Math.min(20, mapBitmapCanvas.height);
+                const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] !== 0) return false;
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
+        })();
+
+        // Match current displayed size
+        const mapRect = mapContainer.getBoundingClientRect();
+        const cssW = Math.max(1, Math.round(mapRect.width));
+        const cssH = Math.max(1, Math.round(mapRect.height));
+
+        const scaledMap = document.createElement('canvas');
+        scaledMap.width = cssW;
+        scaledMap.height = cssH;
+        scaledMap.getContext('2d').drawImage(
+            mapBitmapCanvas,
+            0,
+            0,
+            mapBitmapCanvas.width,
+            mapBitmapCanvas.height,
+            0,
+            0,
+            cssW,
+            cssH
+        );
+
+        // Clone card off-screen
+        const cardRect = cardBody.getBoundingClientRect();
+        const clone = cardBody.cloneNode(true);
+        Object.assign(clone.style, {
+            position: 'absolute',
+            top: '-10000px',
+            left: '-10000px',
+            pointerEvents: 'none',
+            width: cardRect.width + 'px',
+            height: cardRect.height + 'px',
+            background: '#ffffff',
+            display: 'block'
+        });
+        document.body.appendChild(clone);
+
+        // Remove unwanted controls ONLY in the clone
+        ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom', '[data-spain-level]']
+            .forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
+
+        const cloneMap = clone.querySelector('#worldmap-container');
+        if (!cloneMap) throw new Error('Clone map container not found');
+        cloneMap.style.width = cssW + 'px';
+        cloneMap.style.height = cssH + 'px';
+        cloneMap.style.position = 'relative';
+        cloneMap.style.overflow = 'hidden';
+
+        const cloneLeafletContainer = cloneMap.querySelector('.leaflet-container') || cloneMap;
+        cloneLeafletContainer.style.background = 'transparent';
+        cloneLeafletContainer.style.border = 'none';
+        cloneMap.querySelectorAll('.leaflet-pane').forEach(p => {
+            p.style.display = 'none';
+        });
+
+        const bmp = document.createElement('img');
+        bmp.src = scaledMap.toDataURL('image/png');
+        Object.assign(bmp.style, {
+            position: 'absolute',
+            left: '0px',
+            top: '0px',
+            width: cssW + 'px',
+            height: cssH + 'px',
+            zIndex: '0',
+            display: 'block'
+        });
+        cloneLeafletContainer.insertBefore(bmp, cloneLeafletContainer.firstChild);
+
+        cloneMap.querySelectorAll('.legend, .legend-container, .top10, .top10-container')
+            .forEach(el => {
+                if (!el) return;
+                if (!el.style.position) el.style.position = 'absolute';
+                el.style.zIndex = '10';
+                el.style.background = el.style.background || 'transparent';
+            });
+
+        let baseCanvas;
+        if (!isBlank) {
+            const { default: html2canvas } = await import('html2canvas');
+            const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            baseCanvas = await html2canvas(clone, {
+                backgroundColor: '#ffffff',
+                scale,
+                useCORS: true,
+                logging: false,
+                removeContainer: true,
+                imageTimeout: 0
+            });
+        } else {
+            const toHide = [
+                '#exportCollabMap',
+                '[data-map-view="world"]',
+                '[data-map-view="spain"]',
+                '.leaflet-control-zoom'
+            ].map(sel => Array.from(cardBody.querySelectorAll(sel))).flat();
+            toHide.forEach(el => { el.__prevVisibility = el.style.visibility; el.style.visibility = 'hidden'; });
+            void cardBody.offsetHeight;
+            const { default: html2canvas } = await import('html2canvas');
+            const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+            baseCanvas = await html2canvas(cardBody, {
+                backgroundColor: '#ffffff',
+                scale,
+                useCORS: true,
+                logging: false,
+                removeContainer: true,
+                imageTimeout: 0
+            });
+            toHide.forEach(el => { el.style.visibility = el.__prevVisibility || ''; delete el.__prevVisibility; });
+            if (clone.parentNode) document.body.removeChild(clone);
+        }
+
+        const marginLeft = 60;
+        const marginTop = 50;
+        const paddedCanvas = document.createElement('canvas');
+        paddedCanvas.width = baseCanvas.width + marginLeft;
+        paddedCanvas.height = baseCanvas.height + marginTop;
+        const pctx = paddedCanvas.getContext('2d');
+        pctx.fillStyle = '#ffffff';
+        pctx.fillRect(0, 0, paddedCanvas.width, paddedCanvas.height);
+        pctx.drawImage(baseCanvas, marginLeft, marginTop);
+
+        if (clone.parentNode) document.body.removeChild(clone);
+        return paddedCanvas.toDataURL('image/png');
+    } catch (e) {
+        return null;
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.__exportWorldMapImageBase64 = exportWorldMapImageBase64;
+}
+
 if (typeof document !== 'undefined') {
   const exportBtn = document.getElementById('exportCollabMap');
   if (exportBtn && !exportBtn.dataset.boundExport) {

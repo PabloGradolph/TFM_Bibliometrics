@@ -1634,6 +1634,9 @@ def export_report(request):
         'timeline': data.get('timeline_img'),
         'pie': data.get('pie_img'),
         'bar': data.get('bar_img'),
+        # Optional collaboration maps (base64 PNG) captured from the UI.
+        'collab_map_world': data.get('collab_map_world_img'),
+        'collab_map_spain': data.get('collab_map_spain_img'),
     }
     # Ensure the PDF is generated using the active UI language.
     # - Preferred: explicit POST param (allows future callers).

@@ -58,3 +58,26 @@ class ExportReportFormatsTest(TestCase):
 		resp = self.client.post(self.url, {'format': 'pdf'})
 		self.assertEqual(resp.status_code, 200)
 		self.assertIn('application/pdf', resp['Content-Type'])
+
+	def test_pdf_with_collaboration_maps(self):
+		"""PDF export should accept optional collaboration map images.
+
+		We only validate the request succeeds. Rendering correctness is covered
+		by manual UI testing because the images are captured client-side.
+		"""
+		# 1x1 transparent PNG
+		tiny_png = (
+			'data:image/png;base64,'
+			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6X9qWcAAAAASUVORK5CYII='
+		)
+		resp = self.client.post(
+			self.url,
+			{
+				'format': 'pdf',
+				'lang': 'en',
+				'collab_map_world_img': tiny_png,
+				'collab_map_spain_img': tiny_png,
+			},
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn('application/pdf', resp['Content-Type'])

@@ -573,9 +573,120 @@ async function exportSpainMapImage(exportBtnEl) {
   }
 }
 
+/**
+ * Capture the Spain collaboration map card as a PNG data URL.
+ *
+ * This mirrors the existing download exporter but returns base64 so it can be
+ * embedded into PDF reports.
+ *
+ * @returns {Promise<string|null>} Base64 PNG data URL or null on failure.
+ */
+async function exportSpainMapImageBase64() {
+  try {
+    if (!registry.map || !registry.containerEl) return null;
+    const exportBtn = typeof document !== 'undefined' ? document.getElementById('exportCollabMap') : null;
+    const cardBody = exportBtn ? exportBtn.closest('.card-body') : null;
+    if (!cardBody) return null;
+    const mapContainer = registry.containerEl;
+
+    await ensureLeafletImage();
+    try { registry.map.invalidateSize(); } catch (e) { /* noop */ }
+    await new Promise(r => setTimeout(r, 30));
+
+    const mapBitmapCanvas = await new Promise((resolve, reject) => {
+      window.leafletImage(registry.map, (err, canvas) => {
+        if (err || !canvas) return reject(err || new Error('leaflet-image failed'));
+        resolve(canvas);
+      });
+    });
+
+    const isBlank = (() => {
+      try {
+        const ctx = mapBitmapCanvas.getContext('2d');
+        const sampleW = Math.min(20, mapBitmapCanvas.width);
+        const sampleH = Math.min(20, mapBitmapCanvas.height);
+        const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+        for (let i = 3; i < data.length; i += 4) { if (data[i] !== 0) return false; }
+        return true;
+      } catch (e) { return false; }
+    })();
+
+    const mapRect = mapContainer.getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(mapRect.width));
+    const cssH = Math.max(1, Math.round(mapRect.height));
+    const scaledMap = document.createElement('canvas');
+    scaledMap.width = cssW; scaledMap.height = cssH;
+    scaledMap.getContext('2d').drawImage(mapBitmapCanvas, 0, 0, mapBitmapCanvas.width, mapBitmapCanvas.height, 0, 0, cssW, cssH);
+
+    const cardRect = cardBody.getBoundingClientRect();
+    const clone = cardBody.cloneNode(true);
+    Object.assign(clone.style, {
+      position: 'absolute', top: '-10000px', left: '-10000px', pointerEvents: 'none',
+      width: cardRect.width + 'px', height: cardRect.height + 'px', background: '#ffffff', display: 'block'
+    });
+    document.body.appendChild(clone);
+
+    ['#exportCollabMap', '[data-map-view="world"]', '[data-map-view="spain"]', '.leaflet-control-zoom', '[data-spain-level]']
+      .forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
+
+    const overlayClone = clone.querySelector('#' + registry.containerEl.id);
+    if (!overlayClone) throw new Error('Clone overlay container not found');
+    overlayClone.style.width = cssW + 'px';
+    overlayClone.style.height = cssH + 'px';
+    overlayClone.style.position = 'relative';
+    overlayClone.style.overflow = 'hidden';
+    const cloneLeafletContainer = overlayClone.querySelector('.leaflet-container') || overlayClone;
+    cloneLeafletContainer.style.background = 'transparent';
+    cloneLeafletContainer.style.border = 'none';
+    overlayClone.querySelectorAll('.leaflet-pane').forEach(p => { p.style.display = 'none'; });
+    const bmp = document.createElement('img');
+    bmp.src = scaledMap.toDataURL('image/png');
+    Object.assign(bmp.style, { position: 'absolute', left: '0px', top: '0px', width: cssW + 'px', height: cssH + 'px', zIndex: '0', display: 'block' });
+    cloneLeafletContainer.insertBefore(bmp, cloneLeafletContainer.firstChild);
+
+    let baseCanvas;
+    if (!isBlank) {
+      const { default: html2canvas } = await import('html2canvas');
+      const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      baseCanvas = await html2canvas(clone, { backgroundColor: '#ffffff', scale, useCORS: true, logging: false, removeContainer: true, imageTimeout: 0 });
+    } else {
+      const toHide = [
+        '#exportCollabMap',
+        '[data-map-view="world"]',
+        '[data-map-view="spain"]',
+        '.leaflet-control-zoom',
+        '[data-spain-level]'
+      ].map(sel => Array.from(cardBody.querySelectorAll(sel))).flat();
+      toHide.forEach(el => { el.__prevVisibility = el.style.visibility; el.style.visibility = 'hidden'; });
+      const { default: html2canvas } = await import('html2canvas');
+      const scale = Math.min(4, (window.devicePixelRatio || 1) * 2);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      baseCanvas = await html2canvas(cardBody, { backgroundColor: '#ffffff', scale, useCORS: true, logging: false, removeContainer: true, imageTimeout: 0 });
+      toHide.forEach(el => { el.style.visibility = el.__prevVisibility || ''; delete el.__prevVisibility; });
+      if (clone.parentNode) document.body.removeChild(clone);
+    }
+
+    const marginLeft = 60; const marginTop = 50;
+    const paddedCanvas = document.createElement('canvas');
+    paddedCanvas.width = baseCanvas.width + marginLeft;
+    paddedCanvas.height = baseCanvas.height + marginTop;
+    const pctx = paddedCanvas.getContext('2d');
+    pctx.fillStyle = '#ffffff';
+    pctx.fillRect(0, 0, paddedCanvas.width, paddedCanvas.height);
+    pctx.drawImage(baseCanvas, marginLeft, marginTop);
+
+    if (clone.parentNode) document.body.removeChild(clone);
+    return paddedCanvas.toDataURL('image/png');
+  } catch (err) {
+    return null;
+  }
+}
+
 // Expose exporter for worldmap handler to delegate when Spain view is active
 if (typeof window !== 'undefined') {
   window.__exportSpainMapImage = exportSpainMapImage;
+  window.__exportSpainMapImageBase64 = exportSpainMapImageBase64;
 }
 
 export function setSpainMapCounts({ ccaa = {}, provinces = {} }) {

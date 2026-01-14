@@ -318,6 +318,49 @@ export function setupExportReportButton() {
         img.src = url;
     }
 
+    /**
+     * Compress a base64 image data URL by resizing and converting to JPEG.
+     * This keeps the PDF export request under Django's upload size limits.
+     *
+     * @param {string|null} dataUrl
+     * @param {{maxWidth?: number, maxHeight?: number, quality?: number}} opts
+     * @returns {Promise<string|null>}
+     */
+    async function compressImageDataUrl(dataUrl, opts = {}) {
+        try {
+            if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) return null;
+            const { maxWidth = 1400, maxHeight = 900, quality = 0.75 } = opts;
+            const img = new window.Image();
+            img.crossOrigin = 'anonymous';
+            const loaded = new Promise((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = (e) => reject(e);
+            });
+            img.src = dataUrl;
+            await loaded;
+
+            const w = img.naturalWidth || img.width;
+            const h = img.naturalHeight || img.height;
+            if (!w || !h) return dataUrl;
+
+            const ratio = Math.min(1, maxWidth / w, maxHeight / h);
+            const outW = Math.max(1, Math.round(w * ratio));
+            const outH = Math.max(1, Math.round(h * ratio));
+            const canvas = document.createElement('canvas');
+            canvas.width = outW;
+            canvas.height = outH;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, outW, outH);
+            ctx.drawImage(img, 0, 0, outW, outH);
+
+            // JPEG shrinks payload dramatically vs PNG for map screenshots.
+            return canvas.toDataURL('image/jpeg', quality);
+        } catch (e) {
+            return dataUrl;
+        }
+    }
+
     // Evento para el botón de continuar
     modal.addEventListener('click', function(e) {
         if (e.target && e.target.id === 'confirmExportReport') {
@@ -512,9 +555,9 @@ export function setupExportReportButton() {
 
             // Convertir SVGs a PNG base64 (async)
             let imagesReady = 0;
-            const images = { timeline: null, pie: null, bar: null };
+            const images = { timeline: null, pie: null, bar: null, collab_map_world: null, collab_map_spain: null };
             const checkAndSend = () => {
-                if (imagesReady === 3) {
+                if (imagesReady === 4) {
                     // LOG para depuración
                     console.log('Imágenes base64 generadas:', images);
                     // Enviar al backend
@@ -538,6 +581,8 @@ export function setupExportReportButton() {
                     if (images.timeline) formData.append('timeline_img', images.timeline);
                     if (images.pie) formData.append('pie_img', images.pie);
                     if (images.bar) formData.append('bar_img', images.bar);
+                    if (images.collab_map_world) formData.append('collab_map_world_img', images.collab_map_world);
+                    if (images.collab_map_spain) formData.append('collab_map_spain_img', images.collab_map_spain);
 
                     // Añadir el nombre del HTML de la red de palabras clave si corresponde
                     if (
@@ -616,6 +661,29 @@ export function setupExportReportButton() {
                 imagesReady++;
                 checkAndSend();
             }
+
+            // Collaboration map (world/spain depending on active map view)
+            (async () => {
+                try {
+                    const currentMapView = (typeof window !== 'undefined' && window.currentMapView) ? window.currentMapView : 'world';
+                    if (currentMapView === 'spain') {
+                        if (typeof window !== 'undefined' && typeof window.__exportSpainMapImageBase64 === 'function') {
+                            const raw = await window.__exportSpainMapImageBase64();
+                            images.collab_map_spain = await compressImageDataUrl(raw, { maxWidth: 1300, maxHeight: 850, quality: 0.72 });
+                        }
+                    } else {
+                        if (typeof window !== 'undefined' && typeof window.__exportWorldMapImageBase64 === 'function') {
+                            const raw = await window.__exportWorldMapImageBase64();
+                            images.collab_map_world = await compressImageDataUrl(raw, { maxWidth: 1300, maxHeight: 850, quality: 0.72 });
+                        }
+                    }
+                } catch (e) {
+                    // ignore capture errors; report can still be generated
+                } finally {
+                    imagesReady++;
+                    checkAndSend();
+                }
+            })();
         }
     });
 } 

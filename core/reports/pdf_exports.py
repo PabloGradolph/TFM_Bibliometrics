@@ -129,6 +129,8 @@ def _build_pdf_report_impl(
             "leiden": "Leiden",
             "communities": "comunidades",
             "keywords_network": "Red de coautorías por palabras clave",
+            "international_collab_map": "Mapa de colaboración internacional",
+            "national_collab_map": "Mapa de colaboración nacional (España)",
             "selected_author_metrics": "Métricas del autor seleccionado",
             "orcid": "ORCID",
             "total_publications": "Total publicaciones",
@@ -177,6 +179,8 @@ def _build_pdf_report_impl(
             "leiden": "Leiden",
             "communities": "communities",
             "keywords_network": "Co-authorship network by keywords",
+            "international_collab_map": "International collaboration map",
+            "national_collab_map": "National collaboration map (Spain)",
             "selected_author_metrics": "Selected author metrics",
             "orcid": "ORCID",
             "total_publications": "Total publications",
@@ -205,6 +209,8 @@ def _build_pdf_report_impl(
     timeline_img = images.get("timeline")
     pie_img = images.get("pie")
     bar_img = images.get("bar")
+    collab_map_world_img = images.get("collab_map_world")
+    collab_map_spain_img = images.get("collab_map_spain")
     author_name = filters.get("author")
 
     buffer = BytesIO()
@@ -337,6 +343,14 @@ def _build_pdf_report_impl(
         logger.warning('Area distribution images missing for PDF export.')
         elements.append(Paragraph(f"<b>{t('charts_missing')}</b>", styles['Heading4']))
         elements.append(Spacer(1, 0.7 * cm))
+
+    # Collaboration maps (world + Spain) captured from the dashboard.
+    # These are optional; if capture fails or the map is not visible, we simply
+    # omit the section.
+    if collab_map_world_img:
+        add_image_section(t('international_collab_map'), collab_map_world_img)
+    if collab_map_spain_img:
+        add_image_section(t('national_collab_map'), collab_map_spain_img)
 
     elements.append(Spacer(1, 0.7 * cm))
     section_title = t('view_networks')
