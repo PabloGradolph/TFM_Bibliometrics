@@ -384,6 +384,9 @@ export function setupExportReportButton() {
                 if (shouldSendOrdering && sortOrder) formData.append('sort_order', sortOrder);
                 if (shouldIncludeNetworkScope) formData.append('network_scope', networkScope);
                 formData.append('format', fmt);
+                // Ensure backend generates language-dependent formats (PDF) in the current UI language.
+                // It's harmless for language-agnostic formats.
+                formData.append('lang', lang);
 
                 const apiExportUrl = `/BiblioMetrics/${lang}/api/export/report/`;
                 fetch(apiExportUrl, { method: 'POST', body: formData })
@@ -529,6 +532,8 @@ export function setupExportReportButton() {
                     if (sortField) formData.append('sort_field', sortField);
                     if (sortOrder) formData.append('sort_order', sortOrder);
                     formData.append('format', 'pdf');
+                    // Explicitly send current UI language for i18n in the PDF.
+                    formData.append('lang', lang);
                     formData.append('areas_view', areas_view);
                     if (images.timeline) formData.append('timeline_img', images.timeline);
                     if (images.pie) formData.append('pie_img', images.pie);

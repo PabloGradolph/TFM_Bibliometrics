@@ -1635,12 +1635,19 @@ def export_report(request):
         'pie': data.get('pie_img'),
         'bar': data.get('bar_img'),
     }
+    # Ensure the PDF is generated using the active UI language.
+    # - Preferred: explicit POST param (allows future callers).
+    # - Fallback: the current request language (LocaleMiddleware / i18n_patterns).
+    from django.utils.translation import get_language
+
+    requested_lang = (data.get('lang') or '').strip() or (get_language() or 'es')
     pdf_content = build_pdf_report(
         request=request,
         pubs_queryset=pubs_query,
         filters=filters_context,
         images=images_context,
         network_html=data.get('network_html'),
+        lang=requested_lang,
         logger=logger,
     )
 
