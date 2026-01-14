@@ -574,3 +574,21 @@ msgstr "Afilicaciones Extranjeras"
 
 msgid "Cite this publication"
 msgstr "Cita esta publicación"
+
+msgid "Use cases"
+msgstr "Casos de uso"
+
+msgid "Short videos showing practical use cases of the platform."
+msgstr "Vídeos cortos que muestran casos de uso prácticos de la herramienta."
+
+msgid "Use case 1"
+msgstr "Caso de uso 1"
+
+msgid "Use case 2"
+msgstr "Caso de uso 2"
+
+msgid "Use case 3"
+msgstr "Caso de uso 3"
+
+msgid "Your browser does not support the video tag."
+msgstr "Tu buscador no soporta las etiquetas de vídeo"
