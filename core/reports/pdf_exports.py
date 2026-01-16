@@ -118,7 +118,7 @@ def _build_pdf_report_impl(
             "publication_types": "Tipos de publicación",
             "quartiles": "Cuartiles",
             "citations_range": "Citas (mín - máx)",
-            "selected_author": "Autor seleccionado",
+            "selected_author": "Autores seleccionados",
             "timeline": "Línea temporal de publicaciones",
             "areas_bar": "Distribución de áreas (gráfico de barras)",
             "areas_pie": "Distribución de áreas (gráfico circular)",
@@ -131,7 +131,7 @@ def _build_pdf_report_impl(
             "keywords_network": "Red de coautorías por palabras clave",
             "international_collab_map": "Mapa de colaboración internacional",
             "national_collab_map": "Mapa de colaboración nacional (España)",
-            "selected_author_metrics": "Métricas del autor seleccionado",
+            "selected_author_metrics": "Métricas de autores seleccionados",
             "orcid": "ORCID",
             "total_publications": "Total publicaciones",
             "total_citations": "Total citas",
@@ -168,7 +168,7 @@ def _build_pdf_report_impl(
             "publication_types": "Publication types",
             "quartiles": "Quartiles",
             "citations_range": "Citations (min - max)",
-            "selected_author": "Selected author",
+            "selected_author": "Selected authors",
             "timeline": "Publication timeline",
             "areas_bar": "Areas distribution (bar chart)",
             "areas_pie": "Areas distribution (pie chart)",
@@ -181,7 +181,7 @@ def _build_pdf_report_impl(
             "keywords_network": "Co-authorship network by keywords",
             "international_collab_map": "International collaboration map",
             "national_collab_map": "National collaboration map (Spain)",
-            "selected_author_metrics": "Selected author metrics",
+            "selected_author_metrics": "Selected authors metrics",
             "orcid": "ORCID",
             "total_publications": "Total publications",
             "total_citations": "Total citations",
@@ -212,6 +212,15 @@ def _build_pdf_report_impl(
     collab_map_world_img = images.get("collab_map_world")
     collab_map_spain_img = images.get("collab_map_spain")
     author_name = filters.get("author")
+    authors = filters.get("authors")
+    if isinstance(authors, (list, tuple, set)):
+        selected_author_names = [str(a) for a in authors if a]
+    elif authors:
+        selected_author_names = [str(authors)]
+    elif author_name:
+        selected_author_names = [str(author_name)]
+    else:
+        selected_author_names = []
 
     buffer = BytesIO()
     doc_title = str(t("meta_title"))
@@ -227,9 +236,11 @@ def _build_pdf_report_impl(
     elements = []
     styles = getSampleStyleSheet()
 
+    # Multi-author: use a generic title (same as dashboard "custom filters" report)
+    # Single author: keep author-specific title.
     title = (
         t("report_title_author").format(author=author_name)
-        if author_name
+        if author_name and len(selected_author_names) <= 1
         else t("report_title_filters")
     )
     if lang == "en":
@@ -283,8 +294,9 @@ def _build_pdf_report_impl(
             ),
         ],
     ]
-    if author_name:
-        filters_data.append([label(t('selected_author')), safe_value(author_name, '-')])
+    if selected_author_names:
+        # Keep key name stable across languages (label comes from TXT)
+        filters_data.append([label(t('selected_author')), safe_value(selected_author_names, '-')])
 
     table = Table(filters_data, colWidths=[5 * cm, 10 * cm])
     table.setStyle(
@@ -386,40 +398,49 @@ def _build_pdf_report_impl(
             )
         )
 
-    if author_name:
+    if selected_author_names:
         elements.append(Spacer(1, 0.5 * cm))
         elements.append(Paragraph(f"<b>{t('selected_author_metrics')}</b>", styles['Heading3']))
-        try:
-            author_obj = Author.objects.get(name=author_name)
-            metrics = [
-                (t('orcid'), author_obj.orcid_link or '-'),
-                (t('total_publications'), author_obj.total_publications or '-'),
-                (t('total_citations'), author_obj.total_citations or '-'),
-                (t('citations_wos'), author_obj.citations_wos or '-'),
-                (t('citations_scopus'), author_obj.citations_scopus or '-'),
-                (t('h_index'), author_obj.h_index or '-'),
-                (t('h_index_gb'), author_obj.h_index_gb or '-'),
-                (t('h_index_h5gb'), author_obj.h_index_h5gb or '-'),
-                (t('international_index'), author_obj.international_index or '-'),
-            ]
-            author_table = Table(metrics, colWidths=[7 * cm, 8 * cm])
-            author_table.setStyle(
-                TableStyle(
-                    [
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-                        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-                        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 11),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                        ('TOPPADDING', (0, 0), (-1, -1), 8),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
-                    ]
+
+        # Render a metrics table per author.
+        for idx, author_display in enumerate(selected_author_names):
+            if len(selected_author_names) > 1:
+                elements.append(Spacer(1, 0.2 * cm))
+                elements.append(Paragraph(f"<b>{author_display}</b>", styles.get('Heading4', styles['Heading3'])))
+            try:
+                author_obj = Author.objects.get(name=author_display)
+                metrics = [
+                    (t('orcid'), author_obj.orcid_link or '-'),
+                    (t('total_publications'), author_obj.total_publications or '-'),
+                    (t('total_citations'), author_obj.total_citations or '-'),
+                    (t('citations_wos'), author_obj.citations_wos or '-'),
+                    (t('citations_scopus'), author_obj.citations_scopus or '-'),
+                    (t('h_index'), author_obj.h_index or '-'),
+                    (t('h_index_gb'), author_obj.h_index_gb or '-'),
+                    (t('h_index_h5gb'), author_obj.h_index_h5gb or '-'),
+                    (t('international_index'), author_obj.international_index or '-'),
+                ]
+                author_table = Table(metrics, colWidths=[7 * cm, 8 * cm])
+                author_table.setStyle(
+                    TableStyle(
+                        [
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                            ('FONTSIZE', (0, 0), (-1, -1), 11),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                            ('TOPPADDING', (0, 0), (-1, -1), 8),
+                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                            ('LINEBELOW', (0, 0), (-1, -1), 0.25, colors.grey),
+                        ]
+                    )
                 )
-            )
-            elements.append(author_table)
-        except Author.DoesNotExist:
-            elements.append(Paragraph(f"<b>{t('no_author_metrics')}</b>", styles['Normal']))
+                elements.append(author_table)
+            except Author.DoesNotExist:
+                elements.append(Paragraph(f"<b>{t('no_author_metrics')}</b>", styles['Normal']))
+            if idx < len(selected_author_names) - 1:
+                elements.append(Spacer(1, 0.4 * cm))
+
         elements.append(Spacer(1, 0.7 * cm))
 
         def slugify(value: str) -> str:
@@ -431,16 +452,19 @@ def _build_pdf_report_impl(
                 .replace('.', '')
             )
 
-        author_slug = slugify(author_name)
-        author_html = f'collab_{author_slug}.html'
-        author_network_label = t('author_network_for')
-        elements.append(
-            Paragraph(
-                f'<a href="{base_url}{author_html}">{author_network_label} {author_name}</a>',
-                link_style,
+        # Keep a single "author network" link only when exporting exactly one author;
+        # multi-author network should be interpreted as the combined dashboard view.
+        if len(selected_author_names) == 1 and author_name:
+            author_slug = slugify(author_name)
+            author_html = f'collab_{author_slug}.html'
+            author_network_label = t('author_network_for')
+            elements.append(
+                Paragraph(
+                    f'<a href="{base_url}{author_html}">{author_network_label} {author_name}</a>',
+                    link_style,
+                )
             )
-        )
-        elements.append(Spacer(1, 1 * cm))
+            elements.append(Spacer(1, 1 * cm))
 
     elements.append(PageBreak())
     elements.append(Paragraph(f"<b>{t('filtered_publications_list')}</b>", styles['Heading2']))

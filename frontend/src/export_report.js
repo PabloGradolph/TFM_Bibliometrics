@@ -401,17 +401,24 @@ export function setupExportReportButton() {
                     const typeFilter = document.getElementById('typeFilter');
                     if (typeFilter) types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
-                let author = null; if (window.selectedAuthorName) author = window.selectedAuthorName;
+                // Multi-author selection: send all selected authors (repeated `author` params).
+                // Backend should treat this as OR (any of the selected authors).
+                let authors = [];
+                if (window.selectedAuthorNames && window.selectedAuthorNames.size > 0) {
+                    authors = Array.from(window.selectedAuthorNames);
+                } else if (window.selectedAuthorName) {
+                    authors = [window.selectedAuthorName];
+                }
                 let quartiles = []; if (window.selectedQuartilesList && window.selectedQuartilesList.size > 0) quartiles = Array.from(window.selectedQuartilesList);
                 const metric_source = window.selectedMetricSource || '';
-                return {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, author, quartiles, metric_source};
+                return {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, authors, quartiles, metric_source};
             };
 
             const sendSimpleFormat = (fmt, filename) => {
                 const modalInstance = bootstrap.Modal.getInstance(modal);
                 modalInstance.hide();
                 loadingOverlay.style.display = 'flex';
-                const {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, author, quartiles, metric_source} = collectFilters();
+                const {yearFrom, yearTo, citationsFrom, citationsTo, areas, institutions, types, authors, quartiles, metric_source} = collectFilters();
                 const formData = new FormData();
                 if (yearFrom) formData.append('year_from', yearFrom);
                 if (yearTo) formData.append('year_to', yearTo);
@@ -420,7 +427,7 @@ export function setupExportReportButton() {
                 areas.forEach(a => formData.append('areas', a));
                 institutions.forEach(i => formData.append('institutions', i));
                 types.forEach(t => formData.append('types', t));
-                if (author) formData.append('author', author);
+                authors.forEach(a => formData.append('author', a));
                 quartiles.forEach(q => formData.append('quartiles', q));
                 if (metric_source) formData.append('metric_source', metric_source);
                 if (shouldSendOrdering && sortField) formData.append('sort_field', sortField);
@@ -504,9 +511,12 @@ export function setupExportReportButton() {
                     types = Array.from(typeFilter.selectedOptions).map(opt => opt.value).filter(v => v);
                 }
             }
-            let author = null;
-            if (window.selectedAuthorName) {
-                author = window.selectedAuthorName;
+            // Prefer multi-author selection if available.
+            let authors = [];
+            if (window.selectedAuthorNames && window.selectedAuthorNames.size > 0) {
+                authors = Array.from(window.selectedAuthorNames);
+            } else if (window.selectedAuthorName) {
+                authors = [window.selectedAuthorName];
             }
             // Nuevos filtros: cuartiles y fuente
             let quartiles = [];
@@ -569,7 +579,7 @@ export function setupExportReportButton() {
                     areas.forEach(area => formData.append('areas', area));
                     institutions.forEach(inst => formData.append('institutions', inst));
                     types.forEach(type => formData.append('types', type));
-                    if (author) formData.append('author', author);
+                    authors.forEach(a => formData.append('author', a));
                     quartiles.forEach(q => formData.append('quartiles', q));
                     if (metric_source) formData.append('metric_source', metric_source);
                     if (sortField) formData.append('sort_field', sortField);

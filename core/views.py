@@ -1369,7 +1369,11 @@ def export_report(request):
     types = data.getlist('types') if hasattr(data, 'getlist') else []
     quartiles = data.getlist('quartiles') if hasattr(data, 'getlist') else []
     metric_source = 'wos'  # enforced business rule
-    author = data.get('author')
+    # Multi-author selection: `author` can be repeated (dashboard uses OR semantics)
+    selected_authors = data.getlist('author') if hasattr(data, 'getlist') else []
+    selected_authors = [a for a in selected_authors if a]
+    # Keep legacy single-author variable for backwards compatibility / display.
+    author = selected_authors[0] if selected_authors else None
     format_ = data.get('format', 'pdf')
     sort_field = data.get('sort_field')
     sort_order = data.get('sort_order', 'desc')
@@ -1401,8 +1405,8 @@ def export_report(request):
         pubs_query = _apply_type_filter(pubs_query, types)
     if quartiles:
         pubs_query = _apply_quartile_filter(pubs_query, quartiles, 'wos')
-    if author:
-        pubs_query = pubs_query.filter(authors__name=author)
+    if selected_authors:
+        pubs_query = pubs_query.filter(authors__name__in=selected_authors)
 
     # Ordering annotations (metrics stored in PublicationMetric model)
     from django.db.models import OuterRef, Subquery, FloatField
@@ -1658,7 +1662,7 @@ def export_report(request):
             readme = (
                 "Paquete de exportación bibliométrica IPBLN\n\n"
                 "Incluye: CSV, NDJSON, BibTeX, RIS, red de coautorías (GEXF + edges/nodes CSV).\n"
-                f"Filtros aplicados: años={year_from}-{year_to}, areas={', '.join(areas)}, instituciones={', '.join(institutions)}, tipos={', '.join(types)}, autor={author or '-'}\n"
+                f"Filtros aplicados: años={year_from}-{year_to}, areas={', '.join(areas)}, instituciones={', '.join(institutions)}, tipos={', '.join(types)}, autores={', '.join(selected_authors) if selected_authors else '-'}\n"
                 f"Ordenación: campo={sort_field or '-'} orden={sort_order}\n"
                 f"Tipo de red exportada: {network_label}\n"
             )
@@ -1678,7 +1682,9 @@ def export_report(request):
         'quartiles': quartiles,
         'citations_from': citations_from,
         'citations_to': citations_to,
+        # Keep legacy key for display; PDF builder should prefer `authors`.
         'author': author,
+        'authors': selected_authors,
     }
     images_context = {
         'timeline': data.get('timeline_img'),
