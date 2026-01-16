@@ -15,6 +15,17 @@ import {
     renderAreasChart as renderAreasChartUtil,
 } from './dashboard/areas.js';
 import { createPublicationsTableController } from './dashboard/publications_table.js';
+import {
+    englishModelDescriptions,
+    englishTexts,
+    spanishModelDescriptions,
+    spanishTexts,
+} from './dashboard/clustering_i18n.js';
+import { setMissingPubsNoticeVisible as setMissingPubsNoticeVisibleUtil } from './dashboard/missing_pubs_notice.js';
+import {
+    ensureAuthorSuggestionsPortal as ensureAuthorSuggestionsPortalUtil,
+    positionAuthorDropdown as positionAuthorDropdownUtil,
+} from './dashboard/author_dropdown_portal.js';
 
 export function initFiltersAndSearch() {
 
@@ -67,55 +78,8 @@ export function initFiltersAndSearch() {
 
     const lang = window.location.pathname.split('/')[1] === 'es' ? 'es' : 'en';
 
-    // Descripciones de los modelos en español
-    const spanishModelDescriptions = {
-        'kmeans': 'Agrupa los datos en un número fijo de categorías (clusters) tratando de minimizar la distancia entre los puntos de cada grupo y su centroide, es decir, su "centro". Este método busca particiones compactas y bien separadas, y es especialmente útil cuando los grupos tienen forma redonda o esférica. Es rápido y eficiente, aunque sensible a la elección inicial del número de grupos (k) y a los valores extremos.',
-        'agglomerative': 'Construye agrupaciones de forma jerárquica: comienza considerando cada autor como un grupo separado y va fusionando los más similares en pasos sucesivos. El resultado es una estructura en forma de árbol (dendrograma), que permite explorar diferentes niveles de agrupación según la profundidad del corte. Es útil cuando no se conoce el número exacto de grupos y se desea analizar la relación progresiva entre autores.',
-        'spectral': 'Transforma la relación entre autores en una red (o grafo) de similitudes y la descompone matemáticamente para encontrar estructuras ocultas. Posteriormente, agrupa los autores en ese nuevo espacio. Es muy útil cuando las agrupaciones no tienen una forma clara o son no convexas, como anillos o cadenas, y aprovecha la conectividad global de los datos.',
-        'gmm': 'Parte de la idea de que los datos provienen de una combinación de distribuciones estadísticas llamadas Gaussianas (curvas en forma de campana). En lugar de asignar cada punto a un único cluster, estima la probabilidad de que pertenezca a cada uno. Esto le permite detectar clusters superpuestos o de formas más complejas que los que detecta KMeans, siendo ideal cuando se sospecha que los datos tienen estructuras suaves o ambiguas.',
-        'dbscan': 'Identifica grupos basándose en la densidad de los puntos: busca regiones donde los puntos están muy juntos y los separa de las regiones más dispersas. Es especialmente útil cuando los clusters tienen formas arbitrarias y no se conoce el número de grupos a priori. Puede identificar puntos de ruido (outliers) y no requiere especificar el número de clusters.',
-        'hdbscan': 'Es una versión jerárquica de DBSCAN que puede encontrar clusters de diferentes densidades. En lugar de usar un único umbral de densidad, construye una jerarquía de clusters y luego selecciona los más significativos. Es robusto a los parámetros y puede encontrar clusters de formas arbitrarias.',
-        'lovaina': 'Algoritmo de detección de comunidades que optimiza la modularidad de la red. Funciona de manera iterativa, moviendo nodos entre comunidades para maximizar la modularidad. Es especialmente efectivo para detectar comunidades en redes grandes y puede encontrar comunidades de diferentes tamaños.'
-    };
-
-    // Descripciones de los modelos en inglés
-    const englishModelDescriptions = {
-        'kmeans': 'It groups the data into a fixed number of categories (clusters) trying to minimize the distance between the points of each group and its centroid, that is, its "center". This method looks for compact and well-separated partitions, and is especially useful when the clusters are round or spherical in shape. It is fast and efficient, although sensitive to the initial choice of the number of groups (k) and to extreme values.',
-        'agglomerative': 'It builds groupings in a hierarchical way: it starts by considering each author as a separate group and merges the most similar ones in successive steps. The result is a tree-like structure (dendrogram), which allows exploring different levels of grouping according to the depth of the cut. It is useful when the exact number of groups is not known and it is desired to analyze the progressive relationship between authors.',
-        'spectral': 'It transforms the relationship between authors into a network (or graph) of similarities and decomposes it mathematically to find hidden structures. It then clusters the authors in this new space. It is very useful when the groupings do not have a clear shape or are non-convex, such as rings or chains, and takes advantage of the global connectivity of the data.',
-        'gmm': 'It starts from the idea that the data come from a combination of statistical distributions called Gaussian (bell-shaped curves). Instead of assigning each point to a single cluster, it estimates the probability that it belongs to each cluster. This allows it to detect overlapping or more complex-shaped clusters than KMeans detects, making it ideal when data are suspected of having soft or ambiguous structures.',
-        'dbscan': 'Identifies groups based on the density of points: it looks for regions where points are very close together and separates them from more scattered regions. It is especially useful when clusters have arbitrary shapes and the number of groups is not known a priori. It can identify noise points (outliers) and does not require specifying the number of clusters.',
-        'hdbscan': 'It is a hierarchical version of DBSCAN that can find clusters of different densities. Instead of using a single density threshold, it builds a hierarchy of clusters and then selects the most significant ones. It is robust to parameters and can find clusters of arbitrary shapes.',
-        'lovaina': 'A community detection algorithm that optimizes network modularity. It works iteratively, moving nodes between communities to maximize modularity. It is especially effective for detecting communities in large networks and can find communities of different sizes.'
-    };
-
-    // Textos en español
-    const spanishTexts = {
-        'clusters': 'clusters',
-        'bestConfig': 'Mejor Configuración',
-        'globalBestConfig': 'Mejor Configuración Global',
-        'manualConfig': 'Configuración Manual',
-        'numberOfClusters': 'Número de Clusters',
-        'clusteringModel': 'Modelo de Clustering',
-        'configurationMode': 'Modo de Configuración',
-        'apply': 'Aplicar',
-        'cancel': 'Cancelar',
-        'globalBestDescription': 'Usa la mejor configuración de clustering encontrada entre todos los modelos y parámetros.'
-    };
-
-    // Textos en inglés
-    const englishTexts = {
-        'clusters': 'clusters',
-        'bestConfig': 'Best Configuration',
-        'globalBestConfig': 'Global Best Configuration',
-        'manualConfig': 'Manual Configuration',
-        'numberOfClusters': 'Number of Clusters',
-        'clusteringModel': 'Clustering Model',
-        'configurationMode': 'Configuration Mode',
-        'apply': 'Apply',
-        'cancel': 'Cancel',
-        'globalBestDescription': 'Uses the best clustering configuration found across all models and parameters.'
-    };
+    // Clustering modal dictionaries were moved to `dashboard/clustering_i18n.js`
+    // to keep this file smaller without altering behavior.
 
     // Función para actualizar textos según el idioma
     function updateModalTexts() {
@@ -293,19 +257,16 @@ export function initFiltersAndSearch() {
 
     // Helper: show/hide the "missing publications" notice
     function setMissingPubsNoticeVisible(visible) {
-        if (!missingPubsNotice || !missingPubsNoticeText) return;
-        if (visible) {
-            const lang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
-            const concienciaURL = 'https://apps3.csic.es/contcien/';
-            const contactEmail = 'bioinformatica@ipbln.csic.es';
-            const textEs = `¿No encuentras una de tus publicaciones? Asegúrate de tenerla registrada en <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. Si ya la tienes publicada allí y sigues sin verla aquí, espera a que actualicemos nuestro sistema. Si tienes prisa, puedes contactar con la Unidad de Bioinformática del IPBLN en <a href="mailto:${contactEmail}">${contactEmail}</a> para solicitar una actualización prioritaria.`;
-            const textEn = `Can't find one of your publications? Make sure it is registered in <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. If it's already there but still not visible here, please wait for our next update. If it's urgent, contact the IPBLN Bioinformatics Unit at <a href="mailto:${contactEmail}">${contactEmail}</a> to request an earlier update.`;
-            missingPubsNoticeText.innerHTML = (lang === 'es') ? textEs : textEn;
-            missingPubsNotice.classList.remove('d-none');
-        } else {
-            missingPubsNotice.classList.add('d-none');
-            missingPubsNoticeText.innerHTML = '';
-        }
+        setMissingPubsNoticeVisibleUtil({
+            noticeEl: missingPubsNotice,
+            noticeTextEl: missingPubsNoticeText,
+            visible,
+            detectLang: () => (
+                (typeof detectLangFromPath === 'function')
+                    ? detectLangFromPath()
+                    : (window.location.pathname.includes('/es/') ? 'es' : 'en')
+            ),
+        });
     }
 
     // Variables for debounced autocomplete (shared)
@@ -317,40 +278,7 @@ export function initFiltersAndSearch() {
      * @returns {void}
      */
     function ensureFiltersAuthorSuggestionsPortal() {
-        if (!filtersAuthorSuggestions) return;
-        if (filtersAuthorSuggestions.dataset.portalized === 'true') return;
-
-        // If this element previously relied on Bootstrap's w-100/position-absolute inside a
-        // relatively positioned parent, remove those width helpers because once we portal it
-        // to <body> they can unintentionally make the dropdown span the whole viewport.
-        filtersAuthorSuggestions.classList.remove('w-150');
-
-        document.body.appendChild(filtersAuthorSuggestions);
-        filtersAuthorSuggestions.dataset.portalized = 'true';
-
-        // Base styles for portalized dropdown
-        filtersAuthorSuggestions.style.position = 'fixed';
-        filtersAuthorSuggestions.style.zIndex = '999999';
-        filtersAuthorSuggestions.style.boxSizing = 'border-box';
-        filtersAuthorSuggestions.style.maxWidth = '600px';
-        filtersAuthorSuggestions.style.right = 'auto';
-        filtersAuthorSuggestions.style.bottom = 'auto';
-        filtersAuthorSuggestions.style.maxHeight = '160px';
-        filtersAuthorSuggestions.style.overflowY = 'auto';
-        filtersAuthorSuggestions.style.overflowX = 'hidden';
-        filtersAuthorSuggestions.style.display = 'none';
-
-        const list = filtersAuthorSuggestions.querySelector('.list-group');
-        if (list) {
-            list.style.width = '100%';
-            list.style.maxWidth = '100%';
-            list.style.boxSizing = 'border-box';
-        }
-
-        // Ensure list style remains consistent
-        if (!filtersAuthorSuggestions.classList.contains('dropdown-portal')) {
-            filtersAuthorSuggestions.classList.add('dropdown-portal');
-        }
+        ensureAuthorSuggestionsPortalUtil(filtersAuthorSuggestions);
     }
 
     /**
@@ -362,45 +290,10 @@ export function initFiltersAndSearch() {
      * @returns {void}
      */
     function positionFiltersAuthorDropdown() {
-        if (!filtersAuthorSearch || !filtersAuthorSuggestions) return;
-        if (filtersAuthorSuggestions.style.display !== 'block') return;
-
-        ensureFiltersAuthorSuggestionsPortal();
-
-        try {
-            const rect = filtersAuthorSearch.getBoundingClientRect();
-            const vv = window.visualViewport;
-            const offsetLeft = vv ? vv.offsetLeft : 0;
-            const offsetTop = vv ? vv.offsetTop : 0;
-
-            // Limit height so it doesn't cover the UI; keep it scrollable.
-            // The goal is to keep it compact (similar to a select height) while still usable.
-            const viewportHeight = vv ? vv.height : window.innerHeight;
-            const availableBelow = Math.max(0, viewportHeight - rect.bottom - 12);
-            const desiredMaxHeight = 160;
-            const computedMaxHeight = Math.min(desiredMaxHeight, availableBelow);
-
-            filtersAuthorSuggestions.style.position = 'fixed';
-            filtersAuthorSuggestions.style.left = `${Math.round(rect.left + offsetLeft)}px`;
-            filtersAuthorSuggestions.style.top = `${Math.round(rect.bottom + offsetTop)}px`;
-            const width = Math.round(rect.width);
-
-            // Force width to match input and ensure we don't overflow the viewport.
-            // Subtract a small margin to avoid touching the edge.
-            const viewportWidth = vv ? vv.width : window.innerWidth;
-            const maxAllowedWidth = Math.max(200, Math.round(viewportWidth - (rect.left + offsetLeft) - 12));
-            filtersAuthorSuggestions.style.width = `${Math.min(width, maxAllowedWidth)}px`;
-            filtersAuthorSuggestions.style.maxWidth = `${Math.min(width, maxAllowedWidth)}px`;
-            filtersAuthorSuggestions.style.maxHeight = `${Math.max(120, Math.round(computedMaxHeight))}px`;
-        } catch (e) {
-            // Last-resort: place near the input in the normal flow.
-            filtersAuthorSuggestions.style.position = 'absolute';
-            filtersAuthorSuggestions.style.top = '100%';
-            filtersAuthorSuggestions.style.left = '0';
-            filtersAuthorSuggestions.style.width = '100%';
-            filtersAuthorSuggestions.style.maxHeight = '160px';
-            filtersAuthorSuggestions.style.overflowY = 'auto';
-        }
+        positionAuthorDropdownUtil({
+            searchEl: filtersAuthorSearch,
+            suggestionsEl: filtersAuthorSuggestions,
+        });
     }
 
     /**
