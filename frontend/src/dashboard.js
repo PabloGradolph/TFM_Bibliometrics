@@ -38,6 +38,10 @@ import {
     buildPublicationsSearchParams,
     parseTopK,
 } from './dashboard/search_params.js';
+import {
+    showSemanticSearchResultsModal,
+    showStandardSearchResultsModal,
+} from './dashboard/search_modals.js';
 
 export function initFiltersAndSearch() {
 
@@ -897,88 +901,12 @@ export function initFiltersAndSearch() {
 
     // Función para mostrar los resultados de búsqueda
     function showSearchResults(results) {
-        const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es';
-        const searchResults = currentLang === 'es' ? 'Resultados de la búsqueda' : 'Search Results';
-        const emptyText = currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.';
-        const authorsLabel = currentLang === 'es' ? 'Autores' : 'Authors';
-        const institutionsLabel = currentLang === 'es' ? 'Instituciones' : 'Institutions';
-        const areasLabel = currentLang === 'es' ? 'Áreas' : 'Areas';
-        const doiLabel = currentLang === 'es' ? 'DOI' : 'DOI';
-        const viewLinkText = currentLang === 'es' ? 'Ver publicación' : 'View publication';
-
-        // Crear el modal si no existe
-        let modal = document.getElementById('searchResultsModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'searchResultsModal';
-            modal.className = 'modal fade';
-            modal.setAttribute('tabindex', '-1');
-            modal.innerHTML = `
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">${searchResults}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div id="searchResultsList"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-
-        const modalTitle = modal.querySelector('.modal-title');
-        if (modalTitle) modalTitle.textContent = searchResults;
-
-        // Actualizar el contenido del modal
-        const resultsList = document.getElementById('searchResultsList');
-        if (results.length === 0) {
-            resultsList.innerHTML = `<p class="text-center">${emptyText}</p>`;
-        } else {
-            resultsList.innerHTML = results.map(result => {
-                const authors = Array.isArray(result.authors) ? result.authors.join(', ') : (result.authors || '');
-                const otherAuthors = Array.isArray(result.other_authors) && result.other_authors.length > 0
-                    ? ` <span class="text-muted">(${result.other_authors.join(', ')})</span>`
-                    : '';
-                const doi = (result.doi || '').toString().trim();
-                const doiLine = doi ? `<strong>${doiLabel}:</strong> ${doi}<br>` : '';
-                return `
-                <div class="card mb-3">
-                    <div class="card-body" data-publication-id="${result.id}" style="cursor: pointer;">
-                        <h5 class="card-title">${result.title}</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            ${result.year} - ${result.publication_type}
-                        </h6>
-                        <p class="card-text">
-                            <strong>${authorsLabel}:</strong> ${authors}${otherAuthors}<br>
-                            <strong>${institutionsLabel}:</strong> ${result.institutions.join(', ')}<br>
-                            <strong>${areasLabel}:</strong> ${result.areas.join(', ')}
-                            <br>${doiLine}
-                        </p>
-                        ${result.url ? `<a href="${result.url}" class="card-link" target="_blank">${viewLinkText}</a>` : ''}
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-
-        // Añadir evento de clic a cada tarjeta de resultado
-        resultsList.querySelectorAll('.card-body').forEach(cardBody => {
-            cardBody.addEventListener('click', function() {
-                const publicationId = this.dataset.publicationId;
-                if (publicationId) {
-                    // Redirigir a la página de detalle de publicación
-                    const nextUrl = encodeURIComponent(window.location.href);
-                    window.location.href = `/BiblioMetrics/publication/${publicationId}/?next=${nextUrl}`;
-                }
-            });
+        showStandardSearchResultsModal({
+            results,
+            detectLang: () => ((typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es'),
+            nextUrl: window.location.href,
+            bootstrap,
         });
-
-        // Mostrar el modal
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
     }
 
     /**
@@ -986,126 +914,24 @@ export function initFiltersAndSearch() {
      * @param {Array<Object>} results - Array of publication objects returned by the semantic search API.
      */
     function showSemanticResults(results) {
-    const currentLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es';
-    const titleText = currentLang === 'es' ? 'Resultados IA' : 'AI Search Results';
+        const detectLang = () => ((typeof detectLangFromPath === 'function') ? detectLangFromPath() : 'es');
 
-        // Defensive: ensure we have an array
-        if (!Array.isArray(results)) results = [];
-
-        // Sort by similarity desc if similarity field exists
-        results = results.slice().sort((a, b) => {
-            const sa = (typeof a.similarity === 'number') ? a.similarity : 0;
-            const sb = (typeof b.similarity === 'number') ? b.similarity : 0;
-            return sb - sa;
+        showSemanticSearchResultsModal({
+            results,
+            detectLang,
+            bootstrap,
+            topKSelectEl: document.getElementById('semanticTopK'),
+            getLastQuery: () => window.lastSemanticQuery || null,
+            fetchSemantic: (query, topK, langCode) => {
+                return fetch(`/BiblioMetrics/${langCode}/semantic_search/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, top_k: topK }),
+                })
+                    .then((resp) => resp.json())
+                    .then((data) => data.results || data);
+            },
         });
-
-        // Create modal if not present
-        let modal = document.getElementById('semanticResultsModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'semanticResultsModal';
-            modal.className = 'modal fade';
-            modal.setAttribute('tabindex', '-1');
-            modal.innerHTML = `
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">${titleText}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div id="semanticResultsList"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        } else {
-            // update title language
-            const hdr = modal.querySelector('.modal-title');
-            if (hdr) hdr.textContent = titleText;
-        }
-
-        const list = document.getElementById('semanticResultsList');
-        if (!list) return;
-
-        function renderSemanticResults(res) {
-            if (res.length === 0) {
-                list.innerHTML = '<p class="text-center">' + (currentLang === 'es' ? 'No se encontraron resultados.' : 'No results found.') + '</p>';
-            } else {
-                list.innerHTML = res.map(r => {
-                    const simText = (typeof r.similarity === 'number') ? `<div class="text-end text-muted" style="font-size:0.9rem">${(r.similarity*100).toFixed(1)}% similar</div>` : '';
-                    const authors = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
-                    const otherAuthors = Array.isArray(r.other_authors) && r.other_authors.length > 0
-                        ? ` <span class="text-muted">(${r.other_authors.join(', ')})</span>`
-                        : '';
-                    const areasFallback = Array.isArray(r.areas) && r.areas.length ? r.areas : Array.isArray(r.areas_all) ? r.areas_all : [];
-                    const areas = areasFallback.length ? areasFallback.join(', ') : (currentLang === 'es' ? 'Sin áreas registradas' : 'No areas available');
-                    const institutions = Array.isArray(r.institutions) && r.institutions.length ? r.institutions.join(', ') : '';
-                    const instLabel = currentLang === 'es' ? 'Instituciones' : 'Institutions';
-                    const areasLabel = currentLang === 'es' ? 'Áreas' : 'Areas';
-                    const pubType = r.publication_type || '';
-                    const year = r.year || '';
-                    const subtitleText = (year ? year : '') + (pubType ? ` - ${pubType}` : '');
-                    const urlLink = r.url ? `<a href="${r.url}" class="card-link" target="_blank">${currentLang === 'es' ? 'Ver publicación' : 'View publication'}</a>` : '';
-
-                    return `
-                        <div class="card mb-3">
-                            <div class="card-body" data-publication-id="${r.id}" style="cursor: pointer;">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h5 class="card-title mb-1">${r.title}</h5>
-                                        <h6 class="card-subtitle mb-2 text-muted">${subtitleText}</h6>
-                                    </div>
-                                    ${simText}
-                                </div>
-                                <p class="card-text mb-1"><strong>${currentLang === 'es' ? 'Autores' : 'Authors'}:</strong> ${authors}${otherAuthors}</p>
-                                ${institutions ? `<p class="card-text mb-1"><strong>${instLabel}:</strong> ${institutions}</p>` : ''}
-                                <p class="card-text mb-1"><strong>${areasLabel}:</strong> ${areas}</p>
-                                <div>${urlLink}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-                // Attach click handlers
-                const container = document.getElementById('semanticResultsList');
-                container.querySelectorAll('.card-body').forEach(cardBody => {
-                    cardBody.addEventListener('click', function() {
-                        const publicationId = this.dataset.publicationId;
-                        if (publicationId) {
-                            window.location.href = `/BiblioMetrics/publication/${publicationId}/`;
-                        }
-                    });
-                });
-            }
-        }
-
-        renderSemanticResults(results);
-
-        // Añadir evento al selector para cambiar el número de resultados
-        const topKSelect = document.getElementById('semanticTopK');
-        if (topKSelect) {
-            topKSelect.addEventListener('change', function() {
-                const topK = parseInt(this.value);
-                // Aquí deberías volver a hacer la petición al backend con el nuevo top_k
-                // Puedes guardar el último query en una variable global si lo necesitas
-                if (window.lastSemanticQuery) {
-                    fetch(`/BiblioMetrics/${currentLang}/semantic_search/`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: window.lastSemanticQuery, top_k: topK })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        renderSemanticResults(data.results || []);
-                    });
-                }
-            });
-        }
-
-        // Show modal
-        const modalInstance = new bootstrap.Modal(document.getElementById('semanticResultsModal'));
-        modalInstance.show();
     }
 
     // Event listeners para la búsqueda

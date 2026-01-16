@@ -189,18 +189,37 @@ def semantic_search(request):
         return f"{title} || {fallback}" if fallback else title
 
     pairs = [(query, _build_rerank_text(c)) for c in candidates]
-    cross_encoder_model = 'cross-encoder/stsb-xlm-r-multilingual'
+
+    # Cross-encoder model used for reranking.
+    # The previous identifier (`cross-encoder/stsb-xlm-r-multilingual`) is not a valid
+    # Hugging Face Hub model and causes the reranking step to be skipped.
+    #
+    # You can override it by setting `SEMANTIC_RERANK_CROSS_ENCODER_MODEL` in Django
+    # settings (e.g. via env var).
+    cross_encoder_model = getattr(
+        settings,
+        'SEMANTIC_RERANK_CROSS_ENCODER_MODEL',
+        'cross-encoder/stsb-xlm-roberta-base',
+    )
     if pairs:
         try:
-            if not hasattr(semantic_search, '_cross_encoder'):
+            # Cache the model instance to avoid re-loading on every request.
+            cached = getattr(semantic_search, '_cross_encoder', None)
+            cached_name = getattr(semantic_search, '_cross_encoder_name', None)
+            if cached is None or cached_name != cross_encoder_model:
                 semantic_search._cross_encoder = CrossEncoder(cross_encoder_model)
+                semantic_search._cross_encoder_name = cross_encoder_model
             cross_encoder = semantic_search._cross_encoder
             scores = cross_encoder.predict(pairs)
             for i, c in enumerate(candidates):
                 c['rerank_score'] = float(scores[i])
             candidates.sort(key=lambda x: x.get('rerank_score', 0.0), reverse=True)
         except Exception as rerank_error:  # noqa: BLE001
-            logging.warning("Cross-encoder rerank skipped: %s", rerank_error)
+            logging.warning(
+                "Cross-encoder rerank skipped for model '%s': %s",
+                cross_encoder_model,
+                rerank_error,
+            )
     return JsonResponse({'results': candidates, 'received_query': query})
 
 def home(request):
