@@ -836,6 +836,8 @@ export function createCollaborationNetworkController(deps) {
         }
 
         // Full network toggle button
+        // NOTE: The button can be temporarily hidden in the template (e.g. with `d-none`).
+        // Keep this handler so re-enabling the feature is as simple as removing that class.
         const toggleFullBtn = document.getElementById('toggleFullNetworkBtn');
         if (toggleFullBtn) {
             toggleFullBtn.addEventListener('click', function () {
