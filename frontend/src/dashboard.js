@@ -26,6 +26,18 @@ import {
     ensureAuthorSuggestionsPortal as ensureAuthorSuggestionsPortalUtil,
     positionAuthorDropdown as positionAuthorDropdownUtil,
 } from './dashboard/author_dropdown_portal.js';
+import {
+    buildFiltersAuthorSuggestionParams,
+    showFiltersAuthorSuggestions as showFiltersAuthorSuggestionsUtil,
+} from './dashboard/filters_author_suggestions.js';
+import {
+    buildDashboardFilterParams,
+    cloneSearchParams,
+} from './dashboard/filter_params.js';
+import {
+    buildPublicationsSearchParams,
+    parseTopK,
+} from './dashboard/search_params.js';
 
 export function initFiltersAndSearch() {
 
@@ -308,65 +320,45 @@ export function initFiltersAndSearch() {
     function showFiltersAuthorSuggestions(query) {
         if (!filtersAuthorSearch || !filtersAuthorSuggestions) return;
 
-        ensureFiltersAuthorSuggestionsPortal();
-
-        // Allow suggestions even after selecting one author (multi-select).
-        if (!query) {
-            filtersAuthorSuggestions.style.display = 'none';
-            return;
-        }
-
         // Pass current dashboard filters so author counts reflect the filtered subset
         // (same behavior as other filter dropdowns).
-        const params = new URLSearchParams();
-        params.set('q', query);
-        if (yearFrom && yearFrom.value) params.append('year_from', yearFrom.value);
-        if (yearTo && yearTo.value) params.append('year_to', yearTo.value);
-        if (citationsFrom && citationsFrom.value) params.append('citations_from', citationsFrom.value);
-        if (citationsTo && citationsTo.value) params.append('citations_to', citationsTo.value);
-        selectedAreasList.forEach((a) => params.append('areas', a));
-        selectedInstitutionsList.forEach((i) => params.append('institutions', i));
-        selectedTypesList.forEach((t) => params.append('types', t));
-        selectedQuartilesList.forEach((q) => params.append('quartiles', q));
+        const params = buildFiltersAuthorSuggestionParams({
+            query,
+            yearFromEl: yearFrom,
+            yearToEl: yearTo,
+            citationsFromEl: citationsFrom,
+            citationsToEl: citationsTo,
+            selectedAreas: selectedAreasList,
+            selectedInstitutions: selectedInstitutionsList,
+            selectedTypes: selectedTypesList,
+            selectedQuartiles: selectedQuartilesList,
+        });
 
         // Do NOT send already-selected authors.
         // Suggestion counts should reflect only the non-author filters; otherwise
         // selecting authors can incorrectly shrink other authors' counts.
 
-        fetch(`/BiblioMetrics/${lang}/api/search/authors/?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
+        showFiltersAuthorSuggestionsUtil({
+            lang,
+            query,
+            searchEl: filtersAuthorSearch,
+            suggestionsEl: filtersAuthorSuggestions,
+            ensurePortal: ensureFiltersAuthorSuggestionsPortal,
+            positionDropdown: positionFiltersAuthorDropdown,
+            hideDropdown: () => {
+                filtersAuthorSuggestions.style.display = 'none';
+            },
+            showDropdown: () => {
+                filtersAuthorSuggestions.style.display = 'block';
+            },
+            clearSuggestions: () => {
                 const suggestionsList = filtersAuthorSuggestions.querySelector('.list-group');
                 if (!suggestionsList) return;
                 suggestionsList.innerHTML = '';
-
-                if (!data.suggestions || data.suggestions.length === 0) {
-                    filtersAuthorSuggestions.style.display = 'none';
-                    return;
-                }
-
-                data.suggestions.forEach(author => {
-                    const item = document.createElement('a');
-                    item.href = '#';
-                    item.className = 'list-group-item list-group-item-action';
-                    item.innerHTML = `
-                        ${author.name}
-                        <span class="badge bg-secondary float-end">${author.count} pub.</span>
-                    `;
-                    item.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        selectAuthor(author.name);
-                    });
-                    suggestionsList.appendChild(item);
-                });
-
-                filtersAuthorSuggestions.style.display = 'block';
-                positionFiltersAuthorDropdown();
-            })
-            .catch(error => {
-                console.error('Error fetching author suggestions (filters):', error);
-                filtersAuthorSuggestions.style.display = 'none';
-            });
+            },
+            selectAuthor: (authorName) => selectAuthor(authorName),
+            queryParams: params,
+        });
     }
 
     // Keep the fixed dropdown aligned on scroll/resize (while visible)
@@ -842,20 +834,16 @@ export function initFiltersAndSearch() {
         // Mostrar indicador de carga
         standardSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        // Construir la URL de búsqueda
-        const params = new URLSearchParams();
-        if (selectedAuthorName) {
-            params.append('author', selectedAuthorName);
-        } else {
-            params.append('q', standardSearch.value.trim());
-        }
         // Recoger el parámetro del selector de número de resultados IA
         const topKSelect = document.getElementById('semanticTopK');
-        let top_k = 50;
-        if (topKSelect) {
-            top_k = parseInt(topKSelect.value) || 50;
-        }
-        params.append('top_k', top_k);
+        const top_k = parseTopK(topKSelect, 50);
+
+        // Construir la URL de búsqueda
+        const params = buildPublicationsSearchParams({
+            selectedAuthorName,
+            query: standardSearch.value.trim(),
+            topK: top_k,
+        });
 
         // Realizar la búsqueda
         fetch(`/BiblioMetrics/${lang}/api/search/?${params.toString()}`)
@@ -1562,27 +1550,20 @@ export function initFiltersAndSearch() {
         }
 
         // Construir la URL con los parámetros de filtrado
-        const params = new URLSearchParams();
-        if (filters.year_from) params.append('year_from', filters.year_from);
-    if (filters.year_to) params.append('year_to', filters.year_to);
-    if (filters.citations_from) params.append('citations_from', filters.citations_from);
-    if (filters.citations_to) params.append('citations_to', filters.citations_to);
-        filters.areas.forEach(area => params.append('areas', area));
-        filters.institutions.forEach(institution => params.append('institutions', institution));
-        filters.types.forEach(type => params.append('types', type));
-    filters.quartiles.forEach(q => params.append('quartiles', q));
-    // metric_source removed
-        params.append('view_type', filters.view_type);
-        if (includePredictedAreas) params.append('include_predicted_areas', 'true');
-
-        // Add selected authors.
-        // - Single author: keep legacy `author=<name>`
-        // - Multiple authors: send repeated `author=<name>` (OR semantics in backend)
-        if (selectedAuthorNames && selectedAuthorNames.size > 1) {
-            Array.from(selectedAuthorNames).forEach((name) => params.append('author', name));
-        } else if (selectedAuthorName) {
-            params.append('author', selectedAuthorName);
-        }
+        const params = buildDashboardFilterParams({
+            yearFromEl: yearFrom,
+            yearToEl: yearTo,
+            citationsFromEl: citationsFrom,
+            citationsToEl: citationsTo,
+            selectedAreas: selectedAreasList,
+            selectedInstitutions: selectedInstitutionsList,
+            selectedTypes: selectedTypesList,
+            selectedQuartiles: selectedQuartilesList,
+            includePredictedAreas,
+            selectedAuthorName,
+            selectedAuthorNames,
+            viewType: filters.view_type,
+        });
 
         // Obtener los datos filtrados
         try {
@@ -1614,7 +1595,7 @@ export function initFiltersAndSearch() {
             }
 
             // Obtener datos de la red de colaboración
-            const networkParams = new URLSearchParams(params); // Clonar los parámetros existentes
+            const networkParams = cloneSearchParams(params); // Clonar los parámetros existentes
             networkParams.append('view_type', window.currentCommunityView); // Añadir el tipo de vista de comunidad
 
             // Keep network scope consistent with the toggle (IPs vs full network).
@@ -1659,7 +1640,7 @@ export function initFiltersAndSearch() {
 
                 // Actualizar mapa (Mundo/España) con agregación en servidor
             try {
-                    const paramsAll = new URLSearchParams(params);
+                    const paramsAll = cloneSearchParams(params);
                     // Count mode for Spain map: 'occurrences' (sum of all affiliations) by default
                     paramsAll.set('count', 'occurrences');
                     if (window.currentMapView === 'spain') {
