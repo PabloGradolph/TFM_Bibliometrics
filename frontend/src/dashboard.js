@@ -43,6 +43,9 @@ import {
     showStandardSearchResultsModal,
 } from './dashboard/search_modals.js';
 
+import { createAISemanticSearch } from './dashboard/ai_semantic_search.js';
+import { loadDashboardFilterData } from './dashboard/filters_bootstrap.js';
+
 export function initFiltersAndSearch() {
 
     // Referencias a los elementos del DOM
@@ -946,46 +949,14 @@ export function initFiltersAndSearch() {
     const aiSearch = document.getElementById('aiSearch');
     const aiSearchBtn = document.getElementById('aiSearchBtn');
 
-    function handleAISearch() {
-        const query = aiSearch ? aiSearch.value.trim() : '';
-        if (!query) return;
-
-        // Show spinner on button
-        if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        // Guardar el último query para el selector de top_k
-        window.lastSemanticQuery = query;
-        const topKSelect = document.getElementById('semanticTopK');
-        let top_k = 50;
-        if (topKSelect) {
-            top_k = parseInt(topKSelect.value) || 50;
-        }
-        const payload = { query, top_k };
-        fetch(`/BiblioMetrics/${lang}/semantic_search/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(resp => resp.json())
-        .then(data => {
-            // Restore button icon
-            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
-
-            // Backend returns list in data.results or data
-            const results = data.results || data;
-            showSemanticResults(results);
-        })
-        .catch(error => {
-            console.error('Error performing semantic search:', error);
-            if (aiSearchBtn) aiSearchBtn.innerHTML = '<i class="fas fa-robot"></i>';
-            alert('Error performing AI search.');
-        });
-    }
-
-    if (aiSearchBtn) aiSearchBtn.addEventListener('click', handleAISearch);
-    if (aiSearch) aiSearch.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') handleAISearch();
+    const { attachAISearchListeners } = createAISemanticSearch({
+        aiSearchEl: aiSearch,
+        aiSearchBtnEl: aiSearchBtn,
+        lang,
+        showSemanticResults,
     });
+
+    attachAISearchListeners();
 
     // Inicializar estado del botón al cargar la página
     // NOTE: updateSearchButton() was tied to the old main search author UI.
@@ -999,78 +970,25 @@ export function initFiltersAndSearch() {
 
     // Función para cargar los datos de los filtros
     function loadFilterData() {
-        fetch(`/BiblioMetrics/${lang}/api/dashboard/filters/`)
-            .then(response => response.json())
-            .then(data => {
-                // Establecer el rango de años disponible
-                const years = data.years.map(y => y.year);
-                yearFrom.min = Math.min(...years);
-                yearFrom.max = Math.max(...years);
-                yearTo.min = Math.min(...years);
-                yearTo.max = Math.max(...years);
+        const detectLang = () => {
+            if (typeof detectLangFromPath === 'function') return detectLangFromPath();
+            return window.location.pathname.includes('/es/') ? 'es' : 'en';
+        };
 
-                // Llenar el filtro de áreas temáticas
-                data.areas.forEach(area => {
-                    const option = document.createElement('option');
-                    option.value = area.name;
-                    option.textContent = `${area.name} (${area.count})`;
-                    areaFilter.appendChild(option);
-                });
-
-                // Llenar el filtro de instituciones
-                data.institutions.forEach(institution => {
-                    const option = document.createElement('option');
-                    option.value = institution.name;
-                    option.textContent = `${institution.name} (${institution.count})`;
-                    institutionFilter.appendChild(option);
-                });
-
-                // Llenar el filtro de tipos de publicación
-                data.publication_types.forEach(type => {
-                    const option = document.createElement('option');
-                    option.value = type.publication_type;
-                    const currentLang = (typeof detectLangFromPath === 'function')
-                        ? detectLangFromPath()
-                        : (window.location.pathname.includes('/es/') ? 'es' : 'en');
-                    const label = getPublicationTypeLabel(type.publication_type, currentLang);
-                    option.textContent = `${label} (${type.count})`;
-                    typeFilter.appendChild(option);
-                });
-
-                // Llenar el filtro de cuartil (Q1..Q4) con conteos
-                if (quartileFilter && Array.isArray(data.quartiles)) {
-                    quartileFilter.innerHTML = '';
-                    const anyOpt = document.createElement('option');
-                    anyOpt.value = '';
-                    const qLang = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/es/') ? 'es' : 'en');
-                    anyOpt.textContent = qLang === 'es' ? 'Todos los cuartiles' : 'All quartiles';
-                    quartileFilter.appendChild(anyOpt);
-                    data.quartiles.forEach(q => {
-                        const option = document.createElement('option');
-                        option.value = q.quartile;
-                        option.textContent = `${q.quartile} (${q.count})`;
-                        quartileFilter.appendChild(option);
-                    });
-                }
-
-                // Actualizar rango de citas disponible inicial
-                if (data.citations_range) {
-                    const help = document.getElementById('citationsRangeHelp');
-                    if (help) {
-                        const minC = data.citations_range.min || 0;
-                        const maxC = data.citations_range.max || 0;
-                        const langRange = (typeof detectLangFromPath === 'function') ? detectLangFromPath() : (window.location.pathname.includes('/en/') ? 'en' : 'es');
-                        const rangeLabel = langRange === 'es' ? 'Rango disponible' : 'Available range';
-                        help.textContent = `${rangeLabel}: ${minC} - ${maxC}`;
-                        if (citationsFrom) citationsFrom.placeholder = minC;
-                        if (citationsTo) citationsTo.placeholder = maxC;
-                    }
-                }
-
-                // Cargar datos iniciales
-                updateVisualizations();
-            })
-            .catch(error => console.error('Error loading filter data:', error));
+        loadDashboardFilterData({
+            lang,
+            detectLang,
+            getPublicationTypeLabel,
+            yearFrom,
+            yearTo,
+            areaFilter,
+            institutionFilter,
+            typeFilter,
+            quartileFilter,
+            citationsFrom,
+            citationsTo,
+            updateVisualizations,
+        });
     }
 
     // Función para crear un badge con botón de eliminar
