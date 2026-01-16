@@ -436,12 +436,9 @@ export function initFiltersAndSearch() {
         selectedTypesList.forEach((t) => params.append('types', t));
         selectedQuartilesList.forEach((q) => params.append('quartiles', q));
 
-        // Preserve already-selected authors to keep query semantics consistent with the dashboard.
-        if (selectedAuthorNames && selectedAuthorNames.size > 1) {
-            Array.from(selectedAuthorNames).forEach((name) => params.append('author', name));
-        } else if (selectedAuthorName) {
-            params.append('author', selectedAuthorName);
-        }
+        // Do NOT send already-selected authors.
+        // Suggestion counts should reflect only the non-author filters; otherwise
+        // selecting authors can incorrectly shrink other authors' counts.
 
         fetch(`/BiblioMetrics/${lang}/api/search/authors/?${params.toString()}`)
             .then(response => response.json())

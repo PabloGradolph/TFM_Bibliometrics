@@ -703,6 +703,13 @@ def get_author_suggestions(request):
     types = request.GET.getlist('types')
     quartiles = request.GET.getlist('quartiles')
     metric_source = 'wos'
+    # Important UX rule:
+    # Suggestion counts should reflect ONLY the non-author filters.
+    # Selecting one author should not reduce the displayed publication count of
+    # other authors in the suggestions list.
+    #
+    # Example: if Edu is selected, Javier should still show his full count under
+    # the current non-author filters.
     selected_authors = _get_selected_authors(request)
 
     base_pubs = Publication.objects.all()
@@ -728,8 +735,10 @@ def get_author_suggestions(request):
         base_pubs = _apply_type_filter(base_pubs, types)
     if quartiles:
         base_pubs = _apply_quartile_filter(base_pubs, quartiles, metric_source)
-    if selected_authors:
-        base_pubs = base_pubs.filter(authors__name__in=selected_authors).distinct()
+
+    # NOTE: We intentionally do NOT filter base_pubs by selected authors.
+    # Otherwise, with multi-author selection, base_pubs becomes an OR-restricted
+    # set which can dramatically reduce counts for any author not in that set.
 
     # Suggest author names that match q.
     candidate_names = list(
