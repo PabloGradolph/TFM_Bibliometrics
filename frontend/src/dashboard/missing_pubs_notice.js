@@ -23,7 +23,7 @@ export function setMissingPubsNoticeVisible({
     if (visible) {
         const lang = detectLang();
         const concienciaURL = 'https://apps3.csic.es/contcien/';
-        const contactEmail = 'bioinformatica@ipbln.csic.es';
+        const contactEmail = 'bioinformatica@ipb.csic.es';
         const textEs = `¿No encuentras una de tus publicaciones? Asegúrate de tenerla registrada en <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. Si ya la tienes publicada allí y sigues sin verla aquí, espera a que actualicemos nuestro sistema. Si tienes prisa, puedes contactar con la Unidad de Bioinformática del IPBLN en <a href="mailto:${contactEmail}">${contactEmail}</a> para solicitar una actualización prioritaria.`;
         const textEn = `Can't find one of your publications? Make sure it is registered in <a href="${concienciaURL}" target="_blank" rel="noopener">Conciencia</a>. If it's already there but still not visible here, please wait for our next update. If it's urgent, contact the IPBLN Bioinformatics Unit at <a href="mailto:${contactEmail}">${contactEmail}</a> to request an earlier update.`;
 
