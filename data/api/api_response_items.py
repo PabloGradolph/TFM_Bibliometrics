@@ -86,7 +86,7 @@ def main():
         publication_data[pub_id] = data
         status = "✅" if data is not None else "❌"
         print(f"[{index}/{total}] {status} Publication {pub_id}")
-        time.sleep(0.2)  # API rate limiting
+        time.sleep(0.1)  # API rate limiting
 
     save_to_json(publication_data, OUTPUT_JSON_PATH)
     print(f"\n📦 Data saved to {OUTPUT_JSON_PATH}")

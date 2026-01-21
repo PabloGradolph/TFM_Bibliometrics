@@ -86,7 +86,7 @@ def main():
         author_data[author_id] = data
         status = "✅" if "error" not in data else "❌"
         print(f"[{index}/{total}] {status} ID {author_id}")
-        time.sleep(0.2)  # Avoid overloading the server
+        time.sleep(0.3)  # Avoid overloading the server
 
     save_to_json(author_data, OUTPUT_JSON_PATH)
     print(f"\n📦 Data saved to {OUTPUT_JSON_PATH}")

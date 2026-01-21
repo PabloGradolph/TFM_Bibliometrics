@@ -551,6 +551,7 @@ gb_id,label
 127682,Clinical Neurology;Neurosciences
 557672,Clinical Neurology;Neurosciences
 155486,Clinical Neurology;Neurosciences
+908164,Rheumatology
 381265,Rheumatology
 995045,Rheumatology
 999268,Rheumatology
@@ -1394,6 +1395,7 @@ gb_id,label
 987682,Rheumatology
 1029822,Immunology;Genetics & Heredity
 964103,Multidisciplinary Sciences
+1032911,Infectious Diseases
 157236,Rheumatology
 157231,Rheumatology
 156051,Rheumatology
@@ -2124,3 +2126,14 @@ gb_id,label
 33506,"Chemistry, Inorganic & Nuclear"
 33443,"Chemistry, Inorganic & Nuclear"
 67679,"Chemistry, Multidisciplinary"
+1039000,Immunology;Microbiology
+1037368,"Chemistry, Medicinal;Pharmacology & Pharmacy"
+1045308,Oncology
+1044316,Clinical Neurology;Neurosciences
+1046061,Rheumatology
+1037365,Cell Biology;Biochemistry & Molecular Biology
+1037370,"Infectious Diseases;Chemistry, Medicinal"
+1037363,Cell Biology
+1038772,"Chemistry, Medicinal"
+1038893,Immunology
+1044894,Pharmacology & Pharmacy
